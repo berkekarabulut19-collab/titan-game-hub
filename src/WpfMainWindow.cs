@@ -312,14 +312,7 @@ namespace TitanGameHub
                 Background = MakeGradient("#2D1B4E", "#150E26"),
                 BorderBrush = ThemeManager.AccentTealBrush,
                 BorderThickness = new Thickness(1.5),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Effect = new DropShadowEffect()
-                {
-                    Color = (Color)ColorConverter.ConvertFromString("#A855F7"),
-                    BlurRadius = 14,
-                    ShadowDepth = 0,
-                    Opacity = 0.75
-                }
+                HorizontalAlignment = HorizontalAlignment.Center
             };
 
             System.Windows.Shapes.Path steamIconPath = new System.Windows.Shapes.Path()

@@ -51,6 +51,16 @@ namespace TitanGameHub
                     }
                 }
 
+                // Multi-Core Background JIT Profile Optimization (.NET 4.5+)
+                try
+                {
+                    string jitDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                    if (!Directory.Exists(jitDir)) Directory.CreateDirectory(jitDir);
+                    System.Runtime.ProfileOptimization.SetProfileRoot(jitDir);
+                    System.Runtime.ProfileOptimization.StartProfile("titan_startup.jit");
+                }
+                catch { }
+
                 CrashReporter.Install();
                 try { LanguageService.Load(); } catch { }
 
@@ -60,14 +70,14 @@ namespace TitanGameHub
                 Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
                 Thread.CurrentThread.CurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
 
-                // Initialize Phase 1-8 Core Subsystems (v9.0 Enterprise)
+                // Initialize Phase 1-8 Core Subsystems (non-blocking background startup)
                 try { KernelLatencyOptimizer.OptimizeNetworkStack(); } catch { }
-                try { SignatureDatabaseService.LoadDatabase(); } catch { }
-                try { SteamEmulatorBridge.StartLanDiscovery(Environment.UserName); } catch { }
-                try { VirtualLanMeshService.AllocateMeshIp("TITAN-TR", Environment.UserName); } catch { }
 
                 ThreadPool.QueueUserWorkItem(delegate
                 {
+                    try { SignatureDatabaseService.LoadDatabase(); } catch { }
+                    try { SteamEmulatorBridge.StartLanDiscovery(Environment.UserName); } catch { }
+                    try { VirtualLanMeshService.AllocateMeshIp("TITAN-TR", Environment.UserName); } catch { }
                     try { ZeroVpnTunnelService.DiscoverPublicEndpoint(); } catch { }
                     try
                     {
