@@ -107,8 +107,8 @@ namespace TitanGameHub
         public static List<GameProfile> FetchAllSourcesMerged(string searchQuery, int page, int perPage, out string statusMessage)
         {
             statusMessage = "";
-            int[] sources = new int[] { 0, -10, -11, -12, -13 };
-            string[] names = new string[] { "SteamRIP", "FitGirl", "FitGirl", "OvaGames", "FreeGOG" };
+            int[] sources = new int[] { 0, -11, -12, -13, -14 };
+            string[] names = new string[] { "SteamRIP", "FitGirl", "OvaGames", "FreeGOG", "CroTorrents" };
 
             List<GameProfile>[] buckets = new List<GameProfile>[sources.Length];
             string[] statuses = new string[sources.Length];
@@ -157,9 +157,10 @@ namespace TitanGameHub
 
         private static string GetBaseUrlForSource(int categoryId)
         {
-            if (categoryId == -11) return "https://fitgirl-repacks.site";
+            if (categoryId == -10 || categoryId == -11) return "https://fitgirl-repacks.site";
             if (categoryId == -12) return "https://www.ovagames.com";
             if (categoryId == -13) return "https://freegogpcgames.com";
+            if (categoryId == -14) return "https://crotorrents.com";
             return "https://steamrip.com";
         }
 
@@ -227,6 +228,10 @@ namespace TitanGameHub
             else if (categoryId == -13)
             {
                 results = FetchWpJsonCatalogFromBaseUrl("https://freegogpcgames.com", "FreeGOG", 0, searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -14)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://crotorrents.com", "CroTorrents", 0, searchQuery, page, perPage, out statusMessage);
             }
             else
             {

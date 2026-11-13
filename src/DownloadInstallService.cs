@@ -2089,7 +2089,8 @@ namespace TitanGameHub
             if (knownFileHost) return false;
 
             bool sitePage = u.Contains("steamrip.com/") || u.Contains("fitgirl-repacks.site/") ||
-                            u.Contains("ovagames.com/") || u.Contains("freegogpcgames.com/") || u.Contains("online-fix.me/");
+                            u.Contains("ovagames.com/") || u.Contains("freegogpcgames.com/") || u.Contains("online-fix.me/") ||
+                            u.Contains("crotorrents.com/");
             return sitePage;
         }
 
