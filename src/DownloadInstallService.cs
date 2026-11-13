@@ -960,6 +960,15 @@ namespace TitanGameHub
                     // ve 403 korumalı hostlar için arka plan WebView2 indirmesi (başarısız olursa sonraki aynaya geçer)
                     foreach (SiteMirror mirror in candidates)
                     {
+                        if (mirror.Url.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase) ||
+                            mirror.Url.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase))
+                        {
+                            MagnetCatalog.Put(profile, mirror.Url);
+                            if (TryTorrentFallback(profile))
+                                return;
+                            continue;
+                        }
+
                         if (DownloadHostPolicy.NeedsBrowserSession(mirror.Url))
                         {
                             string browserUrl = mirror.Url.StartsWith("//") ? "https:" + mirror.Url : mirror.Url;
@@ -2119,7 +2128,12 @@ namespace TitanGameHub
                         {
                             wc.Proxy = null;
                             wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                            string html = wc.DownloadString(profile.DownloadUrl);
+                            string html = "";
+                            try { html = wc.DownloadString(profile.DownloadUrl); }
+                            catch
+                            {
+                                try { html = wc.DownloadString("https://r.jina.ai/" + profile.DownloadUrl); } catch { }
+                            }
                             src = TorrentDownloadService.ExtractMagnetOrTorrent(html, profile.DownloadUrl);
                         }
                     }

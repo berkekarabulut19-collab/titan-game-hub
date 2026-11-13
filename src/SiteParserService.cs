@@ -500,7 +500,7 @@ namespace TitanGameHub
         {
             if (string.IsNullOrWhiteSpace(rawTitle)) return "";
             string decoded = WebUtility.HtmlDecode(rawTitle);
-            decoded = Regex.Replace(decoded, @"\s*Free\s+Download.*$", "", RegexOptions.IgnoreCase);
+            decoded = Regex.Replace(decoded, @"\s*(?:Free|Torrent)\s+Download.*$", "", RegexOptions.IgnoreCase);
             decoded = Regex.Replace(decoded, @"\s*\(v[0-9\.]+.*?\)\s*$", "", RegexOptions.IgnoreCase);
             decoded = Regex.Replace(decoded, @"\s*\[v?[0-9\.]+.*?\]\s*$", "", RegexOptions.IgnoreCase);
             return decoded.Trim();
@@ -870,6 +870,23 @@ namespace TitanGameHub
                 string url = rm.Groups[1].Value.Trim().Replace("\\/", "/");
                 if (url.StartsWith("//")) url = "https:" + url;
                 TryAddSupportedMirror(url, seen, res.Mirrors);
+            }
+
+            // 5D. Extract direct magnet:?xt=urn:btih:... links (FitGirl / CroTorrents)
+            MatchCollection magLinks = Regex.Matches(html, @"magnet:\?xt=urn:btih:[^""'\s<>]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            foreach (Match mm in magLinks)
+            {
+                string magUrl = WebUtility.HtmlDecode(mm.Value.Trim());
+                if (seen.Add(magUrl))
+                {
+                    res.Mirrors.Add(new SiteMirror
+                    {
+                        HostName = "Torrent Magnet (aria2)",
+                        Url = magUrl,
+                        IsDirectArchive = true,
+                        Priority = 8
+                    });
+                }
             }
 
             res.Mirrors.Sort(delegate(SiteMirror a, SiteMirror b) { return a.Priority.CompareTo(b.Priority); });
