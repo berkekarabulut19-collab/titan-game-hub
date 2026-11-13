@@ -19,6 +19,7 @@ data/
 *.log
 *.bak
 *.user
+*.lnk
 .vs/
 obj/
 tools/ota_private_key.xml
