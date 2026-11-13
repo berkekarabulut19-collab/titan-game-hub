@@ -1956,6 +1956,12 @@ namespace TitanGameHub
             };
             primaryQuickStack.Children.Add(btnOpenFolder);
 
+            Button btnHeroUninstall = CreateSteamUtilityButton("🗑 KALDIR", "Oyunu diskten veya kütüphaneden kaldır");
+            btnHeroUninstall.Foreground = HexBrush("#F87171");
+            btnHeroUninstall.BorderBrush = HexBrush("#991B1B");
+            btnHeroUninstall.Click += delegate { RunUninstallSelected(); };
+            primaryQuickStack.Children.Add(btnHeroUninstall);
+
             Button btnCreateShortcut = CreateSteamUtilityButton("🖥️ KISAYOL", "Masaüstüne orijinal ikonlu başlatma kısayolu (.lnk) oluştur");
             btnCreateShortcut.Click += delegate
             {
@@ -2227,27 +2233,9 @@ namespace TitanGameHub
             };
             perfToolsPanel.Children.Add(btnIntegerScale);
 
-            _btnUninstallGame = CreateSteamUtilityButton("🗑 KALDIR", "Oyunu diskten kaldır veya bağlantıyı kes");
+            _btnUninstallGame = CreateSteamUtilityButton("🗑 KALDIR", "Oyunu diskten veya kütüphaneden kaldır");
             _btnUninstallGame.Foreground = HexBrush("#F87171");
-            _btnUninstallGame.Click += delegate
-            {
-                if (_selectedProfile == null || !_selectedProfile.IsInstalled) return;
-                MessageBoxResult res = MessageBox.Show(
-                    _selectedProfile.Name + " oyununu kaldırmak istediğinize emin misiniz?",
-                    "Steam // Titan Oyun Kaldırma",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Warning);
-                if (res == MessageBoxResult.Yes)
-                {
-                    string msg;
-                    _selectedProfile.UninstallManagedGame(out msg);
-                    ProfileStore.SaveProfiles(_allProfiles);
-                    _txtBottomStatus.Text = msg;
-                    SelectGameProfile(_selectedProfile);
-                    RefreshLibrarySidebarList();
-                    RefreshLibrarySummaryMetrics();
-                }
-            };
+            _btnUninstallGame.Click += delegate { RunUninstallSelected(); };
             secToolsPanel.Children.Add(_btnUninstallGame);
 
             _btnUpdateShieldStatus = CreateSteamUtilityButton("🛡 GÜNCELLEME KALKANI", "Kilitli süreç temizleme, save karantinası ve PE bütünlük raporu");
@@ -4109,7 +4097,7 @@ namespace TitanGameHub
                 _btnHeroPrimary.Content = "⬇ YÜKLE (TEK TIK)";
                 _btnHeroPrimary.Background = MakeGradient("#9333EA", "#6B21A8");
                 _btnHeroPrimary.BorderBrush = ThemeManager.AccentTealBrush;
-                _btnUninstallGame.Visibility = Visibility.Collapsed;
+                _btnUninstallGame.Visibility = Visibility.Visible;
                 if (_btnUpdateShieldStatus != null) _btnUpdateShieldStatus.Visibility = Visibility.Collapsed;
                 if (_btnUpdateShieldRollback != null) _btnUpdateShieldRollback.Visibility = Visibility.Collapsed;
             }

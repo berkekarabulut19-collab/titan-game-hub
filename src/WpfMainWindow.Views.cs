@@ -1310,7 +1310,7 @@ namespace TitanGameHub
 
             stack.Children.Add(new TextBlock()
             {
-                Text = "PixelDrain, Fileditch, GoFile, Buzzheavier ve doğrudan .RAR/.ZIP bağlantıları 4 kanallı HTTP Range hızlandırıcısıyla indirilir, SHA-256 doğrulamasından geçirilir ve Spacewar (AppID 480) ile otomatik kurulur.",
+                Text = "Doğrudan yüksek hızlı sunucu ve .RAR/.ZIP bağlantıları 4 kanallı HTTP Range hızlandırıcısıyla indirilir, SHA-256 doğrulamasından geçirilir ve otomatik kurulur.",
                 Foreground = ThemeManager.ForegroundMutedBrush,
                 FontSize = 11.5,
                 TextWrapping = TextWrapping.Wrap,
