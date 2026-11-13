@@ -980,6 +980,12 @@ namespace TitanGameHub
                             string embPath;
                             if (TryEmbeddedBrowserDownload(profile, browserUrl, out embPath))
                             {
+                                string embScanMsg;
+                                if (!ArchiveSecurityScanner.IsSafe(embPath, out embScanMsg))
+                                {
+                                    try { File.Delete(embPath); } catch { }
+                                    continue;
+                                }
                                 ExtractArchiveAndConfigure(profile, embPath, GetTargetInstallDirectoryForGame(profile));
                                 return;
                             }
@@ -1468,13 +1474,11 @@ namespace TitanGameHub
                         return false;
                     }
 
-                    // Güvenlik: indirilen arşivi Windows Defender ile tara (varsa).
+                    // Güvenlik: indirilen arşivi Windows Defender ile tara; tehdit varsa sessizce silip sonraki temiz aynaya geç.
                     string scanMsg;
-                    if (!ArchiveSecurityScanner.IsSafe(tempArchive, out scanMsg) )
+                    if (!ArchiveSecurityScanner.IsSafe(tempArchive, out scanMsg))
                     {
                         try { File.Delete(tempArchive); } catch { }
-                        ReportProgress("⛔ " + scanMsg, 0, "Güvenlik");
-                        LastFatalError = scanMsg;
                         return false;
                     }
 
@@ -2168,7 +2172,11 @@ namespace TitanGameHub
                 if (string.IsNullOrEmpty(archive)) return false;
 
                 string scanMsg;
-                if (!ArchiveSecurityScanner.IsSafe(archive, out scanMsg)) { LastFatalError = scanMsg; return false; }
+                if (!ArchiveSecurityScanner.IsSafe(archive, out scanMsg))
+                {
+                    try { File.Delete(archive); } catch { }
+                    return false;
+                }
 
                 ExtractArchiveAndConfigure(profile, archive, GetTargetInstallDirectoryForGame(profile));
                 return true;
