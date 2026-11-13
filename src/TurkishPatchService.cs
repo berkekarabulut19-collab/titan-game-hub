@@ -183,6 +183,84 @@ namespace TitanGameHub
             catch { }
         }
 
+        /// <summary>
+        /// Uzak bir JSON manifestosundan (veya titan_user.cfg -> TURKISH_PATCH_MANIFEST_URL)
+        /// güncel Türkçe yama kataloğunu indirir, bin\data\turkish_patches.json içine kaydeder ve belleğe yükler.
+        /// </summary>
+        public static void SyncExternalManifestAsync(string remoteManifestUrl = null, Action<string> completedCallback = null)
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    string url = remoteManifestUrl;
+                    if (string.IsNullOrWhiteSpace(url))
+                        url = ReadConfigValue("TURKISH_PATCH_MANIFEST_URL");
+
+                    if (string.IsNullOrWhiteSpace(url) || !url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (completedCallback != null) completedCallback("Uzak Türkçe yama manifestosu tanımlı değil.");
+                        return;
+                    }
+
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                    string json;
+                    using (WebClient wc = new WebClient())
+                    {
+                        wc.Proxy = null;
+                        wc.Encoding = Encoding.UTF8;
+                        wc.Headers.Add("User-Agent", "TitanGameHub/1.0");
+                        json = wc.DownloadString(url.Trim());
+                    }
+
+                    if (string.IsNullOrWhiteSpace(json)) return;
+
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    List<Dictionary<string, object>> items = ser.Deserialize<List<Dictionary<string, object>>>(json);
+                    if (items == null || items.Count == 0) return;
+
+                    string dataDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                    if (!Directory.Exists(dataDir)) Directory.CreateDirectory(dataDir);
+                    File.WriteAllText(Path.Combine(dataDir, "turkish_patches.json"), json, Encoding.UTF8);
+
+                    LoadExternalManifestIfExists();
+                    if (completedCallback != null)
+                        completedCallback("🇹🇷 Türkçe yama kataloğu güncellendi (" + items.Count + " kayıt).");
+                }
+                catch (Exception ex)
+                {
+                    if (completedCallback != null)
+                        completedCallback("Türkçe yama kataloğu senkron hatası: " + ex.Message);
+                }
+            });
+        }
+
+        private static string ReadConfigValue(string key)
+        {
+            try
+            {
+                string[] cfgPaths = new string[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "titan_user.cfg"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "titan_user.cfg")
+                };
+                for (int c = 0; c < cfgPaths.Length; c++)
+                {
+                    if (!File.Exists(cfgPaths[c])) continue;
+                    string[] lines = File.ReadAllLines(cfgPaths[c], Encoding.UTF8);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string l = lines[i].Trim();
+                        if (l.StartsWith("#") || !l.StartsWith(key, StringComparison.OrdinalIgnoreCase)) continue;
+                        int eq = l.IndexOf('=');
+                        if (eq > 0) return l.Substring(eq + 1).Trim();
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
         private static void RegisterPatch(TurkishPatchInfo info)
         {
             if (info == null || string.IsNullOrEmpty(info.GameName)) return;

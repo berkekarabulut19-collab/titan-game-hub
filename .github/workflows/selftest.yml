@@ -1,25 +1,26 @@
-name: TitanGameHub Selftest
+name: TitanGameHub Build, Selftest & Release
 
 on:
   push:
     branches: [ main, master ]
+    tags: [ 'v*' ]
   pull_request:
   workflow_dispatch:
 
 jobs:
-  selftest:
+  build-and-test:
     runs-on: windows-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
-
-      - name: Build (if needed)
+      - name: Compile with csc.exe
         shell: cmd
         run: |
-          if exist build.bat call build.bat
+          call compile.bat
+          if errorlevel 1 exit /b 1
+          if exist res\webview2 copy /y res\webview2\* bin\
+          if exist res\aria2\aria2c.exe copy /y res\aria2\aria2c.exe bin\
 
       - name: Run selftest
         shell: cmd
@@ -27,11 +28,35 @@ jobs:
           if exist bin\TitanGameHub.exe (
             bin\TitanGameHub.exe --selftest
           ) else (
-            echo "TitanGameHub.exe bulunamadi, derleme sonucu kontrol edin."
+            echo "TitanGameHub.exe bulunamadi."
             exit /b 1
           )
 
-      - name: Upload selftest report
+      - name: Package Portable Zip
+        shell: pwsh
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'TitanGameHub_Stage'
+          $zipOut = Join-Path $env:RUNNER_TEMP 'TitanGameHub_Portable_Guncel.zip'
+          New-Item -ItemType Directory -Path $stage -Force | Out-Null
+          $topFiles = @('ARKADASLA_OYNAMA.txt', 'KURULUM_VE_BASLAT.bat', 'README.txt', 'run.bat', 'compile.bat', 'selftest.bat', 'export_catalog.bat', 'TitanGameHub.csproj', 'GELISTIRME_NOTLARI.md', 'build_portable.bat')
+          foreach ($f in $topFiles) { if (Test-Path $f) { Copy-Item $f -Destination $stage -Force } }
+          Copy-Item 'src' -Destination (Join-Path $stage 'src') -Recurse -Force
+          Copy-Item 'res' -Destination (Join-Path $stage 'res') -Recurse -Force
+          $binStage = Join-Path $stage 'bin'
+          New-Item -ItemType Directory -Path $binStage -Force | Out-Null
+          Get-ChildItem 'bin' -File | Where-Object { $_.Name -notin @('titan_user.cfg') } | Copy-Item -Destination $binStage -Force
+          New-Item -ItemType Directory -Path (Join-Path $binStage 'Games') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $binStage 'data') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $stage 'SaveBackups') -Force | Out-Null
+          Compress-Archive -Path "$stage\*" -DestinationPath $zipOut -Force
+
+      - name: Upload Portable Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TitanGameHub-Portable
+          path: ${{ runner.temp }}\TitanGameHub_Portable_Guncel.zip
+
+      - name: Upload Selftest Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -40,3 +65,11 @@ jobs:
             bin/data/selftest_report.txt
             data/selftest_report.txt
           if-no-files-found: warn
+
+      - name: Publish GitHub Release on Tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ runner.temp }}\TitanGameHub_Portable_Guncel.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

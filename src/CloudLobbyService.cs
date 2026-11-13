@@ -37,7 +37,38 @@ namespace TitanGameHub
     /// </summary>
     public class CloudLobbyService : IDisposable
     {
-        private const string BaseUrl = "https://ntfy.sh/";
+        private static readonly string BaseUrl = ResolveLobbyBaseUrl();
+
+        private static string ResolveLobbyBaseUrl()
+        {
+            try
+            {
+                string[] cfgPaths = new string[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "titan_user.cfg"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "titan_user.cfg")
+                };
+                for (int c = 0; c < cfgPaths.Length; c++)
+                {
+                    if (!File.Exists(cfgPaths[c])) continue;
+                    string[] lines = File.ReadAllLines(cfgPaths[c], Encoding.UTF8);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string l = lines[i].Trim();
+                        if (l.StartsWith("#") || !l.StartsWith("LOBBY_SERVER_URL", StringComparison.OrdinalIgnoreCase)) continue;
+                        int eq = l.IndexOf('=');
+                        if (eq > 0)
+                        {
+                            string u = l.Substring(eq + 1).Trim();
+                            if (u.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                return u.EndsWith("/") ? u : (u + "/");
+                        }
+                    }
+                }
+            }
+            catch { }
+            return "https://ntfy.sh/";
+        }
         private const string TopicPrefix = "titan_v5_lobby_";
         private const int HeartbeatSeconds = 30;
         private const int PollIntervalMs = 3500;

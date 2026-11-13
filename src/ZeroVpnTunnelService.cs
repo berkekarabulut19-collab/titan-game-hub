@@ -42,6 +42,8 @@ namespace TitanGameHub
         private static IPEndPoint _lastLocalClientEp;
         private static int _localGamePort = 27015;
         private static long _lastPunchSentTicks = 0;
+        private static bool _isRelayMode = false;
+        private static string _relayRoomCode = "TITAN-TR";
 
         public static bool IsTunnelActive { get { return _tunnelActive; } }
         public static bool IsPeerConnected { get; private set; }
@@ -296,6 +298,7 @@ namespace TitanGameHub
                 _remotePeerEp = new IPEndPoint(peerIp, peerPort);
                 _localGamePort = localGamePort > 0 ? localGamePort : 27015;
                 _lastLocalClientEp = null;
+                _isRelayMode = false;
                 IsPeerConnected = false;
                 LastRttMs = 0;
 
@@ -344,6 +347,82 @@ namespace TitanGameHub
             }
         }
 
+        /// <summary>
+        /// CGNAT arkasındaki oyuncular için hafif UDP Relay (tools/titan_udp_relay.py) istemcisi başlatır.
+        /// </summary>
+        public static bool StartUdpRelayClient(string relayHost, int relayPort, string roomCode, int localGamePort, out string statusMsg)
+        {
+            statusMsg = "";
+            StopHolePunchTunnel(true);
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(relayHost) || relayPort <= 0)
+                {
+                    statusMsg = "Geçersiz UDP Relay sunucu adresi.";
+                    return false;
+                }
+
+                IPAddress[] addrs = Dns.GetHostAddresses(relayHost.Trim());
+                IPAddress relayIp = null;
+                for (int i = 0; i < addrs.Length; i++)
+                {
+                    if (addrs[i].AddressFamily == AddressFamily.InterNetwork) { relayIp = addrs[i]; break; }
+                }
+                if (relayIp == null)
+                {
+                    statusMsg = "Relay sunucu IPv4 adresi çözümlenemedi.";
+                    return false;
+                }
+
+                _remotePeerEp = new IPEndPoint(relayIp, relayPort);
+                _localGamePort = localGamePort > 0 ? localGamePort : 27015;
+                _relayRoomCode = string.IsNullOrWhiteSpace(roomCode) ? "TITAN-TR" : roomCode.Trim().ToUpperInvariant();
+                _isRelayMode = true;
+                _lastLocalClientEp = null;
+                IsPeerConnected = false;
+                LastRttMs = 0;
+
+                lock (_sync)
+                {
+                    _tunnelClient = new UdpClient(0);
+                    _tunnelClient.Client.ReceiveTimeout = 500;
+                    try
+                    {
+                        _localProxyClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, _localGamePort));
+                    }
+                    catch
+                    {
+                        _localProxyClient = new UdpClient(new IPEndPoint(IPAddress.Loopback, 0));
+                        _localGamePort = ((IPEndPoint)_localProxyClient.Client.LocalEndPoint).Port;
+                    }
+                    _localProxyClient.Client.ReceiveTimeout = 500;
+                }
+
+                _tunnelActive = true;
+
+                _punchThread = new Thread(PunchLoop);
+                _punchThread.IsBackground = true;
+                _punchThread.Start();
+
+                _relayThread = new Thread(RelayLoop);
+                _relayThread.IsBackground = true;
+                _relayThread.Start();
+
+                _localProxyThread = new Thread(LocalProxyLoop);
+                _localProxyThread.IsBackground = true;
+                _localProxyThread.Start();
+
+                statusMsg = string.Format("CGNAT UDP Relay Aktif! Sunucu: {0} | Oda: {1} | Yerel Proxy: 127.0.0.1:{2}", _remotePeerEp, _relayRoomCode, _localGamePort);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                statusMsg = "Relay başlatma hatası: " + ex.Message;
+                return false;
+            }
+        }
+
         public static void StopHolePunchTunnel()
         {
             StopHolePunchTunnel(true);
@@ -382,12 +461,16 @@ namespace TitanGameHub
 
         private static void PunchLoop()
         {
+            byte[] relayJoinBytes = Encoding.ASCII.GetBytes("TITAN_RELAY_JOIN#" + (_relayRoomCode ?? "TITAN-TR"));
             while (_tunnelActive && _tunnelClient != null && _remotePeerEp != null)
             {
                 try
                 {
                     Interlocked.Exchange(ref _lastPunchSentTicks, Stopwatch.GetTimestamp());
-                    _tunnelClient.Send(PunchSynBytes, PunchSynBytes.Length, _remotePeerEp);
+                    if (_isRelayMode)
+                        _tunnelClient.Send(relayJoinBytes, relayJoinBytes.Length, _remotePeerEp);
+                    else
+                        _tunnelClient.Send(PunchSynBytes, PunchSynBytes.Length, _remotePeerEp);
                 }
                 catch { }
                 Thread.Sleep(2000);
@@ -440,7 +523,7 @@ namespace TitanGameHub
                         continue;
                     }
 
-                    if (IsPacketMatch(data, PunchAckBytes))
+                    if (IsPacketMatch(data, PunchAckBytes) || IsPacketMatch(data, Encoding.ASCII.GetBytes("TITAN_RELAY_OK")))
                     {
                         IsPeerConnected = true;
                         LastPeerSeenUtc = DateTime.UtcNow;
