@@ -96,6 +96,26 @@ namespace TitanGameHub
                     {
                         core.Settings.AreDefaultContextMenusEnabled = false;
                         core.Settings.IsStatusBarEnabled = false;
+                        core.Settings.AreDefaultScriptDialogsEnabled = false;
+
+                        // Asla harici tarayıcı veya açılır pencere (popup) açılmasın
+                        core.NewWindowRequested += delegate(object snw, CoreWebView2NewWindowRequestedEventArgs enw)
+                        {
+                            try
+                            {
+                                enw.Handled = true;
+                                string target = enw.Uri ?? "";
+                                string tl = target.ToLowerInvariant();
+                                bool isDownloadTarget = tl.Contains(".rar") || tl.Contains(".zip") || tl.Contains(".7z") ||
+                                                        tl.Contains(".torrent") || tl.Contains("/download") || tl.Contains("/dl/") ||
+                                                        tl.Contains("bzzhr") || tl.Contains("buzzheavier") || tl.Contains("fileditch") ||
+                                                        tl.Contains("fuckingfast") || tl.Contains("pixeldrain") || tl.Contains("gofile") ||
+                                                        tl.Contains("datanodes") || tl.Contains("vikingfile");
+                                if (isDownloadTarget && !string.IsNullOrEmpty(target))
+                                    core.Navigate(target);
+                            }
+                            catch { }
+                        };
 
                         if (!string.IsNullOrEmpty(referer))
                         {
@@ -180,7 +200,7 @@ namespace TitanGameHub
                                     try
                                     {
                                         core.ExecuteScriptAsync(
-                                            "(function(){var s='a[href$=\".rar\"],a[href$=\".zip\"],a[href*=\"download\"]';" +
+                                            "(function(){var s='a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button[hx-get],a[href*=\"download\"]';" +
                                             "var a=document.querySelectorAll(s);" +
                                             "if(a.length>0){a[0].click();return a.length;}return 0;})()");
                                     }

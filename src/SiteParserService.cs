@@ -214,7 +214,7 @@ namespace TitanGameHub
             // Route to trusted partner sites if selected
             if (categoryId == -10)
             {
-                results = FetchWpJsonCatalogFromBaseUrl("", "FitGirl", 0, searchQuery, page, perPage, out statusMessage);
+                results = FetchWpJsonCatalogFromBaseUrl("https://fitgirl-repacks.site", "FitGirl", 0, searchQuery, page, perPage, out statusMessage);
             }
             else if (categoryId == -11)
             {
@@ -236,7 +236,7 @@ namespace TitanGameHub
                 {
                     // Fallback: Query FitGirl WP-JSON (ultra-fast, zero Cloudflare blocks) + SteamRIP Jina Reader
                     string ggStatus;
-                    List<GameProfile> ggGames = FetchWpJsonCatalogFromBaseUrl("", "FitGirl", 0, searchQuery, page, perPage, out ggStatus);
+                    List<GameProfile> ggGames = FetchWpJsonCatalogFromBaseUrl("https://fitgirl-repacks.site", "FitGirl", 0, searchQuery, page, perPage, out ggStatus);
                     if (ggGames != null && ggGames.Count > 0)
                     {
                         statusMessage = ggStatus;
