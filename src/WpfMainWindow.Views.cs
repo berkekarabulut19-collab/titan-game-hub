@@ -3340,6 +3340,10 @@ namespace TitanGameHub
                         _txtChatHistory.AppendText(user + ": " + text + "\r\n");
                         _txtChatHistory.ScrollToEnd();
                     }
+                    if (!string.Equals(user, _cloudLobby.UserName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        ShowSteamToast("💬 " + user, text, NotificationType.Info);
+                    }
                 }));
             };
 
@@ -3383,6 +3387,7 @@ namespace TitanGameHub
                     string safeNick = string.IsNullOrWhiteSpace(fromNick) ? "Bir arkadaşın" : fromNick;
                     string safeGame = string.IsNullOrWhiteSpace(game) ? "Titan Hub" : game;
                     string safeRoom = string.IsNullOrWhiteSpace(roomOrInvite) ? "TITAN-TR" : roomOrInvite;
+                    ShowSteamToast("🎮 Lobi Daveti — " + safeNick, safeGame + " (" + safeRoom + ")", NotificationType.Success);
 
                     string msg = "📨 " + safeNick + " seni lobiye davet ediyor.\n\n"
                         + "🎮 Oyun/Lobi: " + safeGame + "\n"
