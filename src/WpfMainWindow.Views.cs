@@ -904,7 +904,11 @@ namespace TitanGameHub
                     gp.BannerUrl = cachedArt;
                     ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded2)
                     {
-                        if (loaded2) placeholder.Visibility = Visibility.Collapsed;
+                        if (loaded2)
+                        {
+                            placeholder.Visibility = Visibility.Collapsed;
+                            imgHeader.InvalidateVisual();
+                        }
                     });
                 }
                 else
@@ -914,11 +918,15 @@ namespace TitanGameHub
                         if (string.IsNullOrEmpty(artUrl)) return;
                         gp.BannerUrl = artUrl;
                         if (imgHeader.Dispatcher.HasShutdownStarted) return;
-                        imgHeader.Dispatcher.BeginInvoke(new Action(delegate
+                        imgHeader.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate
                         {
                             ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded3)
                             {
-                                if (loaded3) placeholder.Visibility = Visibility.Collapsed;
+                                if (loaded3)
+                                {
+                                    placeholder.Visibility = Visibility.Collapsed;
+                                    imgHeader.InvalidateVisual();
+                                }
                             });
                         }));
                     });
@@ -934,7 +942,10 @@ namespace TitanGameHub
                 ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded)
                 {
                     if (loaded)
+                    {
                         placeholder.Visibility = Visibility.Collapsed;
+                        imgHeader.InvalidateVisual();
+                    }
                     else
                         trySteamArtworkFallback();
                 });

@@ -19,7 +19,7 @@ namespace TitanGameHub
         private static readonly List<string> CacheLruList = new List<string>();
         private const int MaxMemoryCacheItems = 120;
         private static readonly HashSet<string> InFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private static readonly SemaphoreSlim DownloadGate = new SemaphoreSlim(6, 6);
+        private static readonly SemaphoreSlim DownloadGate = new SemaphoreSlim(12, 12);
 
         private sealed class TimeoutWebClient : WebClient
         {
@@ -221,11 +221,12 @@ namespace TitanGameHub
                     try
                     {
                         if (targetBorder.Dispatcher.HasShutdownStarted) return;
-                        targetBorder.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(delegate
+                        targetBorder.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate
                         {
                             try
                             {
                                 targetBorder.Background = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill, Opacity = opacity };
+                                targetBorder.InvalidateVisual();
                                 if (onDone != null) onDone(true);
                             }
                             catch { if (onDone != null) onDone(false); }
@@ -238,7 +239,7 @@ namespace TitanGameHub
                     try
                     {
                         if (!targetBorder.Dispatcher.HasShutdownStarted)
-                            targetBorder.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(delegate { onDone(false); }));
+                            targetBorder.Dispatcher.BeginInvoke(DispatcherPriority.Normal, new Action(delegate { onDone(false); }));
                     }
                     catch { }
                 }

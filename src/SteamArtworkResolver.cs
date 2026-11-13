@@ -25,7 +25,7 @@ namespace TitanGameHub
         private static readonly object _lock = new object();
         private static readonly Dictionary<string, string> _cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> _inFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private static readonly SemaphoreSlim _throttle = new SemaphoreSlim(4, 4);
+        private static readonly SemaphoreSlim _throttle = new SemaphoreSlim(8, 8);
         private static bool _diskLoaded = false;
 
         private sealed class TimeoutWebClient : WebClient
