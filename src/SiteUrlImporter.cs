@@ -57,7 +57,7 @@ namespace TitanGameHub
 
             if (!IsSupportedHost(url))
             {
-                statusMessage = "Desteklenmeyen site. Şunlar destekli: SteamRIP, FitGirl, CroTorrents, OvaGames, FreeGOG, Online-Fix.";
+                statusMessage = "Desteklenmeyen veya geçersiz bağlantı adresi.";
                 return null;
             }
 

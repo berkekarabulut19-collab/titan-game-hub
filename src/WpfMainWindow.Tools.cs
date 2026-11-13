@@ -319,7 +319,7 @@ namespace TitanGameHub
         private void ImportGameFromUrlDialog()
         {
             string url = TextPromptDialog.Prompt(this, "Titan // URL'den Oyun Ekle",
-                "Destekli siteler: SteamRIP, FitGirl, OvaGames, FreeGOG, Online-Fix.\nOyun sayfasının linkini yapıştırın:",
+                "Desteklenen bir oyun sayfasının linkini yapıştırın:",
                 "https://");
             if (string.IsNullOrWhiteSpace(url)) return;
 

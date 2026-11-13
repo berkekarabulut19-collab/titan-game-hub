@@ -558,7 +558,7 @@ namespace TitanGameHub
             if (profile == null) return;
             ThreadPool.QueueUserWorkItem(delegate
             {
-                ReportProgress(profile.Name + " — Çoklu site sunucuları (SteamRIP + FitGirl + OvaGames) çözümleniyor...", 15, "Taranıyor");
+                ReportProgress(profile.Name + " — İndirme sunucuları çözümleniyor...", 15, "Taranıyor");
                 SitePageAnalysis analysis = SiteParserService.AnalyzeGameOnSteamRip(profile);
                 if (OnSiteMirrorsDiscovered != null)
                     OnSiteMirrorsDiscovered(profile, analysis);
@@ -1058,7 +1058,7 @@ namespace TitanGameHub
                     // Böylece "bu oyun inmiyor" durumu kalmaz: sürümü/arşivi hangi site veriyorsa oradan iner.
                     try
                     {
-                        ReportProgress(string.Format("[3/4] {0} — SteamRIP aynaları yanıt vermedi, diğer siteler taranıyor (OvaGames / FitGirl)...", profile.Name), 30, "Alternatif Site");
+                        ReportProgress(string.Format("[3/4] {0} — Alternatif indirme sunucuları taranıyor...", profile.Name), 30, "Alternatif Sunucu");
 
                         MultiSourceVersionResolver.Result alt = MultiSourceVersionResolver.ResolveSync(profile.Name, profile.Version);
                         if (alt != null && !string.IsNullOrEmpty(alt.DirectUrl))
@@ -1122,7 +1122,7 @@ namespace TitanGameHub
                     catch { }
 
                     _isBusy = false;
-                    ReportCompleted(profile, false, "⚠️ Hiçbir bağlı sitede çalışan indirme linki bulunamadı (SteamRIP + FitGirl + OvaGames denendi). 'Alternatif Ayna' ile manuel link verebilir veya tarayıcıdan indirip 'OYUN EKLE' ile bağlayabilirsiniz.");
+                    ReportCompleted(profile, false, "⚠️ Çalışan indirme linki bulunamadı. 'Alternatif Ayna' ile manuel link verebilir veya yerel arşivi 'OYUN EKLE' ile bağlayabilirsiniz.");
                 }
                 catch (Exception ex)
                 {
