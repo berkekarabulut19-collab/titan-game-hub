@@ -16,7 +16,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$zipOut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'TitanGameHub_Portable_Guncel.zip'; " ^
   "if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }; " ^
   "New-Item -ItemType Directory -Path $stage -Force | Out-Null; " ^
-  "$topFiles = @('KURULUM.bat', 'README.md', 'TitanGameHub.csproj'); " ^
+  "$topFiles = @('TitanGameSetup.exe', 'README.md', 'TitanGameHub.csproj'); " ^
   "foreach ($f in $topFiles) { $p = Join-Path $srcRoot $f; if (Test-Path $p) { Copy-Item $p -Destination $stage -Force } }; " ^
   "Copy-Item (Join-Path $srcRoot 'src') -Destination (Join-Path $stage 'src') -Recurse -Force; " ^
   "Copy-Item (Join-Path $srcRoot 'res') -Destination (Join-Path $stage 'res') -Recurse -Force; " ^
