@@ -1,0 +1,770 @@
+using System;
+using System.Collections.Generic;
+using System.Net;
+using System.Text;
+using System.Text.RegularExpressions;
+using System.Threading;
+using System.Web.Script.Serialization;
+
+namespace TitanGameHub
+{
+    public class SiteMirror
+    {
+        public string HostName { get; set; }
+        public string Url { get; set; }
+        public bool IsDirectArchive { get; set; }
+        public int Priority { get; set; }
+        public bool IsUpdateOnlyPackage { get; set; }
+    }
+
+    public class SitePageAnalysis
+    {
+        public bool Success { get; set; }
+        public string ResolvedPostUrl { get; set; }
+        public string LiveVersion { get; set; }
+        public string LiveFileSize { get; set; }
+        public string ReleasedBy { get; set; }
+        public string CleanDescription { get; set; }
+        public string SystemRequirements { get; set; }
+        public string CoverImageUrl { get; set; }
+        public List<SiteMirror> Mirrors { get; set; }
+        public string ErrorMessage { get; set; }
+
+        public SitePageAnalysis()
+        {
+            Mirrors = new List<SiteMirror>();
+        }
+    }
+
+    public class SiteCategoryDef
+    {
+        public int Id { get; set; }
+        public string Title { get; set; }
+        public string TagName { get; set; }
+
+        public SiteCategoryDef(int id, string title, string tag)
+        {
+            Id = id;
+            Title = title;
+            TagName = tag;
+        }
+    }
+
+    public static class SiteParserService
+    {
+        public static readonly SiteCategoryDef[] Categories = new SiteCategoryDef[]
+        {
+            new SiteCategoryDef(-20, "🌐 TÜM SİTELER (BİRLEŞİK CANLI)", "Tüm Siteler"),
+            new SiteCategoryDef(-1, "★ TÜM OYUNLAR (EN İYİLER)", "Öne Çıkan"),
+            new SiteCategoryDef(0, "🔥 SON EKLENENLER (CANLI)", "Son Eklenen"),
+            new SiteCategoryDef(-11, "🟪 FITGIRL REPACKS", "FitGirl"),
+            new SiteCategoryDef(-12, "🟩 OVAGAMES", "OvaGames"),
+            new SiteCategoryDef(-13, "🟨 FREEGOG", "FreeGOG"),
+            new SiteCategoryDef(-30, "🧲 1337X", "1337x"),
+            new SiteCategoryDef(-31, "📦 ELAMIGOS", "ElAmigos"),
+            new SiteCategoryDef(-32, "⚡ SKIDROW CODEX", "SkidrowCodex"),
+            new SiteCategoryDef(-33, "🎮 DODI REPACKS", "Dodi"),
+            new SiteCategoryDef(1538, "CO-OP & MULTIPLAYER", "Multiplayer"),
+            new SiteCategoryDef(26, "AKSİYON (2700+)", "Aksiyon"),
+            new SiteCategoryDef(32, "KORKU (520+)", "Korku"),
+            new SiteCategoryDef(45, "AÇIK DÜNYA (300+)", "Açık Dünya"),
+            new SiteCategoryDef(119, "HAYATTA KALMA", "Hayatta Kalma"),
+            new SiteCategoryDef(37, "SİMÜLASYON (1600+)", "Simülasyon"),
+            new SiteCategoryDef(41, "FPS / SHOOTER", "FPS & Shooter"),
+            new SiteCategoryDef(27, "MACERA (2500+)", "Macera"),
+            new SiteCategoryDef(63, "RPG (1200+)", "RPG"),
+            new SiteCategoryDef(42, "STRATEJİ (1100+)", "Strateji"),
+            new SiteCategoryDef(35, "YARIŞ (230+)", "Yarış")
+        };
+
+        private static string GetBaseUrlForSource(int categoryId)
+        {
+            if (categoryId == -11) return "https://fitgirl-repacks.site";
+            if (categoryId == -12) return "https://www.ovagames.com";
+            if (categoryId == -13) return "https://freegogpcgames.com";
+            if (categoryId == -30) return "https://1337x.to";
+            if (categoryId == -31) return "https://elamigos.site";
+            if (categoryId == -32) return "https://www.skidrowcodex.net";
+            if (categoryId == -33) return "https://dodi-repacks.site";
+            return "https://steamrip.com";
+        }
+
+        private class CachedCatalog
+        {
+            public DateTime Timestamp;
+            public List<GameProfile> Games;
+            public string Status;
+        }
+
+        private static readonly Dictionary<string, CachedCatalog> CatalogCache = new Dictionary<string, CachedCatalog>(StringComparer.OrdinalIgnoreCase);
+        private static readonly Dictionary<string, Tuple<DateTime, SitePageAnalysis>> AnalysisCache = new Dictionary<string, Tuple<DateTime, SitePageAnalysis>>(StringComparer.OrdinalIgnoreCase);
+
+        static SiteParserService()
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | (SecurityProtocolType)768;
+                ServicePointManager.DefaultConnectionLimit = 128;
+                ServicePointManager.Expect100Continue = false;
+            }
+            catch { }
+        }
+
+        public static void InvalidateCache()
+        {
+            lock (CatalogCache) { CatalogCache.Clear(); }
+            lock (AnalysisCache) { AnalysisCache.Clear(); }
+        }
+
+        public static List<GameProfile> FetchAllSourcesMerged(string searchQuery, int page, int perPage, out string statusMessage)
+        {
+            statusMessage = "";
+            int[] sources = new int[] { 0, -11, -12, -13, -30, -31, -32, -33 };
+            string[] names = new string[] { "SteamRIP", "FitGirl", "OvaGames", "FreeGOG", "1337x", "ElAmigos", "SkidrowCodex", "Dodi" };
+
+            List<GameProfile>[] buckets = new List<GameProfile>[sources.Length];
+            string[] statuses = new string[sources.Length];
+            ManualResetEvent[] done = new ManualResetEvent[sources.Length];
+
+            for (int i = 0; i < sources.Length; i++)
+            {
+                int idx = i;
+                done[i] = new ManualResetEvent(false);
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try
+                    {
+                        string st;
+                        buckets[idx] = FetchLiveSiteGames(sources[idx], searchQuery, page, perPage, out st);
+                        statuses[idx] = st;
+                    }
+                    catch { buckets[idx] = null; statuses[idx] = names[idx] + " yanıt vermedi"; }
+                    finally { try { done[idx].Set(); } catch { } }
+                });
+            }
+
+            try { WaitHandle.WaitAll(done, 20000); } catch { }
+
+            List<GameProfile> merged = new List<GameProfile>();
+            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int okSources = 0;
+            for (int i = 0; i < sources.Length; i++)
+            {
+                if (buckets[i] == null || buckets[i].Count == 0) continue;
+                okSources++;
+                foreach (GameProfile gp in buckets[i])
+                {
+                    string key = (gp.Name ?? "").Trim().ToLowerInvariant();
+                    if (key.Length == 0 || !seen.Add(key)) continue;
+                    if (string.IsNullOrEmpty(gp.Category)) gp.Category = names[i];
+                    merged.Add(gp);
+                }
+            }
+
+            statusMessage = string.Format("🌐 TÜM SİTELER: {0}/{1} kaynak yanıt verdi • {2} oyun listelendi", okSources, sources.Length, merged.Count);
+            return merged;
+        }
+
+        public static List<GameProfile> FetchLiveSiteGames(int categoryId, string searchQuery, int page, int perPage, out string statusMessage)
+        {
+            statusMessage = "";
+            if (page < 1) page = 1;
+            if (perPage < 6 || perPage > 50) perPage = 24;
+
+            string cacheKey = string.Format("{0}_{1}_{2}_{3}", categoryId, searchQuery ?? "", page, perPage);
+            lock (CatalogCache)
+            {
+                CachedCatalog cached;
+                if (CatalogCache.TryGetValue(cacheKey, out cached))
+                {
+                    if ((DateTime.Now - cached.Timestamp).TotalMinutes < 5)
+                    {
+                        statusMessage = cached.Status;
+                        return new List<GameProfile>(cached.Games);
+                    }
+                    CatalogCache.Remove(cacheKey);
+                }
+            }
+
+            List<GameProfile> results = null;
+
+            if (categoryId == -20)
+            {
+                results = FetchAllSourcesMerged(searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -11)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://fitgirl-repacks.site", "FitGirl", 0, searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -12)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://www.ovagames.com", "OvaGames", 0, searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -13)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://freegogpcgames.com", "FreeGOG", 0, searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -30)
+            {
+                results = FetchGenericHtmlCatalog("https://1337x.to", "1337x", searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -31)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://elamigos.site", "ElAmigos", 0, searchQuery, page, perPage, out statusMessage);
+                if (results == null || results.Count == 0)
+                    results = FetchGenericHtmlCatalog("https://elamigos.site", "ElAmigos", searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -32)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://www.skidrowcodex.net", "SkidrowCodex", 0, searchQuery, page, perPage, out statusMessage);
+                if (results == null || results.Count == 0)
+                    results = FetchGenericHtmlCatalog("https://www.skidrowcodex.net", "SkidrowCodex", searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -33)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://dodi-repacks.site", "Dodi", 0, searchQuery, page, perPage, out statusMessage);
+                if (results == null || results.Count == 0)
+                    results = FetchGenericHtmlCatalog("https://dodi-repacks.site", "Dodi", searchQuery, page, perPage, out statusMessage);
+            }
+            else
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://steamrip.com", "SteamRIP", categoryId, searchQuery, page, perPage, out statusMessage);
+            }
+
+            if (results == null) results = new List<GameProfile>();
+
+            try { results = GameDeduplicationEngine.Deduplicate(results); } catch { }
+
+            if (results.Count > 0)
+            {
+                lock (CatalogCache)
+                {
+                    CatalogCache[cacheKey] = new CachedCatalog
+                    {
+                        Timestamp = DateTime.Now,
+                        Games = new List<GameProfile>(results),
+                        Status = statusMessage
+                    };
+                }
+            }
+
+            return results;
+        }
+
+        private static List<GameProfile> FetchWpJsonCatalogFromBaseUrl(
+            string baseSiteUrl, string sourceLabel, int categoryId,
+            string searchQuery, int page, int perPage, out string statusMessage)
+        {
+            statusMessage = "";
+            List<GameProfile> results = new List<GameProfile>();
+
+            try
+            {
+                StringBuilder apiUrl = new StringBuilder(baseSiteUrl.TrimEnd('/') + "/wp-json/wp/v2/posts?");
+                apiUrl.Append("per_page=").Append(perPage);
+                apiUrl.Append("&page=").Append(page);
+                apiUrl.Append("&_fields=id,slug,link,title,content,categories,yoast_head_json");
+
+                if (!string.IsNullOrWhiteSpace(searchQuery))
+                    apiUrl.Append("&search=").Append(Uri.EscapeDataString(searchQuery.Trim()));
+                else if (categoryId > 0)
+                    apiUrl.Append("&categories=").Append(categoryId);
+
+                string jsonRaw = DownloadStringWithHeaders(apiUrl.ToString());
+                if (string.IsNullOrWhiteSpace(jsonRaw) || !jsonRaw.TrimStart().StartsWith("["))
+                {
+                    statusMessage = sourceLabel + " API yanıt vermedi.";
+                    return results;
+                }
+
+                JavaScriptSerializer ser = new JavaScriptSerializer();
+                ser.MaxJsonLength = int.MaxValue;
+                object[] posts = ser.Deserialize<object[]>(jsonRaw);
+                if (posts == null || posts.Length == 0)
+                {
+                    statusMessage = sourceLabel + " üzerinde sonuç bulunamadı.";
+                    return results;
+                }
+
+                foreach (object postObj in posts)
+                {
+                    Dictionary<string, object> post = postObj as Dictionary<string, object>;
+                    if (post == null) continue;
+
+                    GameProfile gp = ParseWpPostObjectToGameProfile(post, sourceLabel);
+                    if (gp != null && !string.IsNullOrWhiteSpace(gp.Name))
+                    {
+                        if (gp.Name.IndexOf("Upcoming Repacks", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                        results.Add(gp);
+                    }
+                }
+
+                statusMessage = string.Format("✔ {0}: {1} oyun yüklendi (Sayfa {2})", sourceLabel, results.Count, page);
+                return results;
+            }
+            catch (Exception ex)
+            {
+                statusMessage = sourceLabel + " bağlantı uyarısı: " + ex.Message;
+                return results;
+            }
+        }
+
+        private static GameProfile ParseWpPostObjectToGameProfile(Dictionary<string, object> post, string sourceLabel)
+        {
+            try
+            {
+                string slug = post.ContainsKey("slug") ? Convert.ToString(post["slug"]) : "";
+                string link = post.ContainsKey("link") ? Convert.ToString(post["link"]) : "";
+
+                string rawTitle = "";
+                if (post.ContainsKey("title") && post["title"] is Dictionary<string, object>)
+                {
+                    Dictionary<string, object> titleDict = (Dictionary<string, object>)post["title"];
+                    if (titleDict.ContainsKey("rendered"))
+                        rawTitle = Convert.ToString(titleDict["rendered"]);
+                }
+
+                string cleanName = CleanGameTitle(rawTitle);
+                if (string.IsNullOrWhiteSpace(cleanName)) return null;
+
+                string contentHtml = "";
+                if (post.ContainsKey("content") && post["content"] is Dictionary<string, object>)
+                {
+                    Dictionary<string, object> contentDict = (Dictionary<string, object>)post["content"];
+                    if (contentDict.ContainsKey("rendered"))
+                        contentHtml = Convert.ToString(contentDict["rendered"]);
+                }
+
+                string ogImage = "";
+                try
+                {
+                    if (post.ContainsKey("yoast_head_json") && post["yoast_head_json"] is Dictionary<string, object>)
+                    {
+                        Dictionary<string, object> yoast = (Dictionary<string, object>)post["yoast_head_json"];
+                        if (yoast.ContainsKey("og_image") && yoast["og_image"] is object[])
+                        {
+                            object[] imgs = (object[])yoast["og_image"];
+                            if (imgs.Length > 0 && imgs[0] is Dictionary<string, object>)
+                            {
+                                Dictionary<string, object> firstImg = (Dictionary<string, object>)imgs[0];
+                                if (firstImg.ContainsKey("url"))
+                                    ogImage = Convert.ToString(firstImg["url"]);
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                if (string.IsNullOrEmpty(ogImage) && !string.IsNullOrEmpty(contentHtml))
+                {
+                    Match imgMatch = Regex.Match(contentHtml, "https?://[^\"'\\s<>]+\\.(?:jpg|jpeg|png|webp)", RegexOptions.IgnoreCase);
+                    if (imgMatch.Success) ogImage = imgMatch.Value;
+                }
+
+                string categoryTag = string.IsNullOrEmpty(sourceLabel) ? "Repack" : sourceLabel;
+                string version = ExtractVersionFromTitle(rawTitle);
+                string desc = StripHtmlTags(contentHtml);
+                if (desc.Length > 500) desc = desc.Substring(0, 500);
+
+                return new GameProfile
+                {
+                    Id = "src_" + (string.IsNullOrEmpty(slug) ? MakeSlugFromName(cleanName) : slug),
+                    Name = cleanName,
+                    Category = categoryTag,
+                    Version = version,
+                    RemoteVersion = version,
+                    DownloadUrl = link,
+                    DirectMirrorUrl = "",
+                    Description = desc,
+                    BannerUrl = ogImage ?? "",
+                    CapsuleUrl = ogImage ?? "",
+                    FileSize = "Bilinmiyor",
+                    MaxPlayers = "Singleplayer"
+                };
+            }
+            catch { return null; }
+        }
+
+        private static List<GameProfile> FetchGenericHtmlCatalog(
+            string baseSiteUrl,
+            string sourceLabel,
+            string searchQuery,
+            int page,
+            int perPage,
+            out string statusMessage)
+        {
+            statusMessage = "";
+            List<GameProfile> results = new List<GameProfile>();
+
+            try
+            {
+                string url;
+                bool is1337x = baseSiteUrl.IndexOf("1337x", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (is1337x)
+                {
+                    if (!string.IsNullOrWhiteSpace(searchQuery))
+                        url = baseSiteUrl.TrimEnd('/') + "/search/" + Uri.EscapeDataString(searchQuery.Trim()) + "/" + Math.Max(1, page) + "/";
+                    else
+                        url = baseSiteUrl.TrimEnd('/') + "/cat/Games/" + Math.Max(1, page) + "/";
+                }
+                else
+                {
+                    if (!string.IsNullOrWhiteSpace(searchQuery))
+                        url = baseSiteUrl.TrimEnd('/') + "/?s=" + Uri.EscapeDataString(searchQuery.Trim()) + "&paged=" + Math.Max(1, page);
+                    else
+                        url = baseSiteUrl.TrimEnd('/') + "/page/" + Math.Max(1, page) + "/";
+                }
+
+                string html = DownloadStringWithHeaders(url);
+                if (string.IsNullOrWhiteSpace(html))
+                    html = FetchViaJinaReader(url);
+                if (string.IsNullOrWhiteSpace(html))
+                {
+                    statusMessage = sourceLabel + " yanıt vermedi.";
+                    return results;
+                }
+
+                HashSet<string> seenLinks = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                if (is1337x)
+                {
+                    MatchCollection m1337 = Regex.Matches(html,
+                        @"href=[""'](/torrent/\d+/[^""'#]+)[""'][^>]*>([^<]{3,120})</a>",
+                        RegexOptions.IgnoreCase);
+                    foreach (Match m in m1337)
+                    {
+                        if (results.Count >= perPage) break;
+                        string href = m.Groups[1].Value;
+                        string title = WebUtility.HtmlDecode(StripHtmlTags(m.Groups[2].Value)).Trim();
+                        if (string.IsNullOrWhiteSpace(title)) continue;
+
+                        string fullLink = href.StartsWith("http") ? href : baseSiteUrl.TrimEnd('/') + href;
+                        if (!seenLinks.Add(fullLink)) continue;
+
+                        string cleanName = CleanGameTitle(title);
+                        if (string.IsNullOrWhiteSpace(cleanName)) cleanName = title;
+                        string slug = MakeSlugFromName(cleanName);
+
+                        results.Add(new GameProfile
+                        {
+                            Id = "src_" + sourceLabel.ToLowerInvariant() + "_" + slug,
+                            Name = cleanName,
+                            Category = sourceLabel,
+                            Version = ExtractVersionFromTitle(title),
+                            RemoteVersion = ExtractVersionFromTitle(title),
+                            DownloadUrl = fullLink,
+                            DirectMirrorUrl = "",
+                            Description = sourceLabel + " kaynağından listelendi.",
+                            BannerUrl = "",
+                            CapsuleUrl = "",
+                            FileSize = "Bilinmiyor",
+                            MaxPlayers = "Singleplayer"
+                        });
+                    }
+                }
+                else
+                {
+                    MatchCollection articles = Regex.Matches(html,
+                        @"<article[^>]*>.*?<h[1-4][^>]*>.*?<a[^>]+href=[""']([^""']+)[""'][^>]*>(.*?)</a>.*?</h[1-4]>.*?</article>",
+                        RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+                    if (articles.Count == 0)
+                    {
+                        articles = Regex.Matches(html,
+                            @"<h[1-3][^>]*class=[""'][^""']*(?:entry-title|post-title|title)[^""']*[""'][^>]*>.*?<a[^>]+href=[""']([^""']+)[""'][^>]*>(.*?)</a>",
+                            RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                    }
+
+                    if (articles.Count == 0)
+                    {
+                        string domainHost = "";
+                        try { domainHost = new Uri(baseSiteUrl).Host.Replace("www.", ""); } catch { domainHost = ""; }
+                        string hostPattern = string.IsNullOrEmpty(domainHost) ? "[^\"']+" : Regex.Escape(domainHost);
+                        articles = Regex.Matches(html,
+                            @"<a[^>]+href=[""'](https?://[^""']*" + hostPattern + @"[^""']+)[""'][^>]*>([^<]{8,120})</a>",
+                            RegexOptions.IgnoreCase);
+                    }
+
+                    foreach (Match m in articles)
+                    {
+                        if (results.Count >= perPage) break;
+                        string href = WebUtility.HtmlDecode(m.Groups[1].Value.Trim());
+                        string rawTitle = WebUtility.HtmlDecode(StripHtmlTags(m.Groups[2].Value)).Trim();
+                        if (string.IsNullOrWhiteSpace(rawTitle) || rawTitle.Length < 3) continue;
+                        if (Regex.IsMatch(rawTitle, "^(page\\s*\\d+|home|next|previous|read more)$", RegexOptions.IgnoreCase)) continue;
+                        if (href.Contains("/category/") || href.Contains("/tag/") || href.Contains("/author/") || href.Contains("/page/") || href.Contains("#")) continue;
+
+                        if (href.StartsWith("/")) href = baseSiteUrl.TrimEnd('/') + href;
+                        if (!href.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (!seenLinks.Add(href)) continue;
+
+                        string cleanName = CleanGameTitle(rawTitle);
+                        if (string.IsNullOrWhiteSpace(cleanName)) cleanName = rawTitle;
+                        if (cleanName.Length < 2) continue;
+
+                        string slug = MakeSlugFromName(cleanName);
+                        results.Add(new GameProfile
+                        {
+                            Id = "src_" + sourceLabel.ToLowerInvariant() + "_" + slug,
+                            Name = cleanName,
+                            Category = sourceLabel,
+                            Version = ExtractVersionFromTitle(rawTitle),
+                            RemoteVersion = ExtractVersionFromTitle(rawTitle),
+                            DownloadUrl = href,
+                            DirectMirrorUrl = "",
+                            Description = sourceLabel + " kaynağından listelendi.",
+                            BannerUrl = "",
+                            CapsuleUrl = "",
+                            FileSize = "Bilinmiyor",
+                            MaxPlayers = "Singleplayer"
+                        });
+                    }
+                }
+
+                if (results.Count > 0)
+                    statusMessage = string.Format("✔ {0}: {1} oyun listelendi (Sayfa {2})", sourceLabel, results.Count, page);
+                else
+                    statusMessage = sourceLabel + " üzerinde sonuç bulunamadı.";
+                return results;
+            }
+            catch (Exception ex)
+            {
+                statusMessage = sourceLabel + " bağlantı uyarısı: " + ex.Message;
+                return results;
+            }
+        }
+
+        public static SitePageAnalysis AnalyzeGamePage(string postUrl, string expectedName)
+        {
+            if (string.IsNullOrEmpty(postUrl)) return new SitePageAnalysis { Success = false, ErrorMessage = "Boş URL" };
+
+            string cacheKey = postUrl;
+            lock (AnalysisCache)
+            {
+                Tuple<DateTime, SitePageAnalysis> cached;
+                if (AnalysisCache.TryGetValue(cacheKey, out cached))
+                {
+                    if ((DateTime.Now - cached.Item1).TotalMinutes < 30) return cached.Item2;
+                    AnalysisCache.Remove(cacheKey);
+                }
+            }
+
+            SitePageAnalysis analysis = new SitePageAnalysis();
+            try
+            {
+                string html = DownloadStringWithHeaders(postUrl);
+                if (string.IsNullOrWhiteSpace(html)) html = FetchViaJinaReader(postUrl);
+                if (string.IsNullOrWhiteSpace(html)) { analysis.Success = false; analysis.ErrorMessage = "Sayfa indirilemedi."; return analysis; }
+
+                analysis.CleanDescription = StripHtmlTags(Regex.Match(html, @"<div[^>]+class=[""'][^""']*(?:entry-content|post-content|description)[^""']*[""'][^>]*>([\s\S]*?)</div>", RegexOptions.IgnoreCase).Groups[1].Value);
+                if (string.IsNullOrEmpty(analysis.CleanDescription))
+                    analysis.CleanDescription = StripHtmlTags(Regex.Match(html, @"<p[^>]*>([\s\S]{100,800})</p>", RegexOptions.IgnoreCase).Groups[1].Value);
+                if (analysis.CleanDescription != null && analysis.CleanDescription.Length > 800)
+                    analysis.CleanDescription = analysis.CleanDescription.Substring(0, 800);
+
+                analysis.CoverImageUrl = ExtractFirstImage(html, postUrl);
+                analysis.LiveVersion = ExtractVersionFromTitle(html);
+                analysis.Mirrors = ExtractMirrors(html, postUrl);
+
+                analysis.Success = analysis.Mirrors.Count > 0 || !string.IsNullOrEmpty(analysis.CleanDescription);
+                analysis.ResolvedPostUrl = postUrl;
+
+                lock (AnalysisCache)
+                {
+                    AnalysisCache[cacheKey] = Tuple.Create(DateTime.Now, analysis);
+                }
+            }
+            catch (Exception ex)
+            {
+                analysis.Success = false;
+                analysis.ErrorMessage = ex.Message;
+            }
+            return analysis;
+        }
+
+        private static string ExtractVersionFromTitle(string title)
+        {
+            if (string.IsNullOrEmpty(title)) return "";
+            try
+            {
+                Match m = Regex.Match(title, @"\[v?([0-9]+\.[0-9\.\w\-]+)\]", RegexOptions.IgnoreCase);
+                if (m.Success) return "v" + m.Groups[1].Value.Trim();
+                m = Regex.Match(title, @"\bv?([0-9]+\.[0-9]+\.[0-9]+[A-Za-z0-9\.\-]*)\b");
+                if (m.Success) return "v" + m.Groups[1].Value.Trim();
+                m = Regex.Match(title, @"\bBuild[\s\.]*([0-9]{5,})\b", RegexOptions.IgnoreCase);
+                if (m.Success) return "Build " + m.Groups[1].Value.Trim();
+            }
+            catch { }
+            return "";
+        }
+
+        private static string MakeSlugFromName(string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return "game";
+            string s = name.ToLowerInvariant();
+            s = Regex.Replace(s, @"[^a-z0-9]+", "-");
+            s = s.Trim('-');
+            if (s.Length > 48) s = s.Substring(0, 48).TrimEnd('-');
+            if (string.IsNullOrEmpty(s)) s = "game";
+            return s;
+        }
+
+        private static string CleanGameTitle(string title)
+        {
+            if (string.IsNullOrEmpty(title)) return title;
+            string t = WebUtility.HtmlDecode(title);
+            t = Regex.Replace(t, @"<[^>]+>", " ");
+            t = Regex.Replace(t, @"\s+", " ").Trim();
+            // remove common repack tags
+            t = Regex.Replace(t, @"\s*[-–|]\s*(FitGirl|DODI|ElAmigos|GOG|SteamRIP|Repack|Direct Play).*$", "", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\(?\s*(Free Download|PC Game|Repack|ISO|Direct Link)\s*\)?", "", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"\s+", " ").Trim();
+            if (t.Length > 120) t = t.Substring(0, 120).Trim();
+            return t;
+        }
+
+        private static string StripHtmlTags(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return "";
+            string t = Regex.Replace(html, @"<script[^>]*>[\s\S]*?</script>", " ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"<style[^>]*>[\s\S]*?</style>", " ", RegexOptions.IgnoreCase);
+            t = Regex.Replace(t, @"<[^>]+>", " ");
+            t = WebUtility.HtmlDecode(t);
+            t = Regex.Replace(t, @"\s+", " ").Trim();
+            return t;
+        }
+
+        private static string DownloadStringWithHeaders(string url)
+        {
+            try
+            {
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+                req.Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+                req.Headers.Add("Accept-Language", "tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7");
+                req.Timeout = 15000;
+                req.ReadWriteTimeout = 15000;
+                req.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
+
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (System.IO.StreamReader reader = new System.IO.StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string FetchViaJinaReader(string url)
+        {
+            try
+            {
+                string readerUrl = "https://r.jina.ai/http://" + url.Replace("https://", "").Replace("http://", "");
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(readerUrl);
+                req.Method = "GET";
+                req.UserAgent = "TitanGameHub/1.0";
+                req.Timeout = 20000;
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                using (System.IO.StreamReader reader = new System.IO.StreamReader(resp.GetResponseStream(), Encoding.UTF8))
+                {
+                    return reader.ReadToEnd();
+                }
+            }
+            catch { return null; }
+        }
+
+        private static string ExtractFirstImage(string html, string baseUrl)
+        {
+            try
+            {
+                Match m = Regex.Match(html, @"<img[^>]+src=[""']([^""']+\.(?:jpg|jpeg|png|webp))[""'][^>]*>", RegexOptions.IgnoreCase);
+                if (!m.Success) return "";
+                string src = m.Groups[1].Value;
+                if (src.StartsWith("//")) return "https:" + src;
+                if (src.StartsWith("/"))
+                {
+                    try { Uri u = new Uri(baseUrl); return u.Scheme + "://" + u.Authority + src; } catch { return src; }
+                }
+                return src;
+            }
+            catch { return ""; }
+        }
+
+        private static List<SiteMirror> ExtractMirrors(string html, string baseUrl)
+        {
+            List<SiteMirror> mirrors = new List<SiteMirror>();
+            try
+            {
+                MatchCollection links = Regex.Matches(html, @"<a[^>]+href=[""']([^""']+)[""'][^>]*>(.*?)</a>", RegexOptions.IgnoreCase | RegexOptions.Singleline);
+                HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                int pri = 0;
+
+                foreach (Match m in links)
+                {
+                    string href = m.Groups[1].Value;
+                    string text = StripHtmlTags(m.Groups[2].Value).ToLowerInvariant();
+                    if (string.IsNullOrEmpty(href)) continue;
+                    if (href.StartsWith("#")) continue;
+
+                    if (text.Contains("magnet") || href.StartsWith("magnet:"))
+                    {
+                        if (seen.Add(href))
+                            mirrors.Add(new SiteMirror { HostName = "Magnet", Url = href, IsDirectArchive = false, Priority = pri++ });
+                        continue;
+                    }
+
+                    bool looksLikeDownload = href.IndexOf("download", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                             href.IndexOf("mirror", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                             href.IndexOf("/go/", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                             text.Contains("indir") || text.Contains("download") || text.Contains("torrent") || text.Contains("part");
+                    if (!looksLikeDownload) continue;
+
+                    if (href.StartsWith("//")) href = "https:" + href;
+                    if (href.StartsWith("/"))
+                    { try { Uri u = new Uri(baseUrl); href = u.Scheme + "://" + u.Authority + href; } catch { } }
+                    if (!href.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (seen.Add(href))
+                        mirrors.Add(new SiteMirror { HostName = GetHostName(href), Url = href, IsDirectArchive = href.IndexOf(".torrent", StringComparison.OrdinalIgnoreCase) >= 0, Priority = pri++ });
+                }
+            }
+            catch { }
+            return mirrors;
+        }
+
+        private static string GetHostName(string url)
+        {
+            try { return new Uri(url).Host; } catch { return "mirror"; }
+        }
+    }    
+            // Stub: called by DownloadInstallService.cs and SteamClientBridgeService.cs
+            public static SitePageAnalysis AnalyzeGameOnSteamRip(profile)
+            {
+                return new SitePageAnalysis { Success = false, ErrorMessage = "Stub: AnalyzeGameOnSteamRip not fully implemented" };
+            }
+    
+            // Stub: called by DownloadInstallService.cs
+            public static string FindSteamRipPostUrl(string name)
+            {
+                return "";
+            }
+    
+            // Stub: called by DownloadInstallService.cs
+            public static void InvalidateAnalysisCacheFor(string idOrName)
+            {
+                // No-op stub
+            }
+    
+            // Stub: called by WpfMainWindow.cs
+            public static void ResolveSteamStoreMetadataAsync(GameProfile gp, Action del)
+            {
+                // No-op stub
+                del?.Invoke();
+            }
+    
+
+}

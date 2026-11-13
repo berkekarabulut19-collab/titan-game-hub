@@ -1,0 +1,69 @@
+========================================================================
+   ARKADAŞLA BERABER OYNAMA — ADIM ADIM (TITAN GAME HUB)
+========================================================================
+
+ÖN KOŞULLAR (ikisinde de olmalı)
+------------------------------------------------------------------------
+1. Zip'i arkadaşına gönder, klasöre çıkar, "KURULUM_VE_BASLAT.bat" çalıştır.
+   (Yönetici onayı ister: kısayol, firewall ve klasörleri hazırlar.)
+2. İKİ BİLGİSAYARDA DA STEAM AÇIK VE GİRİŞ YAPILMIŞ OLMALI.
+   Oyunlar Steam üzerinden değil, Spacewar (AppID 480) P2P ağı üzerinden
+   buluşur; Steam kapalıysa arkadaş listesi/lobi çalışmaz.
+3. AYNI OYUN + AYNI SÜRÜM kurulu olmalı. Sürüm farklıysa "GÜNCELLE"
+   ile ikisini de aynı sürüme getir (panelde "Sürüm Farkı" uyarısı çıkar).
+
+ADIM 1 — ARKADAŞ EKLE
+------------------------------------------------------------------------
+- Sağ üstteki "ARKADAŞLAR & P2P LOBİ" panelinde senin kodun yazar: TITAN-XXXXXX
+  ("KOPYALA" ile panoya al, arkadaşına gönder).
+- Arkadaşın da kendi kodunu sana gönderir.
+- "TITAN Kodu veya Nick" alanına onun kodunu yaz → EKLE.
+- 10-20 saniye içinde panelde görünür: hangi oyunu oynuyor, ping, KATIL butonu.
+
+ADIM 2 — OYUNU BAŞLAT
+------------------------------------------------------------------------
+- Kütüphaneden oyunu seç → "OYNA".
+- Uygulama oyuna otomatik olarak:
+  * steam_appid.txt
+  * OnlineFix.ini (Spacewar 480 P2P)
+  * steam_settings\settings\* (Goldberg: hesap adı, dil, dinleme portu, SteamID)
+  yazar. Bu dosyalar olmadan co-op çalışmaz.
+
+ADIM 3 — LOBİ
+------------------------------------------------------------------------
+- Bir kişi "LOBİYE DAVET GÖNDER (480)" butonuna basar.
+  → Lobi kodu + steam://run/480// daveti panoya kopyalanır ve
+    çevrim içi arkadaşlara iletilir.
+- Diğer tarafta panelde arkadaşın yanında "KATIL" çıkar → bas.
+- Oyunun içindeki menüden (Online/Co-Op) arkadaşının odasını görürsün.
+  Bazı oyunlarda doğrudan bağlantı için host IP gerekir: uygulama host
+  IP'sini panoya kopyalar ve steam_settings\settings\connect.txt içine yazar.
+
+ADIM 4 — OYUN İÇİ ARAYÜZ (Shift + Tab)
+------------------------------------------------------------------------
+- Oyundayken Shift+Tab (veya F5) → Steam benzeri overlay açılır:
+  arkadaş listesi, lobi kodu, sohbet, davet, ekran görüntüsü (F12).
+- Tekrar Shift+Tab / Esc ile oyuna dönersin.
+- F6 canlı altyazı, F7 rehber, F8 not defteri de aynı overlay ailesindendir.
+
+AĞ / BAĞLANTI SORUNLARI
+------------------------------------------------------------------------
+- Aynı Wi-Fi: LAN modu otomatik çalışır (UDP 47888 keşif + oyun portu).
+- Farklı şehir/internet: "TAKIMI EŞİTLE & P2P GÜNCELLE" butonuna bas.
+  Router'da UPnP açık olmalı (uygulama port yönlendirmeyi kendisi dener).
+- Windows Firewall: KURULUM_VE_BASLAT.bat gerekli kuralları ekler.
+- Defender oyun DLL'lerini (steam_api64.dll) karantinaya alıyorsa:
+  bin\Games klasörü otomatik dışlanır; almıyorsa tekrar KURULUM çalıştır.
+
+SIK YAPILAN HATALAR
+------------------------------------------------------------------------
+x Steam kapalı            -> lobi/arkadaş listesi boş kalır
+x Farklı oyun sürümü      -> odaya girer ama bağlantı düşer
+x Sadece bir tarafta crack -> davet görünür, oyun açılmaz
+x VPN açık                -> P2P delik açma (hole punching) başarısız olabilir
+x Aynı anda iki Steam hesabı tek makinede -> SteamID çakışır
+
+İPTAL EDİLEN İNDİRME
+------------------------------------------------------------------------
+- İndirme sırasında "İPTAL (KISMI KORU)" → indirilen kısım silinmez.
+- Tekrar OYNA'ya basınca HTTP Range ile kaldığı yerden devam eder.

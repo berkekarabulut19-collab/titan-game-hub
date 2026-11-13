@@ -1,0 +1,42 @@
+name: TitanGameHub Selftest
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  selftest:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Build (if needed)
+        shell: cmd
+        run: |
+          if exist build.bat call build.bat
+
+      - name: Run selftest
+        shell: cmd
+        run: |
+          if exist bin\TitanGameHub.exe (
+            bin\TitanGameHub.exe --selftest
+          ) else (
+            echo "TitanGameHub.exe bulunamadi, derleme sonucu kontrol edin."
+            exit /b 1
+          )
+
+      - name: Upload selftest report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: selftest-report
+          path: |
+            bin/data/selftest_report.txt
+            data/selftest_report.txt
+          if-no-files-found: warn

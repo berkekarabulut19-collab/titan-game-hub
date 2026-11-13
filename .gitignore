@@ -1,0 +1,24 @@
+# Build / runtime caches & user data
+bin/Games/
+bin/cache/
+bin/data/crashes/
+bin/data/*.log
+bin/data/friends.cfg
+bin/data/identity.cfg
+bin/data/download_history.json
+bin/data/settings_profile.json
+bin/data/selftest_report.txt
+bin/titan_user.cfg
+bin/Backups/
+bin/*.exe
+bin/*.dll
+Downloads/
+SaveBackups/
+data/
+*.zip
+*.log
+*.bak
+*.user
+.vs/
+obj/
+tools/ota_private_key.xml

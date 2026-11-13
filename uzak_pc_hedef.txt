@@ -1,0 +1,5 @@
+; Diğer PC'deki TitanGameHub klasör yolunu buraya yazın.
+; Örnek: \\DIGER-PC\TitanGameHub
+; Örnek: Z:\TitanGameHub
+; Boş bırakılırsa derleme sonrası uzak güncelleme atlanır.
+
