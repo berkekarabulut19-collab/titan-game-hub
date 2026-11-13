@@ -406,6 +406,60 @@ namespace TitanGameHub
                 gp.WorkingDirectory = "";
             }
 
+            // Yönetilen oyun köklerindeki (bin\Games, D:\Games vb.) klasörlerde kurulu olup katalogda eksik olan oyunları otomatik keşfet
+            try
+            {
+                HashSet<string> knownNorms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                HashSet<string> knownDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (GameProfile gp in catalog)
+                {
+                    if (gp == null) continue;
+                    string kn = GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
+                    if (!string.IsNullOrEmpty(kn)) knownNorms.Add(kn);
+                    if (!string.IsNullOrEmpty(gp.WorkingDirectory)) knownDirs.Add(gp.WorkingDirectory.TrimEnd('\\', '/'));
+                }
+
+                foreach (string root in GamePathResolver.GetLibraryRoots(false))
+                {
+                    if (string.IsNullOrEmpty(root) || !Directory.Exists(root)) continue;
+                    string[] dirs;
+                    try { dirs = Directory.GetDirectories(root); } catch { continue; }
+                    foreach (string dir in dirs)
+                    {
+                        string dirName = Path.GetFileName(dir) ?? "";
+                        if (string.IsNullOrEmpty(dirName) || dirName.StartsWith("_") || dirName.StartsWith(".")) continue;
+                        if (dirName.EndsWith("_parts", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (knownDirs.Contains(dir.TrimEnd('\\', '/'))) continue;
+
+                        string norm = GameDeduplicationEngine.NormalizeGameTitle(dirName);
+                        if (string.IsNullOrEmpty(norm) || knownNorms.Contains(norm)) continue;
+
+                        string exe = FindMainExeInFolder(dir);
+                        if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
+                        {
+                            GameProfile discovered = new GameProfile
+                            {
+                                Id = "local_" + norm,
+                                Name = dirName,
+                                Category = "Kurulu Oyun",
+                                ExecutablePath = exe,
+                                WorkingDirectory = Path.GetDirectoryName(exe),
+                                Version = "Kurulu",
+                                RemoteVersion = "Kurulu",
+                                SteamAppId = "480",
+                                Description = dirName + " — Bilgisayarda kurulu oyun.",
+                                MaxPlayers = "Tek & Çok Oyunculu",
+                                FileSize = "Kurulu"
+                            };
+                            catalog.Add(discovered);
+                            knownNorms.Add(norm);
+                            changed++;
+                        }
+                    }
+                }
+            }
+            catch { }
+
             return changed;
         }
 
@@ -421,14 +475,15 @@ namespace TitanGameHub
                 foreach (string sd in subDirs)
                 {
                     string sdName = (Path.GetFileName(sd) ?? "").ToLowerInvariant();
-                    if (sdName == "bin" || sdName == "binaries" || sdName == "win64" || sdName == "game" || sdName == "build")
+                    if (sdName == "_commonredist" || sdName == "redist" || sdName == "directx" || sdName == "support" || sdName == "jre")
+                        continue;
+                    try
                     {
-                        try
-                        {
+                        exes.AddRange(Directory.GetFiles(sd, "*.exe", SearchOption.TopDirectoryOnly));
+                        if (sdName == "bin" || sdName == "binaries" || sdName == "win64" || sdName == "game" || sdName == "build")
                             exes.AddRange(Directory.GetFiles(sd, "*.exe", SearchOption.AllDirectories));
-                        }
-                        catch { }
                     }
+                    catch { }
                 }
 
                 if (exes.Count == 0)
