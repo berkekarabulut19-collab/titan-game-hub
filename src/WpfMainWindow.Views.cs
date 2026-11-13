@@ -33,25 +33,25 @@ namespace TitanGameHub
         private TextBlock _txtSigDbStatusText;
 
         // =========================================================================
-        // VIEW 2: MAĞAZA & TÜM SİTE (LIVE 5,000+ STEAMRIP CATALOG BROWSER)
+        // VIEW 2: MAĞAZA & TÜM SİTE (MODERN STEAM-STYLE STOREFRONT)
         // =========================================================================
         private void BuildStoreCenterView(Grid host)
         {
             _viewStore = new Grid() { Margin = new Thickness(14, 8, 14, 8), Visibility = Visibility.Collapsed };
-            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Row 0: Search & Live Site Bar
-            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Row 1: 16 Live Category Pills
-            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Row 2: Pagination & Status Strip
-            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) }); // Row 3: 3-Col Store Grid
+            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Row 0: Search & Actions Header
+            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Row 1: Sources & Categories Wrap Strip
+            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Row 2: Pagination & Load More Bar
+            _viewStore.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) }); // Row 3: Store Grid
             host.Children.Add(_viewStore);
 
-            // Row 0: Steam Store Top Search Bar
+            // Row 0: Top Header & Search Bar
             Border storeTopBorder = new Border()
             {
                 Background = ThemeManager.SidebarNavy,
                 BorderBrush = HexBrush("#2D2345"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(5),
-                Padding = new Thickness(10, 6, 10, 6),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(12, 8, 12, 8),
                 Margin = new Thickness(0, 0, 0, 8)
             };
             Grid.SetRow(storeTopBorder, 0);
@@ -61,49 +61,47 @@ namespace TitanGameHub
             storeTopGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             storeTopGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
             storeTopGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-            storeTopGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             storeTopBorder.Child = storeTopGrid;
 
             StackPanel storeTitleStack = new StackPanel()
             {
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 12, 0)
+                Margin = new Thickness(0, 0, 14, 0)
             };
             storeTitleStack.Children.Add(new TextBlock()
             {
                 Text = "🎮 OYUN MAĞAZASI",
                 Foreground = ThemeManager.AccentTealBrush,
-                FontSize = 13,
+                FontSize = 14,
                 FontWeight = FontWeights.ExtraBold
             });
             _txtStoreCountBadge = new TextBlock()
             {
-                Text = "10.000+ Güvenli Oyun (SteamRIP • FitGirl • OvaGames)",
+                Text = "Tüm Kaynaklar (SteamRIP • FitGirl • OvaGames • FreeGOG • CroTorrents)",
                 Foreground = ThemeManager.AccentGreenBrush,
-                FontSize = 9.2,
+                FontSize = 9.5,
                 FontWeight = FontWeights.Bold
             };
             storeTitleStack.Children.Add(_txtStoreCountBadge);
             Grid.SetColumn(storeTitleStack, 0);
             storeTopGrid.Children.Add(storeTitleStack);
 
-            // Live Site Search Box
+            // Search Box (clean, uncluttered)
             Border searchInputBorder = new Border()
             {
                 Background = HexBrush("#0B1118"),
                 BorderBrush = ThemeManager.BorderPrimaryBrush,
                 BorderThickness = new Thickness(1.5),
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(8, 0, 6, 0),
-                Margin = new Thickness(0, 0, 8, 0),
-                Height = 32,
-                MinWidth = 240
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 0, 8, 0),
+                Margin = new Thickness(0, 0, 10, 0),
+                Height = 34,
+                MinWidth = 220
             };
             Grid.SetColumn(searchInputBorder, 1);
             storeTopGrid.Children.Add(searchInputBorder);
 
             Grid searchGrid = new Grid();
-            searchGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             searchGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             searchGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
             searchGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
@@ -112,10 +110,10 @@ namespace TitanGameHub
             TextBlock iconSearch = new TextBlock()
             {
                 Text = "🔍",
-                FontSize = 11,
+                FontSize = 12,
                 Foreground = ThemeManager.AccentTealBrush,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 6, 0)
+                Margin = new Thickness(0, 0, 8, 0)
             };
             Grid.SetColumn(iconSearch, 0);
             searchGrid.Children.Add(iconSearch);
@@ -126,9 +124,9 @@ namespace TitanGameHub
 
             TextBlock txtSearchWatermark = new TextBlock()
             {
-                Text = "Oyun adı yazarak arayın (Örn: GTA, Peak, Forza, Cyberpunk)...",
+                Text = "Oyun adı yazın (Örn: GTA V, Cyberpunk, Elden Ring, Peak)...",
                 Foreground = HexBrush("#56687D"),
-                FontSize = 11,
+                FontSize = 11.2,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsHitTestVisible = false
             };
@@ -140,21 +138,20 @@ namespace TitanGameHub
                 Foreground = Brushes.White,
                 CaretBrush = ThemeManager.AccentBlueBrush,
                 BorderThickness = new Thickness(0),
-                FontSize = 11.5,
-                Height = 28,
+                FontSize = 11.8,
+                Height = 30,
                 VerticalContentAlignment = VerticalAlignment.Center
             };
             inputHostGrid.Children.Add(_txtStoreSearch);
 
             DispatcherTimer searchDebounceTimer = new DispatcherTimer();
-            searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(400);
+            searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(450);
             searchDebounceTimer.Tick += delegate
             {
                 searchDebounceTimer.Stop();
                 string q = (_txtStoreSearch.Text ?? "").Trim();
                 if (string.IsNullOrEmpty(q)) return;
 
-                // Yerel katalogda hızlı filtrele (UI donmasını önlemek için debounce sonrası tek sefer)
                 try
                 {
                     List<GameProfile> sourceList = _allProfiles ?? new List<GameProfile>();
@@ -172,7 +169,7 @@ namespace TitanGameHub
                     if (matched.Count > 0)
                     {
                         _storeFilteredProfiles = matched;
-                        _txtStoreCountBadge.Text = string.Format("'{0}' için yerel {1} sonuç", q, matched.Count);
+                        _txtStoreCountBadge.Text = string.Format("'{0}' için {1} yerel eşleşme (canlı taranıyor...)", q, matched.Count);
                         RefreshStorefrontGrid();
                     }
                 }
@@ -181,57 +178,15 @@ namespace TitanGameHub
                 if (q.Length >= 2 && !_isFetchingLiveSite)
                 {
                     _currentStorePage = 1;
-                    TriggerLiveSiteSearchOrCategoryFetch();
+                    TriggerLiveSiteSearchOrCategoryFetch(false);
                 }
             };
-
-            // ===== TOPLU KATALOG: bağlı tüm sitelerin oyunlarını kütüphaneye ekle =====
-            Button btnBulkImport = new Button()
-            {
-                Content = "⬇ TÜM SİTELERİ EKLE",
-                Height = 26,
-                Padding = new Thickness(10, 0, 10, 0),
-                Margin = new Thickness(6, 0, 0, 0),
-                Background = HexBrush("#1E172C"),
-                Foreground = ThemeManager.AccentGreenBrush,
-                BorderBrush = ThemeManager.BorderAccentBrush,
-                BorderThickness = new Thickness(1),
-                FontSize = 9.6,
-                FontWeight = FontWeights.Bold,
-                Cursor = Cursors.Hand,
-                ToolTip = "SteamRIP, FitGirl, OvaGames, FreeGOG kataloglarını sayfa sayfa tarar; oyunları KAPAK görselleriyle kütüphaneye ekler"
-            };
-            ApplyRoundedButtonTemplate(btnBulkImport, 3);
-            btnBulkImport.Click += delegate { RunBulkCatalogImport(3); };
-            Grid.SetColumn(btnBulkImport, 4);
-            searchGrid.Children.Add(btnBulkImport);
-
-            // ===== URL'DEN OYUN EKLE (SteamRIP / FitGirl / OvaGames / FreeGOG / Online-Fix) =====
-            Button btnImportFromUrl = new Button()
-            {
-                Content = "＋ URL'DEN EKLE",
-                Height = 26,
-                Padding = new Thickness(10, 0, 10, 0),
-                Margin = new Thickness(6, 0, 0, 0),
-                Background = HexBrush("#1E172C"),
-                Foreground = ThemeManager.AccentTealBrush,
-                BorderBrush = ThemeManager.BorderAccentBrush,
-                BorderThickness = new Thickness(1),
-                FontSize = 9.6,
-                FontWeight = FontWeights.Bold,
-                Cursor = Cursors.Hand,
-                ToolTip = "Bir oyun sayfası linkini yapıştırın: başlık, sürüm, boyut, AppID ve KAPAK görseli otomatik alınır"
-            };
-            ApplyRoundedButtonTemplate(btnImportFromUrl, 3);
-            btnImportFromUrl.Click += delegate { ImportGameFromUrlDialog(); };
-            Grid.SetColumn(btnImportFromUrl, 3);
-            searchGrid.Children.Add(btnImportFromUrl);
 
             Button btnClearSearch = new Button()
             {
                 Content = "✕",
-                Width = 22,
-                Height = 22,
+                Width = 24,
+                Height = 24,
                 Background = Brushes.Transparent,
                 Foreground = ThemeManager.ForegroundMutedBrush,
                 BorderThickness = new Thickness(0),
@@ -245,15 +200,16 @@ namespace TitanGameHub
                 _txtStoreSearch.Text = "";
                 txtSearchWatermark.Visibility = Visibility.Visible;
                 searchDebounceTimer.Stop();
+                _currentStorePage = 1;
                 if (_activeSiteCategoryId == -1)
                 {
                     _storeFilteredProfiles = new List<GameProfile>(_allProfiles);
-                    _txtStoreCountBadge.Text = "Öne Çıkan Co-Op Kataloğu: " + _storeFilteredProfiles.Count + " Oyun";
+                    _txtStoreCountBadge.Text = "Kütüphane & Öne Çıkanlar: " + _storeFilteredProfiles.Count + " Oyun";
                     RefreshStorefrontGrid();
                 }
                 else
                 {
-                    TriggerLiveSiteSearchOrCategoryFetch();
+                    TriggerLiveSiteSearchOrCategoryFetch(false);
                 }
             };
             Grid.SetColumn(btnClearSearch, 2);
@@ -270,12 +226,12 @@ namespace TitanGameHub
                     if (_activeSiteCategoryId == -1)
                     {
                         _storeFilteredProfiles = new List<GameProfile>(_allProfiles);
-                        _txtStoreCountBadge.Text = "Öne Çıkan Co-Op Kataloğu: " + _storeFilteredProfiles.Count + " Oyun";
+                        _txtStoreCountBadge.Text = "Kütüphane & Öne Çıkanlar: " + _storeFilteredProfiles.Count + " Oyun";
                         RefreshStorefrontGrid();
                     }
                     else
                     {
-                        TriggerLiveSiteSearchOrCategoryFetch();
+                        TriggerLiveSiteSearchOrCategoryFetch(false);
                     }
                 }
                 else
@@ -291,14 +247,23 @@ namespace TitanGameHub
                 {
                     searchDebounceTimer.Stop();
                     _currentStorePage = 1;
-                    TriggerLiveSiteSearchOrCategoryFetch();
+                    TriggerLiveSiteSearchOrCategoryFetch(false);
                 }
             };
 
+            // Right Action Buttons Strip (outside search box)
+            StackPanel actionButtons = new StackPanel()
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(actionButtons, 2);
+            storeTopGrid.Children.Add(actionButtons);
+
             Button btnLiveSearch = new Button()
             {
-                Content = "🔍 CANLI ARA",
-                Height = 30,
+                Content = "🔍 ARA",
+                Height = 32,
                 Padding = new Thickness(12, 0, 12, 0),
                 Margin = new Thickness(0, 0, 6, 0),
                 Background = MakeGradient("#9333EA", "#6B21A8"),
@@ -309,54 +274,83 @@ namespace TitanGameHub
                 FontWeight = FontWeights.ExtraBold,
                 Cursor = Cursors.Hand
             };
-            ApplyRoundedButtonTemplate(btnLiveSearch, 3);
+            ApplyRoundedButtonTemplate(btnLiveSearch, 5);
             btnLiveSearch.Click += delegate
             {
                 _currentStorePage = 1;
-                TriggerLiveSiteSearchOrCategoryFetch();
+                TriggerLiveSiteSearchOrCategoryFetch(false);
             };
-            Grid.SetColumn(btnLiveSearch, 2);
-            storeTopGrid.Children.Add(btnLiveSearch);
+            actionButtons.Children.Add(btnLiveSearch);
 
             Button btnFetchLatestSite = new Button()
             {
-                Content = "🔥 SON EKLENENLER",
-                Height = 30,
-                Padding = new Thickness(12, 0, 12, 0),
-                Background = MakeGradient("#5DBA2F", "#46941E"),
-                Foreground = Brushes.White,
-                BorderBrush = HexBrush("#6ED43B"),
+                Content = "🔄 YENİLE",
+                Height = 32,
+                Padding = new Thickness(11, 0, 11, 0),
+                Margin = new Thickness(0, 0, 6, 0),
+                Background = HexBrush("#1E172C"),
+                Foreground = ThemeManager.AccentTealBrush,
+                BorderBrush = ThemeManager.BorderAccentBrush,
                 BorderThickness = new Thickness(1),
                 FontSize = 10,
-                FontWeight = FontWeights.ExtraBold,
-                Cursor = Cursors.Hand
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                ToolTip = "Önbelleği temizleyip canlı sitelerden taze oyun listesi çeker"
             };
-            ApplyRoundedButtonTemplate(btnFetchLatestSite, 3);
+            ApplyRoundedButtonTemplate(btnFetchLatestSite, 5);
             btnFetchLatestSite.Click += delegate
             {
                 SiteParserService.InvalidateCache();
-                _txtStoreSearch.Text = "";
-                _activeSiteCategoryId = 0;
                 _currentStorePage = 1;
-                HighlightStoreCategoryButtons();
-                TriggerLiveSiteSearchOrCategoryFetch();
+                TriggerLiveSiteSearchOrCategoryFetch(false);
             };
-            Grid.SetColumn(btnFetchLatestSite, 3);
-            storeTopGrid.Children.Add(btnFetchLatestSite);
+            actionButtons.Children.Add(btnFetchLatestSite);
 
-            // Row 1: Single Horizontal Scrolling Strip of 16 Category Pills
-            ScrollViewer catScroll = new ScrollViewer()
+            Button btnImportFromUrl = new Button()
             {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
-                Margin = new Thickness(0, 0, 0, 6),
-                Height = 28
+                Content = "＋ URL EKLE",
+                Height = 32,
+                Padding = new Thickness(10, 0, 10, 0),
+                Margin = new Thickness(0, 0, 6, 0),
+                Background = HexBrush("#1E172C"),
+                Foreground = ThemeManager.ForegroundMainBrush,
+                BorderBrush = ThemeManager.BorderPrimaryBrush,
+                BorderThickness = new Thickness(1),
+                FontSize = 9.8,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                ToolTip = "Oyun sayfası linki yapıştırarak kütüphaneye ekle"
             };
-            Grid.SetRow(catScroll, 1);
-            _viewStore.Children.Add(catScroll);
+            ApplyRoundedButtonTemplate(btnImportFromUrl, 5);
+            btnImportFromUrl.Click += delegate { ImportGameFromUrlDialog(); };
+            actionButtons.Children.Add(btnImportFromUrl);
 
-            _storeCatWrap = new StackPanel() { Orientation = Orientation.Horizontal };
-            catScroll.Content = _storeCatWrap;
+            Button btnBulkImport = new Button()
+            {
+                Content = "⬇ KATALOG ÇEK",
+                Height = 32,
+                Padding = new Thickness(10, 0, 10, 0),
+                Background = MakeGradient("#166534", "#15803D"),
+                Foreground = Brushes.White,
+                BorderBrush = ThemeManager.AccentGreenBrush,
+                BorderThickness = new Thickness(1),
+                FontSize = 9.8,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                ToolTip = "Tüm sitelerin ilk sayfalarını tarayıp oyunları kalıcı kütüphaneye aktarır"
+            };
+            ApplyRoundedButtonTemplate(btnBulkImport, 5);
+            btnBulkImport.Click += delegate { RunBulkCatalogImport(3); };
+            actionButtons.Children.Add(btnBulkImport);
+
+            // Row 1: Wrapped Source & Category Pills (all visible at a glance)
+            WrapPanel catWrap = new WrapPanel()
+            {
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+            Grid.SetRow(catWrap, 1);
+            _viewStore.Children.Add(catWrap);
+            _storeCatWrap = catWrap;
 
             foreach (SiteCategoryDef catDef in SiteParserService.Categories)
             {
@@ -365,15 +359,15 @@ namespace TitanGameHub
                 {
                     Content = capturedCat.Title,
                     Tag = capturedCat.Id,
-                    Height = 24,
+                    Height = 26,
                     Padding = new Thickness(10, 0, 10, 0),
-                    Margin = new Thickness(0, 0, 5, 0),
-                    FontSize = 9.2,
+                    Margin = new Thickness(0, 0, 5, 5),
+                    FontSize = 9.4,
                     FontWeight = FontWeights.Bold,
                     Cursor = Cursors.Hand,
                     BorderThickness = new Thickness(1)
                 };
-                ApplyRoundedButtonTemplate(cBtn, 3);
+                ApplyRoundedButtonTemplate(cBtn, 4);
                 cBtn.Click += delegate
                 {
                     _activeSiteCategoryId = capturedCat.Id;
@@ -382,29 +376,29 @@ namespace TitanGameHub
                     if (capturedCat.Id == -1)
                     {
                         _storeFilteredProfiles = new List<GameProfile>(_allProfiles);
-                        _txtStoreCountBadge.Text = "Öne Çıkan Co-Op Kataloğu: " + _storeFilteredProfiles.Count + " Oyun";
-                        _txtStorePageIndicator.Text = "ÖNE ÇIKAN CO-OP PAKETLERİ (SAYFA 1)";
+                        _txtStoreCountBadge.Text = "Kütüphane & Öne Çıkanlar: " + _storeFilteredProfiles.Count + " Oyun";
+                        _txtStorePageIndicator.Text = string.Format("KÜTÜPHANE KATALOĞU ({0} OYUN)", _storeFilteredProfiles.Count);
                         RefreshStorefrontGrid();
                     }
                     else
                     {
-                        TriggerLiveSiteSearchOrCategoryFetch();
+                        TriggerLiveSiteSearchOrCategoryFetch(false);
                     }
                 };
                 _storeCatWrap.Children.Add(cBtn);
             }
             HighlightStoreCategoryButtons();
 
-            // Row 2: Pagination Controls Strip (◀ ÖNCEKİ SAYFA | SAYFA X | SONRAKİ SAYFA ▶)
+            // Row 2: Pagination & Load More Strip
             Border pageBar = new Border()
             {
                 Background = HexBrush("#121A26"),
                 BorderBrush = HexBrush("#1E2C40"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(4),
-                Padding = new Thickness(10, 3, 10, 3),
+                CornerRadius = new CornerRadius(6),
+                Padding = new Thickness(10, 4, 10, 4),
                 Margin = new Thickness(0, 0, 0, 8),
-                Height = 28
+                Height = 34
             };
             Grid.SetRow(pageBar, 2);
             _viewStore.Children.Add(pageBar);
@@ -413,13 +407,14 @@ namespace TitanGameHub
             pageGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             pageGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
             pageGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            pageGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
             pageBar.Child = pageGrid;
 
             Button btnPrevPage = new Button()
             {
                 Content = "◀ ÖNCEKİ SAYFA",
-                Height = 25,
-                Padding = new Thickness(12, 0, 12, 0),
+                Height = 24,
+                Padding = new Thickness(10, 0, 10, 0),
                 Background = HexBrush("#251D38"),
                 Foreground = ThemeManager.AccentTealBrush,
                 BorderBrush = ThemeManager.BorderPrimaryBrush,
@@ -428,15 +423,15 @@ namespace TitanGameHub
                 FontWeight = FontWeights.Bold,
                 Cursor = Cursors.Hand
             };
-            ApplyRoundedButtonTemplate(btnPrevPage, 3);
+            ApplyRoundedButtonTemplate(btnPrevPage, 4);
             btnPrevPage.Click += delegate
             {
                 if (_currentStorePage > 1)
                 {
                     _currentStorePage--;
                     if (_activeSiteCategoryId == -1 && string.IsNullOrWhiteSpace(_txtStoreSearch.Text))
-                        _activeSiteCategoryId = 0;
-                    TriggerLiveSiteSearchOrCategoryFetch();
+                        _activeSiteCategoryId = -20;
+                    TriggerLiveSiteSearchOrCategoryFetch(false);
                 }
             };
             Grid.SetColumn(btnPrevPage, 0);
@@ -444,7 +439,7 @@ namespace TitanGameHub
 
             _txtStorePageIndicator = new TextBlock()
             {
-                Text = "ÖNE ÇIKAN CO-OP & ONLINE OYUNLAR — TÜM SİTE İÇİN KATEGORİ SEÇİN VEYA ARAYIN",
+                Text = "TÜM SİTELER YÜKLENİYOR...",
                 Foreground = ThemeManager.ForegroundSubBrush,
                 FontSize = 10.2,
                 FontWeight = FontWeights.Bold,
@@ -454,11 +449,38 @@ namespace TitanGameHub
             Grid.SetColumn(_txtStorePageIndicator, 1);
             pageGrid.Children.Add(_txtStorePageIndicator);
 
+            Button btnAppendMore = new Button()
+            {
+                Content = "＋ DAHA FAZLA OYUN YÜKLE",
+                Height = 24,
+                Padding = new Thickness(10, 0, 10, 0),
+                Margin = new Thickness(0, 0, 6, 0),
+                Background = HexBrush("#16301B"),
+                Foreground = ThemeManager.AccentGreenBrush,
+                BorderBrush = ThemeManager.AccentGreenBrush,
+                BorderThickness = new Thickness(1),
+                FontSize = 9.5,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand,
+                ToolTip = "Sonraki sayfadaki oyunları mevcut vitrin listesinin altına ekler"
+            };
+            ApplyRoundedButtonTemplate(btnAppendMore, 4);
+            btnAppendMore.Click += delegate
+            {
+                if (_activeSiteCategoryId == -1 && string.IsNullOrWhiteSpace(_txtStoreSearch.Text))
+                    _activeSiteCategoryId = -20;
+                _currentStorePage++;
+                _storeDisplayLimit += 120;
+                TriggerLiveSiteSearchOrCategoryFetch(true);
+            };
+            Grid.SetColumn(btnAppendMore, 2);
+            pageGrid.Children.Add(btnAppendMore);
+
             Button btnNextPage = new Button()
             {
-                Content = "SONRAKİ SAYFA (CANLI SİTE) ▶",
-                Height = 25,
-                Padding = new Thickness(12, 0, 12, 0),
+                Content = "SONRAKİ SAYFA ▶",
+                Height = 24,
+                Padding = new Thickness(10, 0, 10, 0),
                 Background = HexBrush("#251D38"),
                 Foreground = ThemeManager.AccentTealBrush,
                 BorderBrush = ThemeManager.AccentBlueBrush,
@@ -467,12 +489,12 @@ namespace TitanGameHub
                 FontWeight = FontWeights.Bold,
                 Cursor = Cursors.Hand
             };
-            ApplyRoundedButtonTemplate(btnNextPage, 3);
+            ApplyRoundedButtonTemplate(btnNextPage, 4);
             btnNextPage.Click += delegate
             {
                 if (_activeSiteCategoryId == -1 && string.IsNullOrWhiteSpace(_txtStoreSearch.Text))
                 {
-                    _activeSiteCategoryId = 0;
+                    _activeSiteCategoryId = -20;
                     _currentStorePage = 1;
                     HighlightStoreCategoryButtons();
                 }
@@ -480,12 +502,12 @@ namespace TitanGameHub
                 {
                     _currentStorePage++;
                 }
-                TriggerLiveSiteSearchOrCategoryFetch();
+                TriggerLiveSiteSearchOrCategoryFetch(false);
             };
-            Grid.SetColumn(btnNextPage, 2);
+            Grid.SetColumn(btnNextPage, 3);
             pageGrid.Children.Add(btnNextPage);
 
-            // Row 3: Scrollable 3-Column Steam Store Cards Grid
+            // Row 3: Scrollable Store Cards Grid
             ScrollViewer storeScroll = new ScrollViewer()
             {
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto
@@ -513,7 +535,7 @@ namespace TitanGameHub
             }
         }
 
-        private void TriggerLiveSiteSearchOrCategoryFetch()
+        private void TriggerLiveSiteSearchOrCategoryFetch(bool appendMode = false)
         {
             if (_isFetchingLiveSite) return;
             _isFetchingLiveSite = true;
@@ -522,18 +544,30 @@ namespace TitanGameHub
             int catId = _activeSiteCategoryId;
             int page = _currentStorePage;
 
-            _txtStoreCountBadge.Text = "⏳ SteamRIP Canlı Veritabanı taranıyor...";
-            _txtStorePageIndicator.Text = string.Format("CANLI SİTE ÇEKİLİYOR (SAYFA {0})...", page);
+            if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = "⏳ Canlı kaynaklar taranıyor...";
+            if (_txtStorePageIndicator != null)
+                _txtStorePageIndicator.Text = string.Format("CANLI MAĞAZA YÜKLENİYOR (SAYFA {0})...", page);
 
             ThreadPool.QueueUserWorkItem(delegate
             {
                 try
                 {
                     string msg;
-                    List<GameProfile> liveGames = SiteParserService.FetchLiveSiteGames(catId, query, page, (catId == -20 ? 12 : 24), out msg);
+                    int perSite = (catId == -20 ? 24 : 36);
+                    List<GameProfile> liveGames = SiteParserService.FetchLiveSiteGames(catId, query, page, perSite, out msg);
+                    if (liveGames == null) liveGames = new List<GameProfile>();
 
-                    // Ağır tekilleştirme ve yerel kütüphane eşleştirmesini arka plan iş parçacığında yap (UI donmasın)
-                    if (liveGames != null && liveGames.Count > 0)
+                    // İlk sayfa + TÜM SİTELER + arama yoksa yerel katalogdaki oyunları da havuza dahil et
+                    if (!appendMode && catId == -20 && string.IsNullOrEmpty(query) && page == 1 && _allProfiles != null)
+                    {
+                        foreach (GameProfile lp in _allProfiles)
+                        {
+                            if (lp != null && !string.IsNullOrWhiteSpace(lp.Name))
+                                liveGames.Add(lp);
+                        }
+                    }
+
+                    if (liveGames.Count > 0)
                     {
                         liveGames = GameDeduplicationEngine.Deduplicate(liveGames);
 
@@ -576,9 +610,20 @@ namespace TitanGameHub
                             _isFetchingLiveSite = false;
                             if (liveGames != null && liveGames.Count > 0)
                             {
-                                _storeFilteredProfiles = liveGames;
+                                if (appendMode && _storeFilteredProfiles != null && _storeFilteredProfiles.Count > 0)
+                                {
+                                    List<GameProfile> combined = new List<GameProfile>(_storeFilteredProfiles);
+                                    combined.AddRange(liveGames);
+                                    _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(combined);
+                                }
+                                else
+                                {
+                                    _storeFilteredProfiles = liveGames;
+                                }
+
                                 if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = msg;
-                                if (_txtStorePageIndicator != null) _txtStorePageIndicator.Text = string.Format("GÜVENLİ OYUN KATALOĞU — SAYFA {0} ({1} BENZERSİZ OYUN LİSTELENDİ)", page, liveGames.Count);
+                                if (_txtStorePageIndicator != null)
+                                    _txtStorePageIndicator.Text = string.Format("SAYFA {0} • TOPLAM {1} BENZERSİZ OYUN LİSTELENDİ", page, _storeFilteredProfiles.Count);
                                 if (_txtBottomStatus != null) _txtBottomStatus.Text = msg;
                                 RefreshStorefrontGrid();
                             }
@@ -949,10 +994,23 @@ namespace TitanGameHub
                 Margin = new Thickness(0, 0, 0, 10)
             });
 
-            // Single Full-Width Action Button: [↓ GÜVENLİ İNDİR / 🔄 GÜNCELLE / ▶ OYNA]
+            // Single Action Row: [ İNDİR / OYNA ] + [ ＋ / ✔ ] + [ ♡ / ★ ]
+            Grid cardActionGrid = new Grid() { Margin = new Thickness(0, 2, 0, 0) };
+            cardActionGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            if (!gp.IsInstalled)
+            {
+                cardActionGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+                cardActionGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            }
+            else
+            {
+                cardActionGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            }
+            body.Children.Add(cardActionGrid);
+
             string cardBtnText = gp.IsInstalled
                 ? (gp.UpdateAvailable ? "🔄 GÜNCELLE" : "▶ OYNA")
-                : "İNDİR";
+                : "⬇ İNDİR";
             Brush cardBtnBg = gp.IsInstalled
                 ? (gp.UpdateAvailable ? (Brush)MakeGradient("#7E22CE", "#0369A1") : (Brush)MakeGradient("#5DBA2F", "#46941E"))
                 : (Brush)MakeGradient("#9333EA", "#6B21A8");
@@ -963,16 +1021,16 @@ namespace TitanGameHub
             Button btnPrimary = new Button()
             {
                 Content = cardBtnText,
-                Height = 32,
+                Height = 30,
                 Background = cardBtnBg,
                 Foreground = Brushes.White,
                 BorderBrush = cardBtnBorder,
                 BorderThickness = new Thickness(1),
-                FontSize = 10.5,
+                FontSize = 10.2,
                 FontWeight = FontWeights.ExtraBold,
                 Cursor = Cursors.Hand
             };
-            ApplyRoundedButtonTemplate(btnPrimary, 3);
+            ApplyRoundedButtonTemplate(btnPrimary, 4);
             btnPrimary.Click += delegate
             {
                 GameProfile canonical = EnsureGameInLibraryCatalog(captured) ?? captured;
@@ -993,97 +1051,96 @@ namespace TitanGameHub
                     _downloader.StartInAppAutomatedPipeline(canonical);
                 }
             };
-            body.Children.Add(btnPrimary);
+            Grid.SetColumn(btnPrimary, 0);
+            cardActionGrid.Children.Add(btnPrimary);
 
-            // --- İkincil aksiyon: kütüphaneye ekle / favori (Steam "Add to Library" karşılığı) ---
             if (!gp.IsInstalled)
             {
                 bool alreadyInLibrary = IsGameInLibrary(gp);
                 Button btnAddLib = new Button()
                 {
-                    Content = alreadyInLibrary ? "✔ KÜTÜPHANEDE" : "＋ KÜTÜPHANEYE EKLE",
-                    Height = 24,
-                    Margin = new Thickness(0, 6, 0, 0),
+                    Content = alreadyInLibrary ? "✔" : "＋",
+                    Width = 32,
+                    Height = 30,
+                    Margin = new Thickness(5, 0, 0, 0),
                     Background = HexBrush("#1E172C"),
                     Foreground = alreadyInLibrary ? ThemeManager.AccentGreenBrush : HexBrush("#C7D5E0"),
-                    BorderBrush = ThemeManager.BorderPrimaryBrush,
+                    BorderBrush = alreadyInLibrary ? ThemeManager.AccentGreenBrush : ThemeManager.BorderPrimaryBrush,
                     BorderThickness = new Thickness(1),
-                    FontSize = 9.2,
+                    FontSize = 12,
                     FontWeight = FontWeights.Bold,
                     Cursor = Cursors.Hand,
                     ToolTip = alreadyInLibrary
-                        ? "Bu oyun kütüphanenizde. Kütüphane sekmesinden yönetebilirsiniz."
-                        : "Oyunu kütüphaneye ekler (indirme başlatmaz). Sonra Kütüphane'den tek tıkla indirirsiniz."
+                        ? "Bu oyun kütüphanenizde."
+                        : "Kütüphaneye Ekle (indirme başlatmaz)"
                 };
-                ApplyRoundedButtonTemplate(btnAddLib, 3);
+                ApplyRoundedButtonTemplate(btnAddLib, 4);
                 btnAddLib.IsEnabled = !alreadyInLibrary;
                 btnAddLib.Click += delegate
                 {
                     GameProfile canonical = EnsureGameInLibraryCatalog(captured);
                     if (canonical != null)
                     {
-                        _txtBottomStatus.Text = "✔ '" + canonical.Name + "' kütüphanenize eklendi. Kütüphane sekmesinden indirebilirsiniz.";
+                        _txtBottomStatus.Text = "✔ '" + canonical.Name + "' kütüphanenize eklendi.";
                         Win32.PlayTechChirp(true);
-                        RefreshStorefrontGrid();
+                        InvalidateLibraryLookupCache();
+                        btnAddLib.Content = "✔";
+                        btnAddLib.Foreground = ThemeManager.AccentGreenBrush;
+                        btnAddLib.BorderBrush = ThemeManager.AccentGreenBrush;
+                        btnAddLib.IsEnabled = false;
                         RefreshLibrarySidebarList();
                         RefreshLibrarySummaryMetrics();
                     }
                 };
+                Grid.SetColumn(btnAddLib, 1);
+                cardActionGrid.Children.Add(btnAddLib);
 
-                // Takip (wishlist) butonu
                 bool wished = Wishlist.IsWishlisted(gp);
                 Button btnWish = new Button()
                 {
-                    Content = wished ? "★ TAKİPTE" : "♡ TAKİP",
-                    Height = 24,
-                    Margin = new Thickness(4, 6, 0, 0),
-                    Width = 96,
-                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Content = wished ? "★" : "♡",
+                    Width = 32,
+                    Height = 30,
+                    Margin = new Thickness(5, 0, 0, 0),
                     Background = HexBrush("#1E172C"),
                     Foreground = wished ? ThemeManager.AccentTealBrush : ThemeManager.ForegroundMutedBrush,
                     BorderBrush = ThemeManager.BorderPrimaryBrush,
                     BorderThickness = new Thickness(1),
-                    FontSize = 9,
+                    FontSize = 12,
                     FontWeight = FontWeights.Bold,
                     Cursor = Cursors.Hand,
-                    ToolTip = "Takip listesine ekle/çıkar (kütüphaneye eklemez)"
+                    ToolTip = "Takip listesine ekle/çıkar"
                 };
-                ApplyRoundedButtonTemplate(btnWish, 3);
+                ApplyRoundedButtonTemplate(btnWish, 4);
                 btnWish.Click += delegate
                 {
                     bool added = Wishlist.Toggle(gp);
                     _txtBottomStatus.Text = (added ? "★ Takibe alındı: " : "♡ Takipten çıkarıldı: ") + gp.Name;
                     Win32.PlayTechChirp(added);
-
-                    // Tüm ızgarayı yeniden çizmek yerine sadece bu butonu güncelle (performans).
-                    btnWish.Content = added ? "★ TAKİPTE" : "♡ TAKİP";
+                    btnWish.Content = added ? "★" : "♡";
                     btnWish.Foreground = added ? ThemeManager.AccentTealBrush : ThemeManager.ForegroundMutedBrush;
                 };
-
-                DockPanel addRow = new DockPanel();
-                btnAddLib.Margin = new Thickness(0, 6, 0, 0);
-                btnWish.Margin = new Thickness(4, 6, 0, 0);
-                DockPanel.SetDock(btnWish, Dock.Right);
-                addRow.Children.Add(btnWish);
-                addRow.Children.Add(btnAddLib);
-                body.Children.Add(addRow);
+                Grid.SetColumn(btnWish, 2);
+                cardActionGrid.Children.Add(btnWish);
             }
             else
             {
                 Button btnFav = new Button()
                 {
-                    Content = gp.IsFavorite ? "★ FAVORİLERDE" : "☆ FAVORİLERE EKLE",
-                    Height = 24,
-                    Margin = new Thickness(0, 6, 0, 0),
+                    Content = gp.IsFavorite ? "★" : "☆",
+                    Width = 32,
+                    Height = 30,
+                    Margin = new Thickness(5, 0, 0, 0),
                     Background = HexBrush("#1E172C"),
-                    Foreground = HexBrush("#C7D5E0"),
+                    Foreground = gp.IsFavorite ? ThemeManager.AccentTealBrush : HexBrush("#C7D5E0"),
                     BorderBrush = ThemeManager.BorderPrimaryBrush,
                     BorderThickness = new Thickness(1),
-                    FontSize = 9.2,
+                    FontSize = 12,
                     FontWeight = FontWeights.Bold,
-                    Cursor = Cursors.Hand
+                    Cursor = Cursors.Hand,
+                    ToolTip = gp.IsFavorite ? "Favorilerden çıkar" : "Favorilere ekle"
                 };
-                ApplyRoundedButtonTemplate(btnFav, 3);
+                ApplyRoundedButtonTemplate(btnFav, 4);
                 btnFav.Click += delegate
                 {
                     gp.IsFavorite = !gp.IsFavorite;
@@ -1093,10 +1150,12 @@ namespace TitanGameHub
                         { p.IsFavorite = gp.IsFavorite; break; }
                     }
                     ProfileStore.SaveProfiles(_allProfiles);
-                    RefreshStorefrontGrid();
+                    btnFav.Content = gp.IsFavorite ? "★" : "☆";
+                    btnFav.Foreground = gp.IsFavorite ? ThemeManager.AccentTealBrush : HexBrush("#C7D5E0");
                     RefreshLibrarySidebarList();
                 };
-                body.Children.Add(btnFav);
+                Grid.SetColumn(btnFav, 1);
+                cardActionGrid.Children.Add(btnFav);
             }
 
             // --- Hover: donanım hızlandırmalı kenar & arka plan vurgusu (gölge shader maliyeti yok) ---

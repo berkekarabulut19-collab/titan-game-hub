@@ -62,20 +62,25 @@ namespace TitanGameHub
         // -13 = FreeGOG PC Games (DRM-Free GOG)
         public static readonly SiteCategoryDef[] Categories = new SiteCategoryDef[]
         {
-            new SiteCategoryDef(-20, "🌐 TÜM SİTELER (BİRLEŞİK CANLI)", "Tüm Siteler"),
-            new SiteCategoryDef(-1, "★ TÜM OYUNLAR (EN İYİLER)", "Öne Çıkan"),
-            new SiteCategoryDef(0, "🔥 SON EKLENENLER (CANLI)", "Son Eklenen"),
+            new SiteCategoryDef(-20, "🌐 TÜM SİTELER", "Tüm Siteler"),
+            new SiteCategoryDef(-1, "★ KÜTÜPHANE & ÖNE ÇIKAN", "Öne Çıkan"),
+            new SiteCategoryDef(0, "🔥 SON EKLENENLER", "Son Eklenen"),
+            new SiteCategoryDef(-15, "🎮 STEAMRIP", "SteamRIP"),
+            new SiteCategoryDef(-11, "📦 FITGIRL", "FitGirl"),
+            new SiteCategoryDef(-12, "💾 OVAGAMES", "OvaGames"),
+            new SiteCategoryDef(-13, "🎁 FREEGOG", "FreeGOG"),
+            new SiteCategoryDef(-14, "⚡ CROTORRENTS", "CroTorrents"),
             new SiteCategoryDef(1538, "CO-OP & MULTIPLAYER", "Multiplayer"),
-            new SiteCategoryDef(26, "AKSİYON (2700+)", "Aksiyon"),
-            new SiteCategoryDef(32, "KORKU (520+)", "Korku"),
-            new SiteCategoryDef(45, "AÇIK DÜNYA (300+)", "Açık Dünya"),
+            new SiteCategoryDef(26, "AKSİYON", "Aksiyon"),
+            new SiteCategoryDef(32, "KORKU", "Korku"),
+            new SiteCategoryDef(45, "AÇIK DÜNYA", "Açık Dünya"),
             new SiteCategoryDef(119, "HAYATTA KALMA", "Hayatta Kalma"),
-            new SiteCategoryDef(37, "SİMÜLASYON (1600+)", "Simülasyon"),
+            new SiteCategoryDef(37, "SİMÜLASYON", "Simülasyon"),
             new SiteCategoryDef(41, "FPS / SHOOTER", "FPS & Shooter"),
-            new SiteCategoryDef(27, "MACERA (2500+)", "Macera"),
-            new SiteCategoryDef(63, "RPG (1200+)", "RPG"),
-            new SiteCategoryDef(42, "STRATEJİ (1100+)", "Strateji"),
-            new SiteCategoryDef(35, "YARIŞ (230+)", "Yarış")
+            new SiteCategoryDef(27, "MACERA", "Macera"),
+            new SiteCategoryDef(63, "RPG", "RPG"),
+            new SiteCategoryDef(42, "STRATEJİ", "Strateji"),
+            new SiteCategoryDef(35, "YARIŞ", "Yarış")
         };
 
         private static readonly Dictionary<string, string> SteamAppIdCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -232,6 +237,14 @@ namespace TitanGameHub
             else if (categoryId == -14)
             {
                 results = FetchWpJsonCatalogFromBaseUrl("https://crotorrents.com", "CroTorrents", 0, searchQuery, page, perPage, out statusMessage);
+            }
+            else if (categoryId == -15)
+            {
+                results = FetchWpJsonCatalogFromBaseUrl("https://steamrip.com", "SteamRIP", 0, searchQuery, page, perPage, out statusMessage);
+                if (results == null || results.Count == 0)
+                {
+                    results = FetchFallbackSearchViaJina(searchQuery, out statusMessage);
+                }
             }
             else
             {
