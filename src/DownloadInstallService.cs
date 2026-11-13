@@ -1313,6 +1313,7 @@ namespace TitanGameHub
                         using (Stream rs = resp.GetResponseStream())
                         using (FileStream fs = new FileStream(partialFile, mode, FileAccess.Write, FileShare.Read))
                         {
+                            try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
                             byte[] buf = new byte[1048576]; // 1MB ultra-throughput socket buffer
                             long received = existingLength;
                             int read;
@@ -1425,6 +1426,10 @@ namespace TitanGameHub
                             }
 
                             receivedTotal = received;
+                            ReportProgress(
+                                string.Format("[2/4] {0} İndirme Tamamlandı: {1:0.0} MB — Arşiv doğrulanıyor...", profile.Name, receivedTotal / 1048576.0),
+                                85,
+                                "Doğrulanıyor");
                         }
                     }
 
@@ -1475,6 +1480,7 @@ namespace TitanGameHub
                     }
 
                     // Güvenlik: indirilen arşivi Windows Defender ile tara; tehdit varsa sessizce silip sonraki temiz aynaya geç.
+                    ReportProgress(string.Format("[3/4] {0} — Güvenlik taraması yapılıyor...", profile.Name), 87, "Taranıyor");
                     string scanMsg;
                     if (!ArchiveSecurityScanner.IsSafe(tempArchive, out scanMsg))
                     {
@@ -1482,6 +1488,7 @@ namespace TitanGameHub
                         return false;
                     }
 
+                    ReportProgress(string.Format("[3/4] {0} — Arşiv çıkartılıyor ve kuruluyor...", profile.Name), 90, "Kuruluyor");
                     ExtractArchiveAndConfigure(profile, tempArchive, targetDir);
 
                     // Kurulum sonrası kendi indirdiğimiz geçici arşivi temizle (disk şişmesin).

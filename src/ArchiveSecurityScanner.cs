@@ -37,16 +37,27 @@ namespace TitanGameHub
 
                 using (Process p = Process.Start(psi))
                 {
-                    string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-                    p.WaitForExit(180000);
+                    System.Text.StringBuilder sb = new System.Text.StringBuilder();
+                    p.OutputDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) sb.AppendLine(e.Data); };
+                    p.ErrorDataReceived += delegate(object s, DataReceivedEventArgs e) { if (e.Data != null) sb.AppendLine(e.Data); };
+                    p.BeginOutputReadLine();
+                    p.BeginErrorReadLine();
 
+                    if (!p.WaitForExit(20000))
+                    {
+                        try { p.Kill(); } catch { }
+                        message = "Tarama zaman aşımına uğradı, gerçek zamanlı koruma devrede.";
+                        return true;
+                    }
+
+                    string output = sb.ToString();
                     int code = 0;
                     try { code = p.ExitCode; } catch { }
 
                     // MpCmdRun: 0 = tehdit yok, 2 = tehdit bulundu/karantina
-                    if (code == 2 || output.IndexOf("Threat", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                    if (code == 2 || (output.IndexOf("Threat", StringComparison.OrdinalIgnoreCase) >= 0 &&
                         output.IndexOf("no threat", StringComparison.OrdinalIgnoreCase) < 0 &&
-                        output.IndexOf("found no", StringComparison.OrdinalIgnoreCase) < 0)
+                        output.IndexOf("found no", StringComparison.OrdinalIgnoreCase) < 0))
                     {
                         message = "Güvenlik taraması arşivde tehdit bildirdi. Dosya silindi, kurulum durduruldu.";
                         return false;
