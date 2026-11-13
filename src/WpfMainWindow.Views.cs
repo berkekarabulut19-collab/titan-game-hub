@@ -2371,9 +2371,11 @@ namespace TitanGameHub
         {
             Border rightBorder = new Border()
             {
-                Background = HexBrush("#15111F"),
-                BorderBrush = HexBrush("#3B2D59"),
-                BorderThickness = new Thickness(1, 0, 0, 0),
+                Background = HexBrush("#151024"),
+                BorderBrush = HexBrush("#2E234D"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Margin = new Thickness(8, 0, 0, 0),
                 Padding = new Thickness(10)
             };
             Grid.SetColumn(rightBorder, 2);
@@ -4765,18 +4767,113 @@ namespace TitanGameHub
                 try { _txtBottomStatus.Text = "Mağaza açılırken hata: " + ex.Message; } catch { }
             }
 
+            // Kütüphane dışındaki tam sayfa görünümlerde sol oyun listesini otomatik gizle (geniş ekran modu)
+            if (_colLeftLibrary != null)
+                _colLeftLibrary.Width = (targetView == _viewLibrary) ? new GridLength(252) : new GridLength(0);
+
+            if (_txtHeaderViewTitle != null)
+            {
+                if (targetView == _viewLibrary) _txtHeaderViewTitle.Text = "KÜTÜPHANE";
+                else if (targetView == _viewStore) _txtHeaderViewTitle.Text = "CANLI MAĞAZA (5000+)";
+                else if (targetView == _viewDownload) _txtHeaderViewTitle.Text = "İNDİRME MERKEZİ";
+                else if (targetView == _viewZeroVpn) _txtHeaderViewTitle.Text = "ZERO-VPN & P2P TÜNEL";
+                else if (targetView == _viewModManager) _txtHeaderViewTitle.Text = "MODLAR, YAMA & SDK";
+                else if (targetView == _viewTelemetry) _txtHeaderViewTitle.Text = "CANLI TELEMETRİ & BELLEK";
+                else if (targetView == _viewOtaShare) _txtHeaderViewTitle.Text = "OTA AĞI & DAĞITIM";
+                else if (targetView == _viewSettings) _txtHeaderViewTitle.Text = "SİSTEM AYARLARI";
+            }
+
             Button[] btns = new Button[] { _navBtnLibrary, _navBtnStore, _navBtnDownload, _navBtnZeroVpn, _navBtnModManager, _navBtnTelemetry, _navBtnOtaShare, _navBtnSettings };
             foreach (Button b in btns)
             {
                 if (b == null) continue;
                 bool isAct = (b == activeBtn);
                 b.Tag = isAct ? "ACTIVE" : "INACTIVE";
-                b.Background = isAct ? ThemeManager.DarkNavyBrush : Brushes.Transparent;
+                b.Background = isAct ? HexBrush("#23193D") : Brushes.Transparent;
                 b.Foreground = isAct ? Brushes.White : ThemeManager.ForegroundMutedBrush;
-                b.BorderBrush = isAct ? ThemeManager.AccentBlueBrush : Brushes.Transparent;
-                b.BorderThickness = isAct ? new Thickness(0, 0, 0, 2) : new Thickness(0, 0, 0, 2);
-                b.FontWeight = isAct ? FontWeights.Bold : FontWeights.SemiBold;
+                b.BorderBrush = isAct ? ThemeManager.AccentTealBrush : Brushes.Transparent;
+                b.BorderThickness = new Thickness(3, 0, 0, 0);
+                b.FontWeight = isAct ? FontWeights.ExtraBold : FontWeights.SemiBold;
             }
+        }
+
+        private static ControlTemplate RailNavTemplate()
+        {
+            ControlTemplate tpl = new ControlTemplate(typeof(Button));
+
+            FrameworkElementFactory root = new FrameworkElementFactory(typeof(Border));
+            root.SetValue(Border.BackgroundProperty, new TemplateBindingExtension(Control.BackgroundProperty));
+            root.SetValue(Border.BorderBrushProperty, new TemplateBindingExtension(Control.BorderBrushProperty));
+            root.SetValue(Border.BorderThicknessProperty, new TemplateBindingExtension(Control.BorderThicknessProperty));
+            root.SetValue(Border.CornerRadiusProperty, new CornerRadius(10));
+            root.SetValue(Border.PaddingProperty, new TemplateBindingExtension(Control.PaddingProperty));
+
+            FrameworkElementFactory cp = new FrameworkElementFactory(typeof(ContentPresenter));
+            cp.SetValue(ContentPresenter.HorizontalAlignmentProperty, HorizontalAlignment.Center);
+            cp.SetValue(ContentPresenter.VerticalAlignmentProperty, VerticalAlignment.Center);
+            root.AppendChild(cp);
+
+            tpl.VisualTree = root;
+            return tpl;
+        }
+
+        private Button CreateRailNavButton(string icon, string title, bool active)
+        {
+            StackPanel contentStack = new StackPanel()
+            {
+                Orientation = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            contentStack.Children.Add(new TextBlock()
+            {
+                Text = icon,
+                FontSize = 15,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 2)
+            });
+            contentStack.Children.Add(new TextBlock()
+            {
+                Text = LanguageService.T(title).ToUpperInvariant(),
+                FontSize = 8.4,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                TextAlignment = TextAlignment.Center
+            });
+
+            Button btn = new Button()
+            {
+                Content = contentStack,
+                Tag = active ? "ACTIVE" : "INACTIVE",
+                Height = 50,
+                Padding = new Thickness(2, 4, 2, 4),
+                Margin = new Thickness(0, 0, 0, 5),
+                Background = active ? HexBrush("#23193D") : Brushes.Transparent,
+                Foreground = active ? Brushes.White : ThemeManager.ForegroundMutedBrush,
+                BorderBrush = active ? ThemeManager.AccentTealBrush : Brushes.Transparent,
+                BorderThickness = new Thickness(3, 0, 0, 0),
+                FontWeight = active ? FontWeights.ExtraBold : FontWeights.SemiBold,
+                Cursor = Cursors.Hand,
+                ToolTip = LanguageService.T(title)
+            };
+            btn.Template = RailNavTemplate();
+
+            btn.MouseEnter += delegate
+            {
+                if ((btn.Tag as string) != "ACTIVE")
+                {
+                    btn.Foreground = Brushes.White;
+                    btn.Background = HexBrush("#19122B");
+                }
+            };
+            btn.MouseLeave += delegate
+            {
+                if ((btn.Tag as string) != "ACTIVE")
+                {
+                    btn.Foreground = ThemeManager.ForegroundMutedBrush;
+                    btn.Background = Brushes.Transparent;
+                }
+            };
+
+            return btn;
         }
 
         /// <summary>Steam sekmesi için düz, yuvarlamasız şablon (alt çizgi rengi BorderBrush'tan gelir).</summary>

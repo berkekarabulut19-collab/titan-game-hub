@@ -172,6 +172,8 @@ namespace TitanGameHub
 
         // Bottom Steam Status Bar
         private TextBlock _txtBottomStatus;
+        private ColumnDefinition _colLeftLibrary;
+        private TextBlock _txtHeaderViewTitle;
         private HwndSource _hwndSource;
         private DispatcherTimer _steamTimer;
         private DateTime _gameLaunchTime;
@@ -257,17 +259,17 @@ namespace TitanGameHub
 
             Border outerBorder = new Border()
             {
-                Background = ThemeManager.DarkestNavyBrush,
-                BorderBrush = ThemeManager.BorderPrimaryBrush,
+                Background = HexBrush("#0B0814"),
+                BorderBrush = HexBrush("#2E234D"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(6),
+                CornerRadius = new CornerRadius(12),
                 Margin = new Thickness(4),
                 Effect = new DropShadowEffect()
                 {
                     Color = Colors.Black,
-                    BlurRadius = 16,
+                    BlurRadius = 18,
                     ShadowDepth = 0,
-                    Opacity = 0.88
+                    Opacity = 0.90
                 }
             };
             RenderOptions.SetBitmapScalingMode(outerBorder, BitmapScalingMode.HighQuality);
@@ -276,64 +278,54 @@ namespace TitanGameHub
             TextOptions.SetTextRenderingMode(outerBorder, TextRenderingMode.ClearType);
             this.Content = outerBorder;
 
+            // ================= ROOT 2-COLUMN COMMAND RAIL ARCHITECTURE =================
             Grid masterGrid = new Grid();
-            masterGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(58) }); // Steam Top Global Header
-            masterGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) }); // Main Content
-            masterGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(38) }); // Steam Bottom Download & Status Bar
+            masterGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(86) }); // Left Vertical Command Rail
+            masterGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) }); // Main Workspace
             outerBorder.Child = masterGrid;
 
-            // ================= ROW 0: AUTHENTIC STEAM TOP HEADER (#171D25) =================
-            Border headerBorder = new Border()
+            // ================= COL 0: LEFT VERTICAL COMMAND RAIL =================
+            Border railBorder = new Border()
             {
-                Background = ThemeManager.DarkerNavyBrush,
-                BorderBrush = ThemeManager.BorderSubtleBrush,
-                BorderThickness = new Thickness(0, 0, 0, 1),
-                CornerRadius = new CornerRadius(6, 6, 0, 0)
+                Background = MakeVerticalGradient("#110C1F", "#090710"),
+                BorderBrush = HexBrush("#261D40"),
+                BorderThickness = new Thickness(0, 0, 1, 0),
+                CornerRadius = new CornerRadius(12, 0, 0, 12),
+                Padding = new Thickness(6, 12, 6, 10)
             };
-            headerBorder.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
-            {
-                if (e.ClickCount == 2)
-                {
-                    this.WindowState = (this.WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized;
-                }
-                else if (e.LeftButton == MouseButtonState.Pressed)
-                {
-                    this.DragMove();
-                }
-            };
-            Grid.SetRow(headerBorder, 0);
-            masterGrid.Children.Add(headerBorder);
+            Grid.SetColumn(railBorder, 0);
+            masterGrid.Children.Add(railBorder);
 
-            Grid headerGrid = new Grid();
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(220) });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
-            headerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
-            headerBorder.Child = headerGrid;
+            Grid railGrid = new Grid();
+            railGrid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Brand
+            railGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) }); // Nav Icons
+            railGrid.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto }); // Quick Actions
+            railBorder.Child = railGrid;
 
-            // Steam Brand Logo + Title
+            // Rail Brand Stack
             StackPanel brandStack = new StackPanel()
             {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(16, 0, 0, 0)
+                Orientation = Orientation.Vertical,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 0, 0, 12)
             };
-            headerGrid.Children.Add(brandStack);
+            railGrid.Children.Add(brandStack);
 
             Border logoCircle = new Border()
             {
-                Width = 36,
-                Height = 36,
-                CornerRadius = new CornerRadius(18),
-                Background = MakeGradient("#1B2838", "#171A21"),
+                Width = 40,
+                Height = 40,
+                CornerRadius = new CornerRadius(12),
+                Background = MakeGradient("#2D1B4E", "#150E26"),
                 BorderBrush = ThemeManager.AccentTealBrush,
                 BorderThickness = new Thickness(1.5),
-                Margin = new Thickness(0, 0, 10, 0),
+                HorizontalAlignment = HorizontalAlignment.Center,
                 Effect = new DropShadowEffect()
                 {
-                    Color = (Color)ColorConverter.ConvertFromString("#9333EA"),
-                    BlurRadius = 12,
+                    Color = (Color)ColorConverter.ConvertFromString("#A855F7"),
+                    BlurRadius = 14,
                     ShadowDepth = 0,
-                    Opacity = 0.70
+                    Opacity = 0.75
                 }
             };
 
@@ -366,60 +358,49 @@ namespace TitanGameHub
                 logoCircle.Child = steamIconPath;
             }
             brandStack.Children.Add(logoCircle);
-
-            StackPanel brandTextStack = new StackPanel() { VerticalAlignment = VerticalAlignment.Center };
-            StackPanel titleRow = new StackPanel() { Orientation = Orientation.Horizontal };
-            titleRow.Children.Add(new TextBlock()
-            {
-                Text = "STEAM ",
-                Foreground = ThemeManager.ForegroundMainBrush,
-                FontSize = 15.5,
-                FontWeight = FontWeights.ExtraBold
-            });
-            titleRow.Children.Add(new TextBlock()
+            brandStack.Children.Add(new TextBlock()
             {
                 Text = "TITAN",
-                Foreground = ThemeManager.AccentBlueBrush,
-                FontSize = 15.5,
-                FontWeight = FontWeights.ExtraBold
+                Foreground = ThemeManager.AccentTealBrush,
+                FontSize = 9.5,
+                FontWeight = FontWeights.ExtraBold,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                Margin = new Thickness(0, 5, 0, 0)
             });
-            brandTextStack.Children.Add(titleRow);
-            brandTextStack.Children.Add(new TextBlock()
-            {
-                Text = "TÜM SİTE KATALOĞU • P2P 480 • 0.5ms",
-                Foreground = ThemeManager.AccentGreenBrush,
-                FontSize = 8.8,
-                FontWeight = FontWeights.Bold
-            });
-            brandStack.Children.Add(brandTextStack);
 
-            // Center Big Uppercase Steam Nav Tabs
+            // Vertical Navigation Stack in Rail
+            ScrollViewer railNavScroll = new ScrollViewer()
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled
+            };
+            Grid.SetRow(railNavScroll, 1);
+            railGrid.Children.Add(railNavScroll);
+
             StackPanel navStack = new StackPanel()
             {
-                Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(4, 0, 0, 0)
+                Orientation = Orientation.Vertical,
+                VerticalAlignment = VerticalAlignment.Top
             };
-            Grid.SetColumn(navStack, 1);
-            headerGrid.Children.Add(navStack);
+            railNavScroll.Content = navStack;
 
-            _navBtnLibrary = CreateSteamNavButton("KÜTÜPHANE", true);
+            _navBtnLibrary = CreateRailNavButton("🎮", "KÜTÜPHANE", true);
             _navBtnLibrary.Click += delegate { SwitchView(_viewLibrary, _navBtnLibrary); };
             navStack.Children.Add(_navBtnLibrary);
 
-            _navBtnStore = CreateSteamNavButton("TÜM SİTE (5000+)", false);
+            _navBtnStore = CreateRailNavButton("🌐", "MAĞAZA", false);
             _navBtnStore.Click += delegate { SwitchView(_viewStore, _navBtnStore); };
             navStack.Children.Add(_navBtnStore);
 
-            _navBtnDownload = CreateSteamNavButton("İNDİRMELER", false);
+            _navBtnDownload = CreateRailNavButton("⬇", "İNDİRME", false);
             _navBtnDownload.Click += delegate { SwitchView(_viewDownload, _navBtnDownload); RefreshDownloadQueueUI(); };
             navStack.Children.Add(_navBtnDownload);
 
-            _navBtnZeroVpn = CreateSteamNavButton("ZERO-VPN", false);
+            _navBtnZeroVpn = CreateRailNavButton("🛡", "ZERO-VPN", false);
             _navBtnZeroVpn.Click += delegate { SwitchView(_viewZeroVpn, _navBtnZeroVpn); };
             navStack.Children.Add(_navBtnZeroVpn);
 
-            _navBtnModManager = CreateSteamNavButton("MODLAR & SDK", false);
+            _navBtnModManager = CreateRailNavButton("🧩", "MODLAR", false);
             _navBtnModManager.Click += delegate
             {
                 SwitchView(_viewModManager, _navBtnModManager);
@@ -427,26 +408,118 @@ namespace TitanGameHub
             };
             navStack.Children.Add(_navBtnModManager);
 
-            _navBtnTelemetry = CreateSteamNavButton("TELEMETRİ", false);
+            _navBtnTelemetry = CreateRailNavButton("📊", "TELEMETRİ", false);
             _navBtnTelemetry.Click += delegate { SwitchView(_viewTelemetry, _navBtnTelemetry); };
             navStack.Children.Add(_navBtnTelemetry);
 
-            _navBtnOtaShare = CreateSteamNavButton("OTA AĞI", false);
+            _navBtnOtaShare = CreateRailNavButton("📡", "OTA AĞI", false);
             _navBtnOtaShare.Click += delegate { SwitchView(_viewOtaShare, _navBtnOtaShare); };
             navStack.Children.Add(_navBtnOtaShare);
 
-            _navBtnSettings = CreateSteamNavButton("AYARLAR", false);
+            _navBtnSettings = CreateRailNavButton("⚙", "AYARLAR", false);
             _navBtnSettings.Click += delegate { SwitchView(_viewSettings, _navBtnSettings); };
             navStack.Children.Add(_navBtnSettings);
+
+            // Rail Bottom Quick + Add Game
+            Button btnRailAdd = new Button()
+            {
+                Content = "➕ EKLE",
+                Height = 30,
+                Margin = new Thickness(2, 6, 2, 0),
+                Background = HexBrush("#1F1638"),
+                Foreground = ThemeManager.AccentTealBrush,
+                BorderBrush = HexBrush("#4C2F8A"),
+                BorderThickness = new Thickness(1),
+                FontSize = 9.2,
+                FontWeight = FontWeights.ExtraBold,
+                Cursor = Cursors.Hand,
+                ToolTip = "Oyunu .exe veya arşiv üzerinden kütüphaneye ekle"
+            };
+            ApplyRoundedButtonTemplate(btnRailAdd, 8);
+            btnRailAdd.Click += BtnBindExe_Click;
+            Grid.SetRow(btnRailAdd, 2);
+            railGrid.Children.Add(btnRailAdd);
+
+            // ================= COL 1: WORKSPACE SHELL =================
+            Grid workspaceGrid = new Grid() { Background = HexBrush("#0E0A18") };
+            workspaceGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(46) }); // Slim Top Command Bar
+            workspaceGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) }); // Modular Body
+            workspaceGrid.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(42) }); // Slim Floating Footer
+            Grid.SetColumn(workspaceGrid, 1);
+            masterGrid.Children.Add(workspaceGrid);
+
+            // ================= ROW 0: SLIM TOP COMMAND BAR =================
+            Border headerBorder = new Border()
+            {
+                Background = HexBrush("#120D20"),
+                BorderBrush = HexBrush("#261D40"),
+                BorderThickness = new Thickness(0, 0, 0, 1),
+                CornerRadius = new CornerRadius(0, 12, 0, 0),
+                Padding = new Thickness(14, 0, 10, 0)
+            };
+            headerBorder.MouseLeftButtonDown += delegate(object s, MouseButtonEventArgs e)
+            {
+                if (e.ClickCount == 2)
+                {
+                    this.WindowState = (this.WindowState == WindowState.Maximized) ? WindowState.Normal : WindowState.Maximized;
+                }
+                else if (e.LeftButton == MouseButtonState.Pressed)
+                {
+                    this.DragMove();
+                }
+            };
+            Grid.SetRow(headerBorder, 0);
+            workspaceGrid.Children.Add(headerBorder);
+
+            Grid headerGrid = new Grid();
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            headerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            headerBorder.Child = headerGrid;
+
+            StackPanel headerLeftStack = new StackPanel()
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            Grid.SetColumn(headerLeftStack, 0);
+            headerGrid.Children.Add(headerLeftStack);
+
+            _txtHeaderViewTitle = new TextBlock()
+            {
+                Text = "KÜTÜPHANE",
+                Foreground = ThemeManager.ForegroundMainBrush,
+                FontSize = 14,
+                FontWeight = FontWeights.ExtraBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+            headerLeftStack.Children.Add(_txtHeaderViewTitle);
+
+            Border statusChip = new Border()
+            {
+                Background = HexBrush("#1B1430"),
+                BorderBrush = HexBrush("#3B2B63"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(8, 2, 8, 2),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            statusChip.Child = new TextBlock()
+            {
+                Text = "CANLI KATALOG • P2P 480 • 0.5ms",
+                Foreground = ThemeManager.AccentGreenBrush,
+                FontSize = 9,
+                FontWeight = FontWeights.Bold
+            };
+            headerLeftStack.Children.Add(statusChip);
 
             // Right Header: 0.5ms Kernel Lock + RAM Boost + Global Update Scan + Steam Status + Window Controls
             StackPanel rightHeaderStack = new StackPanel()
             {
                 Orientation = Orientation.Horizontal,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(0, 0, 10, 0)
+                VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(rightHeaderStack, 2);
+            Grid.SetColumn(rightHeaderStack, 1);
             headerGrid.Children.Add(rightHeaderStack);
 
             Button btnKernelTimer = new Button()
@@ -688,14 +761,20 @@ namespace TitanGameHub
             btnClose.Click += delegate { this.Close(); };
             rightHeaderStack.Children.Add(btnClose);
 
-            // ================= ROW 1: 3-COLUMN STEAM BODY =================
-            Grid bodyGrid = new Grid();
-            ColumnDefinition colRightFriends = new ColumnDefinition() { Width = new GridLength(255) };
-            bodyGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(270) }); // Left Steam Game List Sidebar
-            bodyGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) }); // Center Steam Stage
-            bodyGrid.ColumnDefinitions.Add(colRightFriends); // Right Steam Friends & Chat (Collapsible)
+            // ================= ROW 1: MODULAR FLOATING 3-COLUMN BODY =================
+            Grid bodyGrid = new Grid() { Margin = new Thickness(8, 8, 8, 6) };
+            _colLeftLibrary = new ColumnDefinition() { Width = new GridLength(252) };
+            ColumnDefinition colRightFriends = new ColumnDefinition() { Width = new GridLength(0) }; // Collapsible Lobby Drawer
+            bodyGrid.ColumnDefinitions.Add(_colLeftLibrary); // Left Floating Library Drawer
+            bodyGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) }); // Center Stage
+            bodyGrid.ColumnDefinitions.Add(colRightFriends); // Right Friends & Chat
             Grid.SetRow(bodyGrid, 1);
-            masterGrid.Children.Add(bodyGrid);
+            workspaceGrid.Children.Add(bodyGrid);
+
+            btnToggleFriends.Content = "👥 LOBİYİ AÇ";
+            btnToggleFriends.Background = HexBrush("#1C1530");
+            btnToggleFriends.Foreground = ThemeManager.ForegroundSubBrush;
+            btnToggleFriends.BorderBrush = HexBrush("#3B2B63");
 
             btnToggleFriends.Click += delegate
             {
@@ -703,14 +782,14 @@ namespace TitanGameHub
                 {
                     colRightFriends.Width = new GridLength(0);
                     btnToggleFriends.Content = "👥 LOBİYİ AÇ";
-                    btnToggleFriends.Background = HexBrush("#241C36");
+                    btnToggleFriends.Background = HexBrush("#1C1530");
                     btnToggleFriends.Foreground = ThemeManager.ForegroundSubBrush;
-                    btnToggleFriends.BorderBrush = ThemeManager.BorderPrimaryBrush;
+                    btnToggleFriends.BorderBrush = HexBrush("#3B2B63");
                 }
                 else
                 {
                     colRightFriends.Width = new GridLength(255);
-                    btnToggleFriends.Content = "👥 LOBİ & ARKADAŞLAR";
+                    btnToggleFriends.Content = "👥 LOBİYİ KAPAT";
                     btnToggleFriends.Background = ThemeManager.AccentBlueBrush;
                     btnToggleFriends.Foreground = Brushes.White;
                     btnToggleFriends.BorderBrush = ThemeManager.AccentTealBrush;
@@ -722,17 +801,18 @@ namespace TitanGameHub
             BuildCenterViews(bodyGrid);
             BuildRightFriendsSidebar(bodyGrid);
 
-            // ================= ROW 2: AUTHENTIC STEAM BOTTOM DOWNLOAD & STATUS BAR =================
+            // ================= ROW 2: SLIM FLOATING BOTTOM STATUS BAR =================
             Border footerBorder = new Border()
             {
-                Background = ThemeManager.DarkerNavyBrush,
-                BorderBrush = ThemeManager.BorderPrimaryBrush,
-                BorderThickness = new Thickness(0, 1, 0, 0),
-                CornerRadius = new CornerRadius(0, 0, 6, 6),
-                Padding = new Thickness(14, 0, 14, 0)
+                Background = HexBrush("#151024"),
+                BorderBrush = HexBrush("#2E234D"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Margin = new Thickness(8, 0, 8, 8),
+                Padding = new Thickness(12, 0, 12, 0)
             };
             Grid.SetRow(footerBorder, 2);
-            masterGrid.Children.Add(footerBorder);
+            workspaceGrid.Children.Add(footerBorder);
 
             Grid footerGrid = new Grid();
             footerGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
@@ -816,10 +896,12 @@ namespace TitanGameHub
         {
             Border leftBorder = new Border()
             {
-                Background = HexBrush("#1E2329"),
-                BorderBrush = ThemeManager.BorderSubtleBrush,
-                BorderThickness = new Thickness(0, 0, 1, 0),
-                Padding = new Thickness(8, 10, 8, 10)
+                Background = HexBrush("#151024"),
+                BorderBrush = HexBrush("#2E234D"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Margin = new Thickness(0, 0, 8, 0),
+                Padding = new Thickness(10)
             };
             Grid.SetColumn(leftBorder, 0);
             bodyGrid.Children.Add(leftBorder);
@@ -1376,14 +1458,21 @@ namespace TitanGameHub
         // =========================================================================
         private void BuildCenterViews(Grid bodyGrid)
         {
-            Grid centerHost = new Grid()
+            Border centerCard = new Border()
             {
-                Background = MakeVerticalGradient("#1A1526", "#0E0B14")
+                Background = MakeVerticalGradient("#161126", "#0D0A16"),
+                BorderBrush = HexBrush("#2E234D"),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                ClipToBounds = true
             };
+            Grid.SetColumn(centerCard, 1);
+            bodyGrid.Children.Add(centerCard);
+
+            Grid centerHost = new Grid();
             centerHost.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
             centerHost.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
-            Grid.SetColumn(centerHost, 1);
-            bodyGrid.Children.Add(centerHost);
+            centerCard.Child = centerHost;
 
             BuildLibraryCenterView(centerHost);
             BuildStoreCenterView(centerHost);
