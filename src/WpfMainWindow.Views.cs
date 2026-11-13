@@ -3199,7 +3199,7 @@ namespace TitanGameHub
                     {
                         Button btnPage = new Button()
                         {
-                            Content = "🌐 STEAMRIP SAYFASI",
+                            Content = "🌐 KAYNAK SAYFASI",
                             Height = 30,
                             Padding = new Thickness(12, 0, 12, 0),
                             Margin = new Thickness(0, 0, 8, 6),

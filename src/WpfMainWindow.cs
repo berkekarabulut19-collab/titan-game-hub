@@ -581,12 +581,12 @@ namespace TitanGameHub
                 FontSize = 9.2,
                 FontWeight = FontWeights.ExtraBold,
                 Cursor = Cursors.Hand,
-                ToolTip = "Tüm kütüphaneyi canlı SteamRIP veritabanı ile karşılaştırarak yeni oyun güncellemelerini tarar"
+                ToolTip = "Tüm kütüphaneyi canlı sunucu veritabanı ile karşılaştırarak yeni oyun güncellemelerini tarar"
             };
             ApplyRoundedButtonTemplate(btnGlobalUpdateScan, 3);
             btnGlobalUpdateScan.Click += delegate
             {
-                _txtBottomStatus.Text = "🔄 Tüm kütüphane için canlı SteamRIP sürüm ve güncelleme taraması başlatıldı...";
+                _txtBottomStatus.Text = "🔄 Tüm kütüphane için canlı sürüm ve güncelleme taraması başlatıldı...";
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
                     List<GameProfile> updatedList;
@@ -598,7 +598,7 @@ namespace TitanGameHub
                         if (_selectedProfile != null) SelectGameProfile(_selectedProfile);
                         _txtBottomStatus.Text = count > 0
                             ? string.Format("🔄 Tarama tamamlandı: {0} oyun için yeni sürüm / güncelleme bulundu!", count)
-                            : "✔ Tüm kütüphane oyunları en güncel SteamRIP sürümünde.";
+                            : "✔ Tüm kütüphane oyunları en güncel sürümde.";
                         Win32.PlayTechChirp(true);
                     }));
                 });
@@ -837,7 +837,7 @@ namespace TitanGameHub
 
             _txtBottomStatus = new TextBlock()
             {
-                Text = "Steam // Titan Edition hazır — Tüm SteamRIP kataloğu ve Spacewar P2P (AppID 480) devrede.",
+                Text = "Steam // Titan Edition hazır — Canlı oyun kataloğu ve Spacewar P2P (AppID 480) devrede.",
                 Foreground = ThemeManager.ForegroundMutedBrush,
                 FontSize = 10.5,
                 VerticalAlignment = VerticalAlignment.Center,
@@ -1774,7 +1774,7 @@ namespace TitanGameHub
             {
                 if (_selectedProfile == null) return;
                 GameProfile targetGp = _selectedProfile;
-                _txtBottomStatus.Text = "🔄 " + targetGp.Name + " için SteamRIP canlı sürüm ve güncelleme kontrolü yapılıyor...";
+                _txtBottomStatus.Text = "🔄 " + targetGp.Name + " için canlı sürüm ve güncelleme kontrolü yapılıyor...";
                 System.Threading.ThreadPool.QueueUserWorkItem(delegate
                 {
                     string repMsg;
@@ -3443,7 +3443,7 @@ namespace TitanGameHub
             StackPanel mTitleStack = new StackPanel();
             mTitleStack.Children.Add(new TextBlock()
             {
-                Text = "🌐 CANLI İNDİRME SUNUCULARI (STEAMRIP DIRECT MIRRORS)",
+                Text = "🌐 CANLI İNDİRME SUNUCULARI (DOĞRUDAN AYNALAR)",
                 Foreground = ThemeManager.AccentTealBrush,
                 FontSize = 12,
                 FontWeight = FontWeights.ExtraBold
@@ -3476,7 +3476,7 @@ namespace TitanGameHub
             {
                 if (_selectedProfile != null)
                 {
-                    _txtLiveMirrorsStatus.Text = _selectedProfile.Name + " için SteamRIP canlı sunucuları taranıyor...";
+                    _txtLiveMirrorsStatus.Text = _selectedProfile.Name + " için canlı sunucular taranıyor...";
                     _downloader.AnalyzeSiteMirrorsAsync(_selectedProfile);
                 }
             };
@@ -4183,7 +4183,7 @@ namespace TitanGameHub
         {
             if (_liveMirrorsWrapPanel == null) return;
             _liveMirrorsWrapPanel.Children.Clear();
-            _txtLiveMirrorsStatus.Text = gp.Name + " — SteamRIP canlı indirme sunucuları çözümleniyor...";
+            _txtLiveMirrorsStatus.Text = gp.Name + " — Canlı indirme sunucuları çözümleniyor...";
 
             if (!string.IsNullOrEmpty(gp.DirectMirrorUrl))
             {
@@ -4193,7 +4193,7 @@ namespace TitanGameHub
             {
                 Button btnPage = new Button()
                 {
-                    Content = "🌐 STEAMRIP SAYFASINI AÇ",
+                    Content = "🌐 KAYNAK SAYFASINI AÇ",
                     Height = 30,
                     Padding = new Thickness(12, 0, 12, 0),
                     Margin = new Thickness(0, 0, 8, 6),

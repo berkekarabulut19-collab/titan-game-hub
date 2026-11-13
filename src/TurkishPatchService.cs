@@ -136,6 +136,35 @@ namespace TitanGameHub
             RegisterSeries("Final Fantasy", "Final Fantasy Serisi Türkçe Altyazı ve Dil Paketi", new[] { "final fantasy" });
             RegisterSeries("Yakuza", "Yakuza / Like a Dragon Türkçe Altyazı ve Dil Paketi", new[] { "yakuza", "like a dragon" });
             RegisterSeries("The Walking Dead", "Telltale The Walking Dead Türkçe Altyazı ve Dil Paketi", new[] { "walking dead" });
+            RegisterSeries("007", "007 / James Bond Serisi Türkçe Altyazı ve Dil Paketi", new[] { "007", "first light", "james bond", "blood stone", "007 legends" });
+            RegisterSeries("Metal Gear", "Metal Gear Solid Serisi Türkçe Altyazı ve Dil Paketi", new[] { "metal gear" });
+            RegisterSeries("Persona", "Persona Serisi Türkçe Altyazı ve Dil Paketi", new[] { "persona 3", "persona 4", "persona 5", "metaphor" });
+            RegisterSeries("Indiana Jones", "Indiana Jones and the Great Circle Türkçe Altyazı ve Dil Paketi", new[] { "indiana jones", "great circle" });
+            RegisterSeries("Clair Obscur", "Clair Obscur: Expedition 33 Türkçe Altyazı ve Dil Paketi", new[] { "clair obscur", "expedition 33" });
+            RegisterSeries("Hellblade", "Senua's Saga: Hellblade Serisi Türkçe Altyazı ve Dil Paketi", new[] { "hellblade", "senua" });
+            RegisterSeries("Banishers", "Banishers: Ghosts of New Eden Türkçe Altyazı ve Dil Paketi", new[] { "banishers" });
+            RegisterSeries("Max Payne", "Max Payne Serisi Türkçe Altyazı ve Dil Paketi", new[] { "max payne" });
+            RegisterSeries("L.A. Noire", "L.A. Noire Türkçe Altyazı ve Dil Paketi", new[] { "l.a. noire", "la noire" });
+            RegisterSeries("Bully", "Bully: Scholarship Edition Türkçe Altyazı ve Dil Paketi", new[] { "bully" });
+            RegisterSeries("Until Dawn", "Until Dawn Türkçe Altyazı ve Dil Paketi", new[] { "until dawn" });
+            RegisterSeries("The Quarry", "The Quarry Türkçe Altyazı ve Dil Paketi", new[] { "the quarry" });
+            RegisterSeries("Dark Pictures", "The Dark Pictures Anthology Türkçe Altyazı ve Dil Paketi", new[] { "dark pictures", "man of medan", "little hope", "house of ashes", "devil in me" });
+            RegisterSeries("Kena", "Kena: Bridge of Spirits Türkçe Altyazı ve Dil Paketi", new[] { "kena" });
+            RegisterSeries("DOOM", "DOOM Serisi Türkçe Altyazı ve Dil Paketi", new[] { "doom eternal", "doom the dark ages", "doom 2016" });
+            RegisterSeries("Halo", "Halo Serisi Türkçe Altyazı ve Dil Paketi", new[] { "halo" });
+            RegisterSeries("Gears", "Gears of War Serisi Türkçe Altyazı ve Dil Paketi", new[] { "gears of war", "gears 5" });
+            RegisterSeries("Middle-earth", "Middle-earth: Shadow Serisi Türkçe Altyazı ve Dil Paketi", new[] { "shadow of mordor", "shadow of war", "middle-earth" });
+            RegisterSeries("Watch Dogs", "Watch Dogs Serisi Türkçe Altyazı ve Dil Paketi", new[] { "watch dogs", "watch_dogs" });
+            RegisterSeries("Hitman", "Hitman Serisi Türkçe Altyazı ve Dil Paketi", new[] { "hitman" });
+            RegisterSeries("Crysis", "Crysis Serisi Türkçe Altyazı ve Dil Paketi", new[] { "crysis" });
+            RegisterSeries("Splinter Cell", "Tom Clancy's Splinter Cell Türkçe Altyazı ve Dil Paketi", new[] { "splinter cell" });
+            RegisterSeries("Prince of Persia", "Prince of Persia Serisi Türkçe Altyazı ve Dil Paketi", new[] { "prince of persia" });
+            RegisterSeries("Ghostrunner", "Ghostrunner Serisi Türkçe Altyazı ve Dil Paketi", new[] { "ghostrunner" });
+            RegisterSeries("Atomic Heart", "Atomic Heart Türkçe Altyazı ve Dil Paketi", new[] { "atomic heart" });
+            RegisterSeries("RoboCop", "RoboCop: Rogue City Türkçe Altyazı ve Dil Paketi", new[] { "robocop" });
+            RegisterSeries("Sniper Elite", "Sniper Elite Serisi Türkçe Altyazı ve Dil Paketi", new[] { "sniper elite" });
+            RegisterSeries("Judgment", "Judgment / Lost Judgment Türkçe Altyazı ve Dil Paketi", new[] { "judgment" });
+            RegisterSeries("A Plague Tale", "A Plague Tale Serisi Türkçe Altyazı ve Dil Paketi", new[] { "plague tale" });
 
             LoadExternalManifestIfExists();
         }
@@ -376,10 +405,22 @@ namespace TitanGameHub
                 }
             }
 
-            // Bilinen hikaye/altyazı odaklı anahtar kelimeler (geniş "o tarz oyunlar" kapsaması)
+            // Bilinen hikaye/altyazı odaklı anahtar kelimeler ve türler (tüm hikayeli oyunları kapsar)
             string lower = name.ToLowerInvariant();
-            if (lower.Contains("assassin") || lower.Contains("subtitle") || lower.Contains("story") ||
-                lower.Contains("campaign") || lower.Contains("rpg"))
+            string genre = gp.Category != null ? gp.Category.ToLowerInvariant() : "";
+            string tags = gp.Tags != null ? gp.Tags.ToLowerInvariant() : "";
+            string desc = gp.Description != null ? gp.Description.ToLowerInvariant() : "";
+            string combined = lower + " " + genre + " " + tags + " " + desc;
+
+            if (combined.Contains("assassin") || combined.Contains("subtitle") || combined.Contains("story") ||
+                combined.Contains("hikaye") || combined.Contains("campaign") || combined.Contains("rpg") ||
+                combined.Contains("adventure") || combined.Contains("macera") || combined.Contains("action") ||
+                combined.Contains("aksiyon") || combined.Contains("gizlilik") || combined.Contains("stealth") ||
+                combined.Contains("horror") || combined.Contains("korku") || combined.Contains("narrative") ||
+                combined.Contains("007") || combined.Contains("bond") || combined.Contains("noir") ||
+                combined.Contains("chronicles") || combined.Contains("odyssey") || combined.Contains("origins") ||
+                combined.Contains("remake") || combined.Contains("remastered") || combined.Contains("definitive") ||
+                combined.Contains("tales") || combined.Contains("legend") || combined.Contains("chapter"))
             {
                 patchInfo = new TurkishPatchInfo
                 {

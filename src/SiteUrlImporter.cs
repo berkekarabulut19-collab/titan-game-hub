@@ -212,12 +212,12 @@ namespace TitanGameHub
         private static string GuessCategory(string url)
         {
             string h = url.ToLowerInvariant();
-            if (h.Contains("steamrip")) return "SteamRIP • Katalog";
+            if (h.Contains("steamrip")) return "Katalog • Tam Sürüm";
             
-            if (h.Contains("fitgirl")) return "FitGirl • Repack";
-            if (h.Contains("ovagames")) return "OvaGames • Repack";
-            if (h.Contains("freegog")) return "GOG • Katalog";
-            if (h.Contains("online-fix")) return "Online-Fix • Co-Op";
+            if (h.Contains("fitgirl")) return "Katalog • Repack";
+            if (h.Contains("ovagames")) return "Katalog • Repack";
+            if (h.Contains("freegog")) return "Katalog • DRM-Free";
+            if (h.Contains("online-fix")) return "Katalog • Co-Op";
             return "Katalog";
         }
 
