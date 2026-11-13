@@ -931,6 +931,12 @@ namespace TitanGameHub
                         }
                     }
 
+                    // Reklam kısaltıcı linkleri (OvaGames srnky/shrinkme/clksz vb.) ayna listesinden ele
+                    candidates.RemoveAll(delegate(SiteMirror m)
+                    {
+                        return m == null || string.IsNullOrEmpty(m.Url) || DownloadHostPolicy.IsAdShortener(m.Url);
+                    });
+
                     // Ayna sırası: ölçülen host hızlarına göre (pixeldrain > gofile > doğrudan arşiv >
                     // sayfa hostları > yalnızca tarayıcıdan inen 403 hostları).
                     for (int ci = 0; ci < candidates.Count; ci++)

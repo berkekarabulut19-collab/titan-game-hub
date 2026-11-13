@@ -95,6 +95,9 @@ namespace TitanGameHub
             Check("pixeldrain en yüksek hız puanı",
                 DownloadHostPolicy.SpeedScore("https://pixeldrain.com/api/file/x?download") >
                 DownloadHostPolicy.SpeedScore("https://itsfileditchfiles.st/a/b.rar"), "");
+            Check("reklam kısaltıcılar elenir",
+                DownloadHostPolicy.IsAdShortener("https://srnky.com/bd1QreiJs") &&
+                DownloadHostPolicy.SpeedScore("https://shrinkme.click/Y1y1Jv") == 0, "");
         }
         private static void TestMultiPart()
         {
@@ -243,6 +246,7 @@ namespace TitanGameHub
             string avail;
             bool ok = TorrentDownloadService.IsAvailable(out avail);
             Check("aria2 RPC hazır", ok, avail);
+            if (ok) TorrentDownloadService.ShutdownEngine();
         }
 
         private static void TestMaintenance()

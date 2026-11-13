@@ -46,10 +46,31 @@ namespace TitanGameHub
             catch { return url; }
         }
 
+        /// <summary>Reklam kısaltıcı linkler (srnky, shrinkme, clksz vb.) indirme aynası değildir.</summary>
+        public static bool IsAdShortener(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            string u = url.ToLowerInvariant();
+            return u.Contains("srnky.com")
+                || u.Contains("shrinkme.")
+                || u.Contains("clksz.com")
+                || u.Contains("ouo.io")
+                || u.Contains("ouo.press")
+                || u.Contains("exe.io")
+                || u.Contains("fc.lc")
+                || u.Contains("linkvertise.")
+                || u.Contains("adf.ly")
+                || u.Contains("shorte.st")
+                || u.Contains("clk.sh")
+                || u.Contains("cuty.io")
+                || u.Contains("za.gl");
+        }
+
         /// <summary>Yüksek = daha hızlı/güvenilir doğrudan indirme.</summary>
         public static int SpeedScore(string url)
         {
             if (string.IsNullOrEmpty(url)) return 0;
+            if (IsAdShortener(url)) return 0;
             string u = url.ToLowerInvariant();
 
             if (u.Contains("pixeldrain.com")) return 100;

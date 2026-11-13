@@ -118,6 +118,12 @@ namespace TitanGameHub
             return false;
         }
 
+        /// <summary>Aktif aria2 RPC motorunu temiz şekilde kapatır.</summary>
+        public static void ShutdownEngine()
+        {
+            try { RpcCall("aria2.forceShutdown", ""); } catch { }
+        }
+
         private static int FindAvailableRpcPort(int preferredPort)
         {
             if (IsPortFree(preferredPort)) return preferredPort;
