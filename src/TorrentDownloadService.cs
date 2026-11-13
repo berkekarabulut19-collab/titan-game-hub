@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -20,8 +21,10 @@ namespace TitanGameHub
     /// </summary>
     public static class TorrentDownloadService
     {
-        private const string RpcUrl = "http://127.0.0.1:6800/jsonrpc";
+        private const int DefaultRpcPort = 16800;
+        private const string RpcUrl = "http://127.0.0.1:16800/jsonrpc";
         private const string RpcSecret = "titan";
+        private static string _activeRpcUrl = null;
 
         public class Config
         {
@@ -115,12 +118,54 @@ namespace TitanGameHub
             return false;
         }
 
+        private static int FindAvailableRpcPort(int preferredPort)
+        {
+            if (IsPortFree(preferredPort)) return preferredPort;
+            try
+            {
+                TcpListener l = new TcpListener(IPAddress.Loopback, 0);
+                l.Start();
+                int port = ((IPEndPoint)l.LocalEndpoint).Port;
+                l.Stop();
+                return port;
+            }
+            catch { return preferredPort; }
+        }
+
+        private static bool IsPortFree(int port)
+        {
+            TcpListener l = null;
+            try
+            {
+                l = new TcpListener(IPAddress.Loopback, port);
+                l.Start();
+                return true;
+            }
+            catch { return false; }
+            finally
+            {
+                if (l != null) { try { l.Stop(); } catch { } }
+            }
+        }
+
         /// <summary>aria2c'yi RPC modunda başlatır (yoksa).</summary>
         public static bool StartEngine(string exePath, string defaultDir)
         {
             try
             {
                 if (RpcCall("aria2.getVersion", "") != null) return true;
+
+                Config cfg = LoadConfig();
+                int preferredPort = DefaultRpcPort;
+                try
+                {
+                    Uri u = new Uri(cfg.Url);
+                    if (u.Port > 0) preferredPort = u.Port;
+                }
+                catch { }
+
+                int port = FindAvailableRpcPort(preferredPort);
+                _activeRpcUrl = "http://127.0.0.1:" + port + "/jsonrpc";
 
                 string dir = string.IsNullOrEmpty(defaultDir)
                     ? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Games", "_incoming")
@@ -130,8 +175,8 @@ namespace TitanGameHub
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = exePath,
-                    Arguments = "--enable-rpc=true --rpc-listen-all=false --rpc-listen-port=6800" +
-                                " --rpc-secret=" + RpcSecret +
+                    Arguments = "--enable-rpc=true --rpc-listen-all=false --rpc-listen-port=" + port +
+                                " --rpc-secret=" + cfg.Secret +
                                 " --seed-time=0 --bt-stop-timeout=0" +
                                 " --max-connection-per-server=8 --split=8 --min-split-size=4M" +
                                 " --continue=true --auto-file-renaming=false" +
@@ -140,11 +185,12 @@ namespace TitanGameHub
                     CreateNoWindow = true,
                     UseShellExecute = false
                 };
-                Process.Start(psi);
+                Process proc = Process.Start(psi);
 
                 for (int i = 0; i < 20; i++)
                 {
-                    Thread.Sleep(500);
+                    Thread.Sleep(250);
+                    if (proc != null && proc.HasExited) break;
                     if (RpcCall("aria2.getVersion", "") != null) return true;
                 }
             }
@@ -285,11 +331,12 @@ namespace TitanGameHub
             try
             {
                 Config cfg = LoadConfig();
+                string targetUrl = !string.IsNullOrEmpty(_activeRpcUrl) ? _activeRpcUrl : cfg.Url;
                 string body = "{\"jsonrpc\":\"2.0\",\"id\":\"titan\",\"method\":\"" + method +
                               "\",\"params\":[\"token:" + cfg.Secret + "\"" +
                               (string.IsNullOrEmpty(paramsElements) ? "" : "," + paramsElements) + "]}";
 
-                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(cfg.Url);
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(targetUrl);
                 req.Method = "POST";
                 req.ContentType = "application/json";
                 req.Proxy = null;
