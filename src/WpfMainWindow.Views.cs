@@ -727,9 +727,8 @@ namespace TitanGameHub
                 Background = ThemeManager.SidebarNavy,
                 BorderBrush = gp.IsInstalled ? ThemeManager.AccentGreenBrush : HexBrush("#2D2345"),
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(4),
-                Margin = new Thickness(0, 0, 10, 0),
-                Effect = new DropShadowEffect() { Color = Colors.Black, BlurRadius = 8, ShadowDepth = 2, Opacity = 0.45 }
+                CornerRadius = new CornerRadius(10),
+                Margin = new Thickness(0, 0, 10, 0)
             };
 
             StackPanel cardStack = new StackPanel();
@@ -1051,16 +1050,16 @@ namespace TitanGameHub
                 body.Children.Add(btnFav);
             }
 
-            // --- Hover: Steam vitrin hissi (kenar parlaması + gölge) ---
+            // --- Hover: donanım hızlandırmalı kenar & arka plan vurgusu (gölge shader maliyeti yok) ---
             card.MouseEnter += delegate
             {
                 card.BorderBrush = ThemeManager.AccentTealBrush;
-                card.Effect = new DropShadowEffect() { Color = (Color)ColorConverter.ConvertFromString("#9333EA"), BlurRadius = 18, ShadowDepth = 0, Opacity = 0.45 };
+                card.Background = HexBrush("#211838");
             };
             card.MouseLeave += delegate
             {
                 card.BorderBrush = gp.IsInstalled ? ThemeManager.AccentGreenBrush : HexBrush("#2D2345");
-                card.Effect = new DropShadowEffect() { Color = Colors.Black, BlurRadius = 8, ShadowDepth = 2, Opacity = 0.45 };
+                card.Background = ThemeManager.SidebarNavy;
             };
 
             return card;

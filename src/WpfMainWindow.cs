@@ -260,19 +260,12 @@ namespace TitanGameHub
             Border outerBorder = new Border()
             {
                 Background = HexBrush("#0B0814"),
-                BorderBrush = HexBrush("#2E234D"),
+                BorderBrush = HexBrush("#3A2C63"),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(12),
-                Margin = new Thickness(4),
-                Effect = new DropShadowEffect()
-                {
-                    Color = Colors.Black,
-                    BlurRadius = 18,
-                    ShadowDepth = 0,
-                    Opacity = 0.90
-                }
+                Margin = new Thickness(4)
             };
-            RenderOptions.SetBitmapScalingMode(outerBorder, BitmapScalingMode.HighQuality);
+            RenderOptions.SetBitmapScalingMode(outerBorder, BitmapScalingMode.Linear);
             RenderOptions.SetClearTypeHint(outerBorder, ClearTypeHint.Enabled);
             TextOptions.SetTextFormattingMode(outerBorder, TextFormattingMode.Display);
             TextOptions.SetTextRenderingMode(outerBorder, TextRenderingMode.ClearType);
