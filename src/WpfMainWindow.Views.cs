@@ -736,7 +736,8 @@ namespace TitanGameHub
             HashSet<string> norms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             if (_allProfiles != null)
             {
-                foreach (GameProfile ex in _allProfiles)
+                List<GameProfile> snap = new List<GameProfile>(_allProfiles);
+                foreach (GameProfile ex in snap)
                 {
                     if (ex == null) continue;
                     if (!string.IsNullOrEmpty(ex.Id)) ids.Add(ex.Id);

@@ -216,6 +216,136 @@ namespace TitanGameHub
                     if (!string.IsNullOrEmpty(art)) return art;
                 }
             }
+
+            // 2. İnternet Kaynağı: CheapShark Oyun API (SteamAppID veya thumb)
+            art = QueryCheapSharkArtwork(clean);
+            if (!string.IsNullOrEmpty(art)) return art;
+
+            // 3. İnternet Kaynağı: Wikipedia OpenSearch + Summary kapak görseli
+            art = QueryWikipediaArtwork(clean);
+            if (!string.IsNullOrEmpty(art)) return art;
+
+            return null;
+        }
+
+        private static string QueryCheapSharkArtwork(string clean)
+        {
+            try
+            {
+                string json;
+                using (TimeoutWebClient wc = new TimeoutWebClient(6000))
+                {
+                    wc.Proxy = null;
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    wc.Encoding = Encoding.UTF8;
+                    json = wc.DownloadString("https://www.cheapshark.com/api/1.0/games?title=" + Uri.EscapeDataString(clean) + "&limit=5");
+                }
+                System.Web.Script.Serialization.JavaScriptSerializer ser =
+                    new System.Web.Script.Serialization.JavaScriptSerializer();
+                object[] arr = ser.DeserializeObject(json) as object[];
+                if (arr == null || arr.Length == 0) return null;
+
+                string wanted = Normalize(clean);
+                string bestThumb = null;
+                string bestSteamId = null;
+                double bestScore = 0;
+
+                foreach (object o in arr)
+                {
+                    Dictionary<string, object> item = o as Dictionary<string, object>;
+                    if (item == null) continue;
+                    string external = item.ContainsKey("external") ? Convert.ToString(item["external"]) : null;
+                    string steamAppId = item.ContainsKey("steamAppID") ? Convert.ToString(item["steamAppID"]) : null;
+                    string thumb = item.ContainsKey("thumb") ? Convert.ToString(item["thumb"]) : null;
+                    if (string.IsNullOrEmpty(external)) continue;
+
+                    double score = Similarity(wanted, Normalize(external));
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestSteamId = steamAppId;
+                        bestThumb = thumb;
+                    }
+                }
+
+                if (bestScore >= 0.42)
+                {
+                    if (!string.IsNullOrEmpty(bestSteamId))
+                    {
+                        string hdr = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + bestSteamId + "/header.jpg";
+                        if (UrlExists(hdr)) return hdr;
+                        string hdr2 = "https://cdn.akamai.steamstatic.com/steam/apps/" + bestSteamId + "/header.jpg";
+                        if (UrlExists(hdr2)) return hdr2;
+                    }
+                    if (!string.IsNullOrEmpty(bestThumb) && bestThumb.StartsWith("http")) return bestThumb;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        private static string QueryWikipediaArtwork(string clean)
+        {
+            try
+            {
+                string searchJson;
+                using (TimeoutWebClient wc = new TimeoutWebClient(6000))
+                {
+                    wc.Proxy = null;
+                    wc.Headers.Add("User-Agent", "TitanGameHub/9.4 (Desktop)");
+                    wc.Encoding = Encoding.UTF8;
+                    searchJson = wc.DownloadString("https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=" +
+                        Uri.EscapeDataString(clean + " video game") + "&format=json&srlimit=3");
+                }
+                System.Web.Script.Serialization.JavaScriptSerializer ser =
+                    new System.Web.Script.Serialization.JavaScriptSerializer();
+                Dictionary<string, object> root = ser.DeserializeObject(searchJson) as Dictionary<string, object>;
+                if (root == null || !root.ContainsKey("query")) return null;
+                Dictionary<string, object> queryObj = root["query"] as Dictionary<string, object>;
+                if (queryObj == null || !queryObj.ContainsKey("search")) return null;
+                object[] results = queryObj["search"] as object[];
+                if (results == null || results.Length == 0) return null;
+
+                string wanted = Normalize(clean);
+                foreach (object o in results)
+                {
+                    Dictionary<string, object> hit = o as Dictionary<string, object>;
+                    if (hit == null || !hit.ContainsKey("title")) continue;
+                    string pageTitle = Convert.ToString(hit["title"]);
+                    if (string.IsNullOrEmpty(pageTitle)) continue;
+                    string strippedTitle = Regex.Replace(pageTitle, @"\s*\([^\)]*\)", "").Trim();
+                    if (Similarity(wanted, Normalize(strippedTitle)) < 0.40) continue;
+
+                    using (TimeoutWebClient wc2 = new TimeoutWebClient(6000))
+                    {
+                        wc2.Proxy = null;
+                        wc2.Headers.Add("User-Agent", "TitanGameHub/9.4 (Desktop)");
+                        wc2.Encoding = Encoding.UTF8;
+                        string sumJson = wc2.DownloadString("https://en.wikipedia.org/api/rest_v1/page/summary/" + Uri.EscapeDataString(pageTitle.Replace(' ', '_')));
+                        Dictionary<string, object> sum = ser.DeserializeObject(sumJson) as Dictionary<string, object>;
+                        if (sum == null) continue;
+                        if (sum.ContainsKey("originalimage"))
+                        {
+                            Dictionary<string, object> orig = sum["originalimage"] as Dictionary<string, object>;
+                            if (orig != null && orig.ContainsKey("source"))
+                            {
+                                string src = Convert.ToString(orig["source"]);
+                                if (!string.IsNullOrEmpty(src) && src.StartsWith("http")) return src;
+                            }
+                        }
+                        if (sum.ContainsKey("thumbnail"))
+                        {
+                            Dictionary<string, object> th = sum["thumbnail"] as Dictionary<string, object>;
+                            if (th != null && th.ContainsKey("source"))
+                            {
+                                string src = Convert.ToString(th["source"]);
+                                if (!string.IsNullOrEmpty(src) && src.StartsWith("http")) return src;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
             return null;
         }
 

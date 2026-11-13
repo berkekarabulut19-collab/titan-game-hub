@@ -213,6 +213,7 @@ namespace TitanGameHub
                         using (Stream rs = resp.GetResponseStream())
                         using (FileStream fs = new FileStream(destPath, mode, FileAccess.Write, FileShare.Read))
                         {
+                            try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
                             byte[] buf = new byte[1048576];
                             long got = existing;
                             int read;
@@ -241,6 +242,14 @@ namespace TitanGameHub
                                         progress(partIndex, partCount, alreadyDoneBytes + got, alreadyDoneBytes + partTotal, speed, label);
                                     }
                                 }
+                            }
+
+                            if (progress != null)
+                            {
+                                string doneLabel = partCount > 1
+                                    ? string.Format("Parça {0}/{1} tamamlandı", partIndex + 1, partCount)
+                                    : "İndirme tamamlandı";
+                                progress(partIndex, partCount, alreadyDoneBytes + got, Math.Max(alreadyDoneBytes + got, alreadyDoneBytes + partTotal), 0, doneLabel);
                             }
                         }
                     }

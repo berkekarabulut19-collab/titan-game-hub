@@ -53,37 +53,76 @@ namespace TitanGameHub
         /// <summary>Oyunu kaldır (dosyalar + katalog kaydı).</summary>
         private void RunUninstallSelected()
         {
-            if (_selectedProfile == null)
+            try
             {
-                MessageBox.Show("Önce bir oyun seçin.", "Kaldır", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
+                if (_selectedProfile == null)
+                {
+                    MessageBox.Show("Önce bir oyun seçin.", "Kaldır", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
 
-            GameProfile gp = _selectedProfile;
-            if (SmartUpdateShieldService.IsGameProcessRunning(gp))
+                GameProfile gp = _selectedProfile;
+                bool isRunning = false;
+                try { isRunning = SmartUpdateShieldService.IsGameProcessRunning(gp); } catch { }
+                if (isRunning)
+                {
+                    MessageBox.Show("Oyun çalışıyor. Önce kapatın.", "Kaldır", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                MessageBoxResult res = MessageBox.Show(
+                    "'" + gp.Name + "' kaldırılsın mı?\n\nEVET: oyun dosyaları diskten silinir\nHAYIR: sadece katalog kaydı silinir",
+                    "Titan // Oyunu Kaldır", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+
+                if (res == MessageBoxResult.Cancel) return;
+
+                bool deleteFiles = (res == MessageBoxResult.Yes);
+                if (_txtBottomStatus != null) _txtBottomStatus.Text = "⏳ '" + gp.Name + "' kaldırılıyor...";
+
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    string msg = "";
+                    bool ok = false;
+                    try
+                    {
+                        ok = GameMaintenanceService.Uninstall(gp, deleteFiles, out msg);
+                    }
+                    catch (Exception ex)
+                    {
+                        ok = false;
+                        msg = "Kaldırma hatası: " + ex.Message;
+                    }
+
+                    try
+                    {
+                        if (Dispatcher.HasShutdownStarted) return;
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            try
+                            {
+                                _allProfiles = ProfileStore.LoadProfiles() ?? new List<GameProfile>();
+                                SelectGameProfile(_allProfiles.Count > 0 ? _allProfiles[0] : null);
+                                try { ApplyLibraryFilter(); } catch { }
+                                try { RefreshLibrarySidebarList(); } catch { }
+                                try { RefreshLibrarySummaryMetrics(); } catch { }
+                                try { RefreshStorefrontGrid(); } catch { }
+                                if (_txtBottomStatus != null) _txtBottomStatus.Text = msg;
+                                try { Win32.PlayTechChirp(ok); } catch { }
+                                MessageBox.Show(msg, "Kaldırma", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
+                            }
+                            catch (Exception uiEx)
+                            {
+                                try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Kaldırma sonrası yenileme hatası: " + uiEx.Message; } catch { }
+                            }
+                        }));
+                    }
+                    catch { }
+                });
+            }
+            catch (Exception ex)
             {
-                MessageBox.Show("Oyun çalışıyor. Önce kapatın.", "Kaldır", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                try { MessageBox.Show("Kaldırma başlatılamadı: " + ex.Message, "Kaldır", MessageBoxButton.OK, MessageBoxImage.Warning); } catch { }
             }
-
-            MessageBoxResult res = MessageBox.Show(
-                "'" + gp.Name + "' kaldırılsın mı?\n\nEVET: oyun dosyaları diskten silinir\nHAYIR: sadece katalog kaydı silinir",
-                "Titan // Oyunu Kaldır", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
-
-            if (res == MessageBoxResult.Cancel) return;
-
-            string msg;
-            bool ok = GameMaintenanceService.Uninstall(gp, res == MessageBoxResult.Yes, out msg);
-
-            _allProfiles = ProfileStore.LoadProfiles();
-            SelectGameProfile(_allProfiles.Count > 0 ? _allProfiles[0] : null);
-            ApplyLibraryFilter();
-            RefreshLibrarySidebarList();
-            RefreshLibrarySummaryMetrics();
-            RefreshStorefrontGrid();
-            _txtBottomStatus.Text = msg;
-            Win32.PlayTechChirp(ok);
-            MessageBox.Show(msg, "Kaldırma", MessageBoxButton.OK, ok ? MessageBoxImage.Information : MessageBoxImage.Warning);
         }
 
         /// <summary>Disk raporu + geçici dosya temizliği.</summary>

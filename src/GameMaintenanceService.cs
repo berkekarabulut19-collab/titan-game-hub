@@ -50,6 +50,10 @@ namespace TitanGameHub
                         return false;
                     }
 
+                    foreach (string f in Directory.GetFiles(target, "*", SearchOption.AllDirectories))
+                    {
+                        try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
+                    }
                     Directory.Delete(target, true);
                     message = "Oyun dosyaları silindi: " + target;
                 }
