@@ -1708,6 +1708,10 @@ namespace TitanGameHub
                         RefreshLibrarySidebarList();
                         if (hasNew || targetGp.UpdateAvailable)
                         {
+                            string oldV = string.IsNullOrEmpty(targetGp.Version) ? "?" : targetGp.Version;
+                            string newV = string.IsNullOrEmpty(targetGp.RemoteVersion) ? "Yeni" : targetGp.RemoteVersion;
+                            string srcHint = string.IsNullOrEmpty(targetGp.UpdateSourceHint) ? "" : (" (" + targetGp.UpdateSourceHint + ")");
+                            _txtBottomStatus.Text = string.Format("🔄 {0}: {1} → {2}{3} güncelleniyor (Save yedeği alındı)...", targetGp.Name, oldV, newV, srcHint);
                             string sMsg;
                             SaveSyncService.CreateSaveBackup(targetGp, out sMsg);
                             _inAppDlStripBorder.Visibility = Visibility.Visible;

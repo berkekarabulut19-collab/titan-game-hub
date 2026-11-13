@@ -26,6 +26,39 @@ namespace TitanGameHub
         public static bool AutoThrottleWhenGameRunning = false;
         public static Func<bool> CheckIsGameRunningFunc = null;
 
+        static DownloadInstallService()
+        {
+            try
+            {
+                string[] cfgPaths = new string[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "titan_user.cfg"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "titan_user.cfg")
+                };
+                for (int c = 0; c < cfgPaths.Length; c++)
+                {
+                    if (!File.Exists(cfgPaths[c])) continue;
+                    string[] lines = File.ReadAllLines(cfgPaths[c], Encoding.UTF8);
+                    for (int i = 0; i < lines.Length; i++)
+                    {
+                        string l = lines[i].Trim();
+                        if (l.StartsWith("#")) continue;
+                        if (l.StartsWith("MAX_DOWNLOAD_MBPS", StringComparison.OrdinalIgnoreCase))
+                        {
+                            int eq = l.IndexOf('=');
+                            double mbps;
+                            if (eq > 0 && double.TryParse(l.Substring(eq + 1).Trim(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out mbps) && mbps > 0)
+                            {
+                                // Convert megabits/sec to bytes/sec
+                                SpeedLimitBytesPerSec = (long)(mbps * 125000.0);
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
         public static string GetEffectiveGamesRoot()
         {
             if (!string.IsNullOrEmpty(CustomGamesRootDirectory) && Directory.Exists(CustomGamesRootDirectory))
