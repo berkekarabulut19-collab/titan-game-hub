@@ -1137,7 +1137,10 @@ namespace TitanGameHub
                         btnAddLib.Foreground = ThemeManager.AccentGreenBrush;
                         btnAddLib.BorderBrush = ThemeManager.AccentGreenBrush;
                         btnAddLib.IsEnabled = false;
-                        RefreshLibrarySidebarList();
+                        ApplyLibraryFilter();
+                    RefreshLibrarySidebarList();
+                    RefreshLibrarySummaryMetrics();
+                    if (_viewStore != null && _viewStore.Visibility == Visibility.Visible) RefreshStorefrontGrid();
                         RefreshLibrarySummaryMetrics();
                     }
                 };
@@ -1201,7 +1204,10 @@ namespace TitanGameHub
                     ProfileStore.SaveProfiles(_allProfiles);
                     btnFav.Content = gp.IsFavorite ? "★" : "☆";
                     btnFav.Foreground = gp.IsFavorite ? ThemeManager.AccentTealBrush : HexBrush("#C7D5E0");
+                    ApplyLibraryFilter();
                     RefreshLibrarySidebarList();
+                    RefreshLibrarySummaryMetrics();
+                    if (_viewStore != null && _viewStore.Visibility == Visibility.Visible) RefreshStorefrontGrid();
                 };
                 Grid.SetColumn(btnFav, 1);
                 cardActionGrid.Children.Add(btnFav);
@@ -2988,6 +2994,7 @@ namespace TitanGameHub
                 {
                     if (ok && gp != null)
                     {
+                        bool foundInMem = false;
                         foreach (GameProfile p in _allProfiles)
                         {
                             if (p.Id == gp.Id || GameDeduplicationEngine.NormalizeGameTitle(p.Name) == GameDeduplicationEngine.NormalizeGameTitle(gp.Name))
@@ -2996,11 +3003,14 @@ namespace TitanGameHub
                                 p.WorkingDirectory = gp.WorkingDirectory;
                                 p.Version = gp.Version;
                                 p.RemoteVersion = gp.Version;
+                                foundInMem = true;
                                 break;
                             }
                         }
+                        if (!foundInMem) _allProfiles.Add(gp);
                     }
                     ProfileStore.SaveProfiles(_allProfiles);
+                    InvalidateLibraryLookupCache();
                     try
                     {
                         DownloadHistoryService.Record(new DownloadHistoryEntry
@@ -3032,7 +3042,10 @@ namespace TitanGameHub
                         _selectedProfile.WorkingDirectory = gp.WorkingDirectory;
                         SelectGameProfile(_selectedProfile);
                     }
+                    ApplyLibraryFilter();
                     RefreshLibrarySidebarList();
+                    RefreshLibrarySummaryMetrics();
+                    if (_viewStore != null && _viewStore.Visibility == Visibility.Visible) RefreshStorefrontGrid();
                     RefreshLibrarySummaryMetrics();
                     RefreshStorefrontGrid();
                     Win32.PlayTechChirp(ok);
@@ -3879,7 +3892,10 @@ namespace TitanGameHub
                     _selectedProfile.DeployOnlineFix("480");
                     ProfileStore.SaveProfiles(_allProfiles);
                     SelectGameProfile(_selectedProfile);
+                    ApplyLibraryFilter();
                     RefreshLibrarySidebarList();
+                    RefreshLibrarySummaryMetrics();
+                    if (_viewStore != null && _viewStore.Visibility == Visibility.Visible) RefreshStorefrontGrid();
                     RefreshLibrarySummaryMetrics();
                     _txtBottomStatus.Text = _selectedProfile.Name + " başarıyla bağlandı ve Spacewar P2P (480) kuruldu!";
                     Win32.PlayTechChirp(true);
@@ -4086,7 +4102,10 @@ namespace TitanGameHub
                 {
                     _txtBottomStatus.Text = string.Format("⚠️ YENİ SÜRÜM MEVCUT: {0} ({1} -> {2}) yayınlandı! Kütüphaneden 'GÜNCELLE' ile yükleyebilirsiniz.", gp.Name, oldVer, newVer);
                     Win32.PlayTechChirp(true);
+                    ApplyLibraryFilter();
                     RefreshLibrarySidebarList();
+                    RefreshLibrarySummaryMetrics();
+                    if (_viewStore != null && _viewStore.Visibility == Visibility.Visible) RefreshStorefrontGrid();
                     RefreshLibrarySummaryMetrics();
                     if (_selectedProfile != null && _selectedProfile.Id == gp.Id)
                         SelectGameProfile(_selectedProfile);
@@ -4247,7 +4266,10 @@ namespace TitanGameHub
                         ProfileStore.SaveProfiles(_allProfiles);
                         Dispatcher.BeginInvoke(new Action(delegate
                         {
-                            RefreshLibrarySidebarList();
+                            ApplyLibraryFilter();
+                    RefreshLibrarySidebarList();
+                    RefreshLibrarySummaryMetrics();
+                    if (_viewStore != null && _viewStore.Visibility == Visibility.Visible) RefreshStorefrontGrid();
                             if (_selectedProfile != null) SelectGameProfile(_selectedProfile);
                             _txtBottomStatus.Text = string.Format("🔄 Oto Güncelleme: {0} oyun için yeni sürüm tespit edildi! (Kütüphanede 🔄 ile işaretlendi)", count);
                             Win32.PlayTechChirp(true);

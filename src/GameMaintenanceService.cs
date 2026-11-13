@@ -108,6 +108,38 @@ namespace TitanGameHub
                     }
                     catch { }
                 }
+
+                // Masaüstü ve Başlat Menüsü kısayollarını (.url / .lnk) da kaldır
+                try
+                {
+                    string rawName = gp.Name ?? "";
+                    string cleanSc = rawName;
+                    foreach (char c in Path.GetInvalidFileNameChars())
+                        cleanSc = cleanSc.Replace(c, '_');
+                    cleanSc = cleanSc.Trim();
+
+                    string[] dirs = new string[]
+                    {
+                        Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory),
+                        Environment.GetFolderPath(Environment.SpecialFolder.CommonDesktopDirectory),
+                        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "Titan Game Hub")
+                    };
+                    string[] exts = new string[] { ".url", ".lnk" };
+                    foreach (string d in dirs)
+                    {
+                        if (string.IsNullOrEmpty(d) || !Directory.Exists(d)) continue;
+                        foreach (string baseN in new string[] { cleanSc, safe })
+                        {
+                            if (string.IsNullOrEmpty(baseN)) continue;
+                            foreach (string ext in exts)
+                            {
+                                string p = Path.Combine(d, baseN + ext);
+                                try { if (File.Exists(p)) File.Delete(p); } catch { }
+                            }
+                        }
+                    }
+                }
+                catch { }
             }
             catch { }
             return freed;
