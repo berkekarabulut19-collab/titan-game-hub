@@ -2846,6 +2846,24 @@ namespace TitanGameHub
                         }
                     }
                     ProfileStore.SaveProfiles(_allProfiles);
+                    try
+                    {
+                        DownloadHistoryService.Record(new DownloadHistoryEntry
+                        {
+                            GameId = gp != null ? (gp.Id ?? "") : "",
+                            GameName = gp != null ? (gp.Name ?? "Oyun") : "Oyun",
+                            Url = gp != null ? (gp.DirectMirrorUrl ?? gp.DownloadUrl ?? "") : "",
+                            Host = gp != null && !string.IsNullOrEmpty(gp.DirectMirrorUrl) ? DownloadHostPolicy.HostLabel(gp.DirectMirrorUrl) : "In-App",
+                            Status = ok ? "completed" : ((msg != null && msg.IndexOf("İptal", StringComparison.OrdinalIgnoreCase) >= 0) ? "cancelled" : "failed"),
+                            Error = ok ? "" : (msg ?? ""),
+                            FinishedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                        });
+                    }
+                    catch { }
+                    if (ok && gp != null)
+                    {
+                        ShowSteamToast("✔ İndirme & Kurulum Tamamlandı", gp.Name + " oynamaya hazır!", NotificationType.Success);
+                    }
                     if (!ok)
                     {
                         if (_txtInAppDlTitle != null) _txtInAppDlTitle.Text = "⚠️ " + msg;
