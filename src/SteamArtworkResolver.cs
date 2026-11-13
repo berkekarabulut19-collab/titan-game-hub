@@ -188,12 +188,39 @@ namespace TitanGameHub
             });
         }
 
-        /// <summary>Steam mağaza aramasında tüm sonuçları gezip isim benzerliğine göre seçer.</summary>
+        /// <summary>Steam mağaza aramasında tüm sonuçları gezip isim benzerliğine göre seçer; gerekirse kısa başlıkla fallback yapar.</summary>
         private static string QuerySteamStore(string term)
         {
             string clean = CleanTitle(term);
-            if (clean.Length < 3) return null;
+            if (clean.Length < 2) return null;
 
+            string art = SearchAndPickArtwork(clean);
+            if (!string.IsNullOrEmpty(art)) return art;
+
+            string[] words = clean.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length >= 3)
+            {
+                string short3 = string.Join(" ", words, 0, Math.Min(3, words.Length));
+                if (!short3.Equals(clean, StringComparison.OrdinalIgnoreCase))
+                {
+                    art = SearchAndPickArtwork(short3);
+                    if (!string.IsNullOrEmpty(art)) return art;
+                }
+            }
+            if (words.Length >= 2)
+            {
+                string short2 = words[0] + " " + words[1];
+                if (!short2.Equals(clean, StringComparison.OrdinalIgnoreCase))
+                {
+                    art = SearchAndPickArtwork(short2);
+                    if (!string.IsNullOrEmpty(art)) return art;
+                }
+            }
+            return null;
+        }
+
+        private static string SearchAndPickArtwork(string clean)
+        {
             string json;
             using (TimeoutWebClient wc = new TimeoutWebClient(8000))
             {
@@ -208,7 +235,6 @@ namespace TitanGameHub
             string bestId = null;
             string bestTinyImage = null;
             double bestScore = 0;
-            bool anyItem = false;
 
             try
             {
@@ -239,7 +265,7 @@ namespace TitanGameHub
             }
             catch { return null; }
 
-            if (bestId != null && bestScore >= 0.60)
+            if (bestId != null && bestScore >= 0.38)
             {
                 // 1) appdetails: en doğru görsel (header_image)
                 string detailsArt = QueryAppDetailsArtwork(bestId);
@@ -269,6 +295,8 @@ namespace TitanGameHub
 
                 foreach (string c in candidates)
                     if (UrlExists(c)) return c;
+
+                if (!string.IsNullOrEmpty(bestTinyImage)) return bestTinyImage;
             }
             return null;
         }
@@ -326,9 +354,9 @@ namespace TitanGameHub
         {
             if (string.IsNullOrEmpty(raw)) return "";
             string s = raw;
-            s = Regex.Replace(s, @"(?i)\b(free download|pre-?installed|repack|fitgirl|elamigos|tenoke|steamrip|online-?fix|update|v?\d+(\.\d+)+)\b", " ");
             s = Regex.Replace(s, @"\[[^\]]*\]|\([^\)]*\)", " ");
-            s = Regex.Replace(s, @"[\u2013\u2014\-_]+", " ");
+            s = Regex.Replace(s, @"(?i)\b(free download|pre-?installed|repack|fitgirl|elamigos|tenoke|steamrip|ovagames|freegog|crotorrents|online-?fix|all dlcs?|dlcs?|bonuses|bonus|deluxe|ultimate|complete|definitive|remastered|goty|gold|digital|edition|multi\d+|build\s*\d+|update|hotfix|portable|cracked|v?\d+(\.\d+)+)\b", " ");
+            s = Regex.Replace(s, @"[\u2013\u2014\-_:+]+", " ");
             s = Regex.Replace(s, @"[^A-Za-z0-9 ]", " ");
             s = Regex.Replace(s, @"\s{2,}", " ").Trim(' ', ':', '.');
             return s;

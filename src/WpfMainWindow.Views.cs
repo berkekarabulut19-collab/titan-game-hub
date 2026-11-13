@@ -892,21 +892,19 @@ namespace TitanGameHub
             });
             imgLayer.Children.Add(placeholder);
 
-            ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded)
+            bool artworkFallbackTried = false;
+            Action trySteamArtworkFallback = delegate
             {
-                if (loaded) placeholder.Visibility = Visibility.Collapsed;
-            });
+                if (artworkFallbackTried) return;
+                artworkFallbackTried = true;
 
-            // Afiş yoksa Steam mağaza aramasından resmi header.jpg getir (vitrin boş kalmasın).
-            if (string.IsNullOrEmpty(gp.BannerUrl) && string.IsNullOrEmpty(gp.CapsuleUrl))
-            {
                 string cachedArt = SteamArtworkResolver.GetCached(gp.Name);
-                if (!string.IsNullOrEmpty(cachedArt))
+                if (!string.IsNullOrEmpty(cachedArt) && !string.Equals(cachedArt, gp.BannerUrl, StringComparison.OrdinalIgnoreCase))
                 {
                     gp.BannerUrl = cachedArt;
-                    ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded)
+                    ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded2)
                     {
-                        if (loaded) placeholder.Visibility = Visibility.Collapsed;
+                        if (loaded2) placeholder.Visibility = Visibility.Collapsed;
                     });
                 }
                 else
@@ -915,15 +913,31 @@ namespace TitanGameHub
                     {
                         if (string.IsNullOrEmpty(artUrl)) return;
                         gp.BannerUrl = artUrl;
+                        if (imgHeader.Dispatcher.HasShutdownStarted) return;
                         imgHeader.Dispatcher.BeginInvoke(new Action(delegate
                         {
-                            ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded)
+                            ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded3)
                             {
-                                if (loaded) placeholder.Visibility = Visibility.Collapsed;
+                                if (loaded3) placeholder.Visibility = Visibility.Collapsed;
                             });
                         }));
                     });
                 }
+            };
+
+            if (string.IsNullOrEmpty(gp.BannerUrl) && string.IsNullOrEmpty(gp.CapsuleUrl))
+            {
+                trySteamArtworkFallback();
+            }
+            else
+            {
+                ImageCacheService.BindImageAsync(imgHeader, gp, 360, 1.0, delegate(bool loaded)
+                {
+                    if (loaded)
+                        placeholder.Visibility = Visibility.Collapsed;
+                    else
+                        trySteamArtworkFallback();
+                });
             }
 
             Grid overlayBadges = new Grid() { Margin = new Thickness(8) };
