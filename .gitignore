@@ -11,7 +11,15 @@ bin/data/selftest_report.txt
 bin/titan_user.cfg
 bin/Backups/
 bin/*.exe
+!bin/TitanGameHub.exe
+!bin/aria2c.exe
 bin/*.dll
+!bin/Microsoft.Web.WebView2.Core.dll
+!bin/Microsoft.Web.WebView2.WinForms.dll
+!bin/Microsoft.Web.WebView2.Wpf.dll
+!bin/WebView2Loader.dll
+!bin/app.ico
+!bin/app_logo.png
 Downloads/
 SaveBackups/
 data/

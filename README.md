@@ -18,3 +18,7 @@ Modern masaüstü oyun kütüphanesi, canlı katalog ve indirme yöneticisi.
 - **Uygulama İçi İndirme:** Doğrudan HTTP akışı, `aria2c` (magnet/torrent) ve arka plan WebView2 ile site penceresi açılmadan indirir.
 - **Kuyruk & Kurulum:** Çoklu indirme kuyruğu, arşiv güvenlik taraması, otomatik çıkarma ve başlatma.
 - **Otomatik Test:** `selftest.bat` (`TitanGameHub.exe --selftest`).
+- **Hazır EXE:** `bin/TitanGameHub.exe` doğrudan çalışmaya hazır olarak repoda yer alır.
+
+---
+**Sürüm:** `v9.4` (`v8.1 STEAM`)
