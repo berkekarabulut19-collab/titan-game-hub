@@ -28,6 +28,23 @@ namespace TitanGameHub
         private static readonly SemaphoreSlim _throttle = new SemaphoreSlim(4, 4);
         private static bool _diskLoaded = false;
 
+        private sealed class TimeoutWebClient : WebClient
+        {
+            private readonly int _timeoutMs;
+            public TimeoutWebClient(int timeoutMs) { _timeoutMs = timeoutMs; }
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                WebRequest req = base.GetWebRequest(address);
+                if (req != null)
+                {
+                    req.Timeout = _timeoutMs;
+                    HttpWebRequest hreq = req as HttpWebRequest;
+                    if (hreq != null) hreq.ReadWriteTimeout = _timeoutMs;
+                }
+                return req;
+            }
+        }
+
         static SteamArtworkResolver()
         {
             try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
@@ -144,16 +161,20 @@ namespace TitanGameHub
             ThreadPool.QueueUserWorkItem(delegate
             {
                 string result = null;
+                bool entered = false;
                 try
                 {
-                    _throttle.Wait(20000);
-                    try
+                    entered = _throttle.Wait(10000);
+                    if (entered)
                     {
                         result = QuerySteamStore(key);
                     }
-                    finally { _throttle.Release(); }
                 }
                 catch { }
+                finally
+                {
+                    if (entered) { try { _throttle.Release(); } catch { } }
+                }
 
                 lock (_lock)
                 {
@@ -174,7 +195,7 @@ namespace TitanGameHub
             if (clean.Length < 3) return null;
 
             string json;
-            using (WebClient wc = new WebClient())
+            using (TimeoutWebClient wc = new TimeoutWebClient(8000))
             {
                 wc.Proxy = null;
                 wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
@@ -222,7 +243,7 @@ namespace TitanGameHub
             {
                 // 1) appdetails: en doğru görsel (header_image)
                 string detailsArt = QueryAppDetailsArtwork(bestId);
-                if (!string.IsNullOrEmpty(detailsArt) && UrlExists(detailsArt)) return detailsArt;
+                if (!string.IsNullOrEmpty(detailsArt)) return detailsArt;
 
                 List<string> candidates = new List<string>();
 
@@ -258,7 +279,7 @@ namespace TitanGameHub
             try
             {
                 string json;
-                using (WebClient wc = new WebClient())
+                using (TimeoutWebClient wc = new TimeoutWebClient(8000))
                 {
                     wc.Proxy = null;
                     wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
@@ -354,33 +375,23 @@ namespace TitanGameHub
 
         private static bool UrlExists(string url)
         {
-            // HEAD bazı CDN'lerde 403 dönüyor; Range'li GET kullan.
-            for (int attempt = 0; attempt < 2; attempt++)
+            // HEAD bazı CDN'lerde 403 dönüyor; hızlı tek Range'li GET kullan.
+            try
             {
-                try
+                HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Method = "GET";
+                req.Proxy = null;
+                req.Timeout = 4000;
+                req.ReadWriteTimeout = 4000;
+                req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+                req.AddRange(0, 2047);
+                using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                 {
-                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
-                    req.Method = "GET";
-                    req.Proxy = null;
-                    req.Timeout = 10000;
-                    req.ReadWriteTimeout = 10000;
-                    req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
-                    req.AddRange(0, 2047);
-                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
-                    {
-                        int code = (int)resp.StatusCode;
-                        return (code == 200 || code == 206);
-                    }
+                    int code = (int)resp.StatusCode;
+                    return (code == 200 || code == 206);
                 }
-                catch (WebException wex)
-                {
-                    HttpWebResponse r = wex.Response as HttpWebResponse;
-                    if (r != null) return false;
-                    Thread.Sleep(300);
-                }
-                catch { Thread.Sleep(300); }
             }
-            return false;
+            catch { return false; }
         }
     }
 }

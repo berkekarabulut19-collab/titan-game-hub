@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace TitanGameHub
 {
@@ -20,6 +21,23 @@ namespace TitanGameHub
         private static readonly HashSet<string> InFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly SemaphoreSlim DownloadGate = new SemaphoreSlim(6, 6);
 
+        private sealed class TimeoutWebClient : WebClient
+        {
+            private readonly int _timeoutMs;
+            public TimeoutWebClient(int timeoutMs) { _timeoutMs = timeoutMs; }
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                WebRequest req = base.GetWebRequest(address);
+                if (req != null)
+                {
+                    req.Timeout = _timeoutMs;
+                    HttpWebRequest hreq = req as HttpWebRequest;
+                    if (hreq != null) hreq.ReadWriteTimeout = _timeoutMs;
+                }
+                return req;
+            }
+        }
+
         static ImageCacheService()
         {
             try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
@@ -28,7 +46,7 @@ namespace TitanGameHub
                 if (!Directory.Exists(CacheDir))
                     Directory.CreateDirectory(CacheDir);
 
-                // Background cache maintenance: purge corrupt 0-byte files or entries older than 30 days
+                // Background cache maintenance: purge corrupt <1KB files or entries older than 30 days
                 ThreadPool.QueueUserWorkItem(delegate
                 {
                     try
@@ -41,9 +59,7 @@ namespace TitanGameHub
                             {
                                 FileInfo fi = new FileInfo(f);
                                 if (fi.Length < 1024 || fi.LastAccessTime < cutoff)
-                                {
                                     fi.Delete();
-                                }
                             }
                             catch { }
                         }
@@ -79,8 +95,8 @@ namespace TitanGameHub
         }
 
         /// <summary>
-        /// onDone(true/false): görsel yüklendi mi? Vitrin kartları yüklenemeyen afişler için
-        /// yer tutucu (gradient + oyun adı) gösterir, siyah kutu bırakmaz.
+        /// onDone(true/false): görsel yüklendi mi? Disk okuma ve decode tamamen arka planda yapılır,
+        /// UI thread asla kilitlenmez.
         /// </summary>
         public static void BindImageAsync(Border targetBorder, GameProfile gp, int decodeWidth, double opacity, Action<bool> onDone)
         {
@@ -110,95 +126,121 @@ namespace TitanGameHub
                 }
             }
 
-            string safeFile = Regex.Replace(gp.Id ?? gp.SteamAppId ?? "game", @"[^a-zA-Z0-9_-]", "") + ".jpg";
-            string localPath = Path.Combine(CacheDir, safeFile);
+            string safeFile = Regex.Replace(gp.Id ?? gp.SteamAppId ?? "game", @"[^a-zA-Z0-9_-]", "");
+            if (string.IsNullOrEmpty(safeFile)) safeFile = "game";
+            string localPath = Path.Combine(CacheDir, safeFile + ".jpg");
 
-            if (File.Exists(localPath) && new FileInfo(localPath).Length > 1024)
-            {
-                BitmapImage bmp = LoadBitmapFromDisk(localPath, decodeWidth);
-                if (bmp != null)
-                {
-                    AddToMemoryCache(cacheKey, bmp);
-                    targetBorder.Background = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill, Opacity = opacity };
-                    if (onDone != null) onDone(true);
-                    return;
-                }
-            }
-
-            // Download asynchronously to local disk cache
+            // Diskten okuma/decode ve indirme tamamen arka planda yapılır
             ThreadPool.QueueUserWorkItem(delegate
             {
-                bool shouldDownload = false;
-                lock (InFlight)
+                BitmapImage bmp = LoadBitmapFromDisk(localPath, decodeWidth);
+                if (bmp == null)
                 {
-                    if (!InFlight.Contains(localPath))
+                    bool shouldDownload = false;
+                    lock (InFlight)
                     {
-                        InFlight.Add(localPath);
-                        shouldDownload = true;
-                    }
-                }
-
-                if (shouldDownload)
-                {
-                    try
-                    {
-                        ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; // TLS 1.2
-                        DownloadGate.Wait(15000);
-                        using (WebClient wc = new WebClient())
+                        if (!InFlight.Contains(localPath))
                         {
-                            wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                            try
+                            InFlight.Add(localPath);
+                            shouldDownload = true;
+                        }
+                    }
+
+                    if (shouldDownload)
+                    {
+                        bool entered = false;
+                        try
+                        {
+                            entered = DownloadGate.Wait(8000);
+                            if (entered)
                             {
-                                wc.DownloadFile(primaryUrl, localPath);
-                            }
-                            catch
-                            {
-                                if (!string.IsNullOrEmpty(fallbackUrl) && fallbackUrl != primaryUrl)
+                                string tmpPath = localPath + "." + Guid.NewGuid().ToString("N").Substring(0, 6) + ".tmp";
+                                try
                                 {
-                                    try { wc.DownloadFile(fallbackUrl, localPath); } catch { }
+                                    using (TimeoutWebClient wc = new TimeoutWebClient(8000))
+                                    {
+                                        wc.Proxy = null;
+                                        wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                        bool ok = false;
+                                        try
+                                        {
+                                            wc.DownloadFile(primaryUrl, tmpPath);
+                                            ok = File.Exists(tmpPath) && new FileInfo(tmpPath).Length > 1024;
+                                        }
+                                        catch { ok = false; }
+
+                                        if (!ok && !string.IsNullOrEmpty(fallbackUrl) && fallbackUrl != primaryUrl)
+                                        {
+                                            try
+                                            {
+                                                wc.DownloadFile(fallbackUrl, tmpPath);
+                                                ok = File.Exists(tmpPath) && new FileInfo(tmpPath).Length > 1024;
+                                            }
+                                            catch { ok = false; }
+                                        }
+
+                                        if (ok)
+                                        {
+                                            try
+                                            {
+                                                if (File.Exists(localPath)) File.Delete(localPath);
+                                                File.Move(tmpPath, localPath);
+                                            }
+                                            catch { }
+                                        }
+                                    }
+                                }
+                                finally
+                                {
+                                    try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
                                 }
                             }
                         }
+                        catch { }
+                        finally
+                        {
+                            if (entered) { try { DownloadGate.Release(); } catch { } }
+                            lock (InFlight) { InFlight.Remove(localPath); }
+                        }
                     }
-                    catch { }
-                    finally
+                    else
                     {
-                        try { DownloadGate.Release(); } catch { }
-                        lock (InFlight) { InFlight.Remove(localPath); }
+                        for (int i = 0; i < 15; i++)
+                        {
+                            Thread.Sleep(120);
+                            if (File.Exists(localPath) && new FileInfo(localPath).Length > 1024) break;
+                        }
                     }
-                }
-                else
-                {
-                    // Wait briefly for in-flight download
-                    for (int i = 0; i < 15; i++)
-                    {
-                        Thread.Sleep(120);
-                        if (File.Exists(localPath) && new FileInfo(localPath).Length > 1024) break;
-                    }
+
+                    bmp = LoadBitmapFromDisk(localPath, decodeWidth);
                 }
 
-                if (File.Exists(localPath) && new FileInfo(localPath).Length > 1024)
+                if (bmp != null)
                 {
-                    targetBorder.Dispatcher.BeginInvoke(new Action(delegate
+                    AddToMemoryCache(cacheKey, bmp);
+                    try
                     {
-                        try
+                        if (targetBorder.Dispatcher.HasShutdownStarted) return;
+                        targetBorder.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(delegate
                         {
-                            BitmapImage bmp = LoadBitmapFromDisk(localPath, decodeWidth);
-                            if (bmp != null)
+                            try
                             {
-                                AddToMemoryCache(cacheKey, bmp);
                                 targetBorder.Background = new ImageBrush(bmp) { Stretch = Stretch.UniformToFill, Opacity = opacity };
                                 if (onDone != null) onDone(true);
                             }
-                            else if (onDone != null) onDone(false);
-                        }
-                        catch { if (onDone != null) onDone(false); }
-                    }));
+                            catch { if (onDone != null) onDone(false); }
+                        }));
+                    }
+                    catch { }
                 }
-                else
+                else if (onDone != null)
                 {
-                    if (onDone != null)
-                        targetBorder.Dispatcher.BeginInvoke(new Action(delegate { onDone(false); }));
+                    try
+                    {
+                        if (!targetBorder.Dispatcher.HasShutdownStarted)
+                            targetBorder.Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(delegate { onDone(false); }));
+                    }
+                    catch { }
                 }
             });
         }
@@ -207,14 +249,24 @@ namespace TitanGameHub
         {
             try
             {
-                BitmapImage bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(path, UriKind.Absolute);
-                if (decodeWidth > 0) bmp.DecodePixelWidth = decodeWidth;
-                bmp.EndInit();
-                bmp.Freeze();
-                return bmp;
+                if (!File.Exists(path)) return null;
+                FileInfo fi = new FileInfo(path);
+                if (fi.Length <= 1024) return null;
+
+                byte[] bytes = File.ReadAllBytes(path);
+                if (bytes == null || bytes.Length <= 1024) return null;
+
+                using (MemoryStream ms = new MemoryStream(bytes))
+                {
+                    BitmapImage bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.StreamSource = ms;
+                    if (decodeWidth > 0) bmp.DecodePixelWidth = decodeWidth;
+                    bmp.EndInit();
+                    bmp.Freeze();
+                    return bmp;
+                }
             }
             catch
             {

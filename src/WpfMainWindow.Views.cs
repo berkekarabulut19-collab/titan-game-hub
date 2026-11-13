@@ -652,11 +652,41 @@ namespace TitanGameHub
         }
 
         private int _storeRenderGeneration = 0;
+        private HashSet<string> _libIdCache = null;
+        private HashSet<string> _libNormCache = null;
+
+        private void InvalidateLibraryLookupCache()
+        {
+            _libIdCache = null;
+            _libNormCache = null;
+        }
+
+        private void EnsureLibraryLookupCache()
+        {
+            if (_libIdCache != null && _libNormCache != null) return;
+            HashSet<string> ids = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            HashSet<string> norms = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (_allProfiles != null)
+            {
+                foreach (GameProfile ex in _allProfiles)
+                {
+                    if (ex == null) continue;
+                    if (!string.IsNullOrEmpty(ex.Id)) ids.Add(ex.Id);
+                    string n = GameDeduplicationEngine.NormalizeGameTitle(ex.Name);
+                    if (!string.IsNullOrEmpty(n)) norms.Add(n);
+                }
+            }
+            _libIdCache = ids;
+            _libNormCache = norms;
+        }
 
         private void RefreshStorefrontGrid()
         {
             if (_storeRowsPanel == null) return;
             if (_storeFilteredProfiles == null) _storeFilteredProfiles = new List<GameProfile>();
+
+            InvalidateLibraryLookupCache();
+            EnsureLibraryLookupCache();
 
             _storeRowsPanel.Children.Clear();
             try { if (_storeScrollViewer != null) _storeScrollViewer.ScrollToTop(); } catch { }
@@ -668,7 +698,7 @@ namespace TitanGameHub
             // Incremental rendering: add rows in batches to keep UI responsive
             int generation = ++_storeRenderGeneration;
             int index = 0;
-            const int rowsPerBatch = 3; // render 3 rows at a time, then yield
+            const int rowsPerBatch = 2; // render 2 rows at a time, then yield
 
             Action renderBatch = null;
             renderBatch = delegate
@@ -1104,13 +1134,10 @@ namespace TitanGameHub
         private bool IsGameInLibrary(GameProfile gp)
         {
             if (gp == null) return false;
+            EnsureLibraryLookupCache();
+            if (!string.IsNullOrEmpty(gp.Id) && _libIdCache.Contains(gp.Id)) return true;
             string key = GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
-            foreach (GameProfile ex in _allProfiles)
-            {
-                if (string.Equals(ex.Id, gp.Id, StringComparison.OrdinalIgnoreCase)) return true;
-                if (GameDeduplicationEngine.NormalizeGameTitle(ex.Name) == key) return true;
-            }
-            return false;
+            return !string.IsNullOrEmpty(key) && _libNormCache.Contains(key);
         }
 
         private GameProfile EnsureGameInLibraryCatalog(GameProfile gp)
