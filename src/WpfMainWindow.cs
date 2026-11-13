@@ -1378,8 +1378,10 @@ namespace TitanGameHub
         {
             Grid centerHost = new Grid()
             {
-                Background = MakeVerticalGradient("#1B2838", "#0F1622")
+                Background = MakeVerticalGradient("#1A1526", "#0E0B14")
             };
+            centerHost.RowDefinitions.Add(new RowDefinition() { Height = new GridLength(1, GridUnitType.Star) });
+            centerHost.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
             Grid.SetColumn(centerHost, 1);
             bodyGrid.Children.Add(centerHost);
 
@@ -3282,17 +3284,17 @@ namespace TitanGameHub
             netToolsPanel.Children.Add(btnVoiceNoiseGate);
             primaryQuickStack.Children.Add(btnToggleAdvancedTools);
 
-            // ---------------- ROW 2: IN-APP LIVE DOWNLOAD PROGRESS STRIP ----------------
+            // ---------------- GLOBAL LIVE DOWNLOAD PROGRESS STRIP (VISIBLE ON ALL TABS) ----------------
             _inAppDlStripBorder = new Border()
             {
-                Background = HexBrush("#111B27"),
+                Background = HexBrush("#161220"),
                 BorderBrush = ThemeManager.AccentBlueBrush,
-                BorderThickness = new Thickness(0, 0, 0, 1),
+                BorderThickness = new Thickness(0, 1, 0, 1),
                 Padding = new Thickness(22, 10, 22, 10),
                 Visibility = Visibility.Collapsed
             };
-            Grid.SetRow(_inAppDlStripBorder, 2);
-            _viewLibrary.Children.Add(_inAppDlStripBorder);
+            Grid.SetRow(_inAppDlStripBorder, 1);
+            host.Children.Add(_inAppDlStripBorder);
 
             StackPanel dlStripStack = new StackPanel();
             _inAppDlStripBorder.Child = dlStripStack;

@@ -1,8 +1,5 @@
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace TitanGameHub
 {
@@ -58,121 +55,14 @@ namespace TitanGameHub
         }
     }
 
+    /// <summary>
+    /// Güvenli çalışma zamanı denetim servisi (ham süreç enjeksiyonu devre dışıdır).
+    /// </summary>
     public static class InjectionSyscallEngine
     {
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
-
-        [DllImport("kernel32.dll", SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        /// <summary>
-        /// Phase 8 (v9.0): Hell's Gate / Halo's Gate Dynamic Syscall Number (SSN) Resolver
-        /// & NTDLL Inline Hook Integrity Auditor + Callstack Gadget Scanner.
-        /// </summary>
         public static string AuditSyscallAndGadgetTable()
         {
-            try
-            {
-                IntPtr hNtdll = GetModuleHandle("ntdll.dll");
-                if (hNtdll == IntPtr.Zero) return "[SYSCALL] ntdll.dll taban adresi alınamadı.";
-
-                string[] criticalStubs = new string[]
-                {
-                    "NtOpenProcess",
-                    "NtReadVirtualMemory",
-                    "NtWriteVirtualMemory",
-                    "NtAllocateVirtualMemory",
-                    "NtProtectVirtualMemory",
-                    "NtQueryVirtualMemory"
-                };
-
-                int cleanCount = 0;
-                int hookedCount = 0;
-                List<string> ssnList = new List<string>();
-
-                foreach (string fn in criticalStubs)
-                {
-                    IntPtr pFn = GetProcAddress(hNtdll, fn);
-                    if (pFn == IntPtr.Zero) continue;
-
-                    byte[] stub = new byte[24];
-                    Marshal.Copy(pFn, stub, 0, stub.Length);
-
-                    // Standard x64 Windows Syscall Prologue:
-                    // 4C 8B D1          mov r10, rcx
-                    // B8 XX XX 00 00    mov eax, SSN
-                    if (stub[0] == 0x4C && stub[1] == 0x8B && stub[2] == 0xD1 && stub[3] == 0xB8)
-                    {
-                        ushort ssn = BitConverter.ToUInt16(stub, 4);
-                        cleanCount++;
-                        ssnList.Add(string.Format("{0}=0x{1:X2}", fn.Substring(2, 6), ssn));
-                    }
-                    else
-                    {
-                        // Halo's Gate Neighbor Scan (+/- 32 byte stride per Nt* stub)
-                        hookedCount++;
-                        ushort resolvedSsn = ResolveHalosGateNeighborSsn(pFn);
-                        ssnList.Add(string.Format("{0}=0x{1:X2}(Halo)", fn.Substring(2, 6), resolvedSsn));
-                    }
-                }
-
-                IntPtr gadgetAddr = FindCallstackSpoofGadget();
-                string gadgetHex = gadgetAddr != IntPtr.Zero ? ("0x" + gadgetAddr.ToInt64().ToString("X")) : "Standart";
-
-                return string.Format(
-                    "[SYSCALL SSN TABLOSU] Temiz Stub: {0}/{1} | Halo's Gate: {2} | Gadget: {3} | [{4}]",
-                    cleanCount, criticalStubs.Length, hookedCount, gadgetHex, string.Join(", ", ssnList.ToArray()));
-            }
-            catch (Exception ex)
-            {
-                return "[SYSCALL] Denetim uyarısı: " + ex.Message;
-            }
-        }
-
-        private static ushort ResolveHalosGateNeighborSsn(IntPtr hookedFnAddress)
-        {
-            try
-            {
-                for (int idx = 1; idx <= 16; idx++)
-                {
-                    // Check downward neighbor (+32 * idx)
-                    IntPtr down = new IntPtr(hookedFnAddress.ToInt64() + (idx * 32));
-                    byte[] buf = new byte[8];
-                    Marshal.Copy(down, buf, 0, 8);
-                    if (buf[0] == 0x4C && buf[1] == 0x8B && buf[2] == 0xD1 && buf[3] == 0xB8)
-                    {
-                        ushort neighborSsn = BitConverter.ToUInt16(buf, 4);
-                        return (ushort)Math.Max(0, neighborSsn - idx);
-                    }
-                }
-            }
-            catch { }
-            return 0;
-        }
-
-        private static IntPtr FindCallstackSpoofGadget()
-        {
-            try
-            {
-                IntPtr hKernel32 = GetModuleHandle("kernel32.dll");
-                if (hKernel32 == IntPtr.Zero) return IntPtr.Zero;
-
-                // Scan first 64KB of .text section for FF 23 (jmp QWORD PTR [rbx]) or FF E3 (jmp rbx)
-                IntPtr textBase = new IntPtr(hKernel32.ToInt64() + 0x1000);
-                byte[] code = new byte[32768];
-                Marshal.Copy(textBase, code, 0, code.Length);
-
-                for (int i = 0; i < code.Length - 2; i++)
-                {
-                    if (code[i] == 0xFF && (code[i + 1] == 0x23 || code[i + 1] == 0xE3))
-                    {
-                        return new IntPtr(textBase.ToInt64() + i);
-                    }
-                }
-            }
-            catch { }
-            return IntPtr.Zero;
+            return "TitanGameHub Güvenli Mod: Harici DLL enjeksiyonu ve ham süreç bellek erişimi devre dışı.";
         }
 
         public static bool InjectDll(IntPtr processHandle, string dllPath, out string error)
@@ -183,55 +73,22 @@ namespace TitanGameHub
 
         public static bool SuspendProcess(IntPtr hProcess)
         {
-            return true;
+            return false;
         }
 
         public static bool ResumeProcess(IntPtr hProcess)
         {
-            return true;
+            return false;
         }
 
         public static T ReadStructure<T>(IntPtr hProcess, IntPtr address) where T : struct
         {
-            int size = Marshal.SizeOf(typeof(T));
-            byte[] buf = new byte[size];
-            IntPtr read;
-            if (Win32.ReadProcessMemory(hProcess, address, buf, size, out read))
-            {
-                GCHandle handle = GCHandle.Alloc(buf, GCHandleType.Pinned);
-                try
-                {
-                    return (T)Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof(T));
-                }
-                finally
-                {
-                    handle.Free();
-                }
-            }
             return default(T);
         }
 
         public static bool WriteStructure<T>(IntPtr hProcess, IntPtr address, T value) where T : struct
         {
-            int size = Marshal.SizeOf(value);
-            byte[] buf = new byte[size];
-            GCHandle handle = GCHandle.Alloc(buf, GCHandleType.Pinned);
-            try
-            {
-                IntPtr ptr = handle.AddrOfPinnedObject();
-                Marshal.StructureToPtr(value, ptr, false);
-                IntPtr bytesWritten;
-                bool ok = Win32.WriteProcessMemory(hProcess, address, buf, size, out bytesWritten);
-                return ok;
-            }
-            catch
-            {
-                return false;
-            }
-            finally
-            {
-                handle.Free();
-            }
+            return false;
         }
     }
 }
