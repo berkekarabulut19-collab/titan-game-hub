@@ -77,7 +77,7 @@ namespace TitanGameHub
             });
             _txtStoreCountBadge = new TextBlock()
             {
-                Text = "Tüm Kaynaklar (SteamRIP • FitGirl • OvaGames • FreeGOG • CroTorrents)",
+                Text = "5000+ Oyun Kataloğu • Türlere Göre Hızlı Keşfet & İndir",
                 Foreground = ThemeManager.AccentGreenBrush,
                 FontSize = 9.5,
                 FontWeight = FontWeights.Bold
@@ -535,18 +535,20 @@ namespace TitanGameHub
             }
         }
 
+        private int _storeFetchGeneration = 0;
+
         private void TriggerLiveSiteSearchOrCategoryFetch(bool appendMode = false)
         {
-            if (_isFetchingLiveSite) return;
+            int fetchGen = ++_storeFetchGeneration;
             _isFetchingLiveSite = true;
 
             string query = (_txtStoreSearch != null && _txtStoreSearch.Text != null) ? _txtStoreSearch.Text.Trim() : "";
             int catId = _activeSiteCategoryId;
             int page = _currentStorePage;
 
-            if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = "⏳ Canlı kaynaklar taranıyor...";
+            if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = "⏳ Oyun kataloğu hazırlanıyor...";
             if (_txtStorePageIndicator != null)
-                _txtStorePageIndicator.Text = string.Format("CANLI MAĞAZA YÜKLENİYOR (SAYFA {0})...", page);
+                _txtStorePageIndicator.Text = string.Format("MAĞAZA YÜKLENİYOR (SAYFA {0})...", page);
 
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -557,13 +559,32 @@ namespace TitanGameHub
                     List<GameProfile> liveGames = SiteParserService.FetchLiveSiteGames(catId, query, page, perSite, out msg);
                     if (liveGames == null) liveGames = new List<GameProfile>();
 
-                    // İlk sayfa + TÜM SİTELER + arama yoksa yerel katalogdaki oyunları da havuza dahil et
-                    if (!appendMode && catId == -20 && string.IsNullOrEmpty(query) && page == 1 && _allProfiles != null)
+                    // İlk sayfada yerel katalogdaki uygun oyunları da havuza dahil et (daha zengin vitrin)
+                    if (!appendMode && string.IsNullOrEmpty(query) && page == 1 && _allProfiles != null)
                     {
                         foreach (GameProfile lp in _allProfiles)
                         {
-                            if (lp != null && !string.IsNullOrWhiteSpace(lp.Name))
+                            if (lp == null || string.IsNullOrWhiteSpace(lp.Name)) continue;
+                            if (catId == -20)
+                            {
                                 liveGames.Add(lp);
+                            }
+                            else if (catId == 1538 && ((lp.Category ?? "").ToLowerInvariant().Contains("co-op") || (lp.MaxPlayers ?? "").ToLowerInvariant().Contains("co-op") || (lp.Description ?? "").ToLowerInvariant().Contains("co-op")))
+                            {
+                                liveGames.Add(lp);
+                            }
+                            else if (catId == -30 && System.Text.RegularExpressions.Regex.IsMatch((lp.Name + " " + lp.Category + " " + lp.Description).ToLowerInvariant(), @"\b(football|soccer|fifa|fc 24|fc 25|efootball|pes|nba|sport)\b"))
+                            {
+                                liveGames.Add(lp);
+                            }
+                            else if (catId == -31 && System.Text.RegularExpressions.Regex.IsMatch((lp.Name + " " + lp.Category + " " + lp.Description).ToLowerInvariant(), @"\b(racing|forza|need for speed|nfs|assetto|f1|dirt|rally|drift|car|euro truck|beamng)\b"))
+                            {
+                                liveGames.Add(lp);
+                            }
+                            else if (catId == -32 && System.Text.RegularExpressions.Regex.IsMatch((lp.Name + " " + lp.Category + " " + lp.Description).ToLowerInvariant(), @"\b(moto|motogp|ride|motocross|motorcycle|superbike|mx)\b"))
+                            {
+                                liveGames.Add(lp);
+                            }
                         }
                     }
 
@@ -600,6 +621,7 @@ namespace TitanGameHub
                                 if (!string.IsNullOrEmpty(match.BannerUrl))
                                     lg.BannerUrl = match.BannerUrl;
                             }
+                            lg.Category = SiteParserService.SanitizeDisplayCategory(lg.Category);
                         }
                     }
 
@@ -607,6 +629,7 @@ namespace TitanGameHub
                     {
                         try
                         {
+                            if (fetchGen != _storeFetchGeneration) return;
                             _isFetchingLiveSite = false;
                             if (liveGames != null && liveGames.Count > 0)
                             {
@@ -635,18 +658,18 @@ namespace TitanGameHub
                         }
                         catch (Exception ex2)
                         {
-                            try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Canlı site taraması hatası: " + ex2.Message; } catch { }
+                            try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Mağaza yükleme hatası: " + ex2.Message; } catch { }
                         }
                     }));
                 }
                 catch (Exception ex)
                 {
-                    _isFetchingLiveSite = false;
+                    if (fetchGen == _storeFetchGeneration) _isFetchingLiveSite = false;
                     try
                     {
                         Dispatcher.BeginInvoke(new Action(delegate
                         {
-                            try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Canlı site taraması başlatılamadı: " + ex.Message; } catch { }
+                            try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Mağaza yükleme başlatılamadı: " + ex.Message; } catch { }
                         }));
                     }
                     catch { }
@@ -942,7 +965,7 @@ namespace TitanGameHub
             };
             statusBadge.Child = new TextBlock()
             {
-                Text = gp.IsInstalled ? "✔ KÜTÜPHANEDE YÜKLÜ" : (gp.Category ?? "STEAMRIP"),
+                Text = gp.IsInstalled ? "✔ KÜTÜPHANEDE YÜKLÜ" : SiteParserService.SanitizeDisplayCategory(gp.Category),
                 Foreground = gp.IsInstalled ? ThemeManager.AccentGreenBrush : ThemeManager.ForegroundMainBrush,
                 FontSize = 9,
                 FontWeight = FontWeights.Bold

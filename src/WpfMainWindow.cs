@@ -30,7 +30,7 @@ namespace TitanGameHub
         private bool _storeAutoLoaded = false;
         private bool _bulkImportRunning = false;
         private bool _storeGridDirty = true;
-        private int _storeDisplayLimit = 120;
+        private int _storeDisplayLimit = 150;
         private System.Windows.Controls.ScrollViewer _storeScrollViewer;
         private GameProfile _selectedProfile;
 

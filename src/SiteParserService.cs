@@ -62,26 +62,38 @@ namespace TitanGameHub
         // -13 = FreeGOG PC Games (DRM-Free GOG)
         public static readonly SiteCategoryDef[] Categories = new SiteCategoryDef[]
         {
-            new SiteCategoryDef(-20, "🌐 TÜM SİTELER", "Tüm Siteler"),
+            new SiteCategoryDef(-20, "🌐 TÜM OYUNLAR", "Tüm Oyunlar"),
             new SiteCategoryDef(-1, "★ KÜTÜPHANE & ÖNE ÇIKAN", "Öne Çıkan"),
-            new SiteCategoryDef(0, "🔥 SON EKLENENLER", "Son Eklenen"),
-            new SiteCategoryDef(-15, "🎮 STEAMRIP", "SteamRIP"),
-            new SiteCategoryDef(-11, "📦 FITGIRL", "FitGirl"),
-            new SiteCategoryDef(-12, "💾 OVAGAMES", "OvaGames"),
-            new SiteCategoryDef(-13, "🎁 FREEGOG", "FreeGOG"),
-            new SiteCategoryDef(-14, "⚡ CROTORRENTS", "CroTorrents"),
-            new SiteCategoryDef(1538, "CO-OP & MULTIPLAYER", "Multiplayer"),
-            new SiteCategoryDef(26, "AKSİYON", "Aksiyon"),
-            new SiteCategoryDef(32, "KORKU", "Korku"),
-            new SiteCategoryDef(45, "AÇIK DÜNYA", "Açık Dünya"),
-            new SiteCategoryDef(119, "HAYATTA KALMA", "Hayatta Kalma"),
-            new SiteCategoryDef(37, "SİMÜLASYON", "Simülasyon"),
-            new SiteCategoryDef(41, "FPS / SHOOTER", "FPS & Shooter"),
-            new SiteCategoryDef(27, "MACERA", "Macera"),
-            new SiteCategoryDef(63, "RPG", "RPG"),
-            new SiteCategoryDef(42, "STRATEJİ", "Strateji"),
-            new SiteCategoryDef(35, "YARIŞ", "Yarış")
+            new SiteCategoryDef(0, "🔥 YENİ ÇIKANLAR", "Yeni Çıkan"),
+            new SiteCategoryDef(1538, "👥 CO-OP & ONLINE", "Co-Op & Online"),
+            new SiteCategoryDef(-30, "⚽ FUTBOL & SPOR", "Futbol & Spor"),
+            new SiteCategoryDef(-31, "🚗 ARABA & YARIŞ", "Araba & Yarış"),
+            new SiteCategoryDef(-32, "🏍 MOTOR & SÜRÜŞ", "Motor & Sürüş"),
+            new SiteCategoryDef(26, "⚔ AKSİYON", "Aksiyon"),
+            new SiteCategoryDef(32, "👻 KORKU", "Korku"),
+            new SiteCategoryDef(45, "🌍 AÇIK DÜNYA", "Açık Dünya"),
+            new SiteCategoryDef(119, "🏕 HAYATTA KALMA", "Hayatta Kalma"),
+            new SiteCategoryDef(41, "🎯 FPS / NİŞANCI", "FPS & Nişancı"),
+            new SiteCategoryDef(27, "🧭 MACERA", "Macera"),
+            new SiteCategoryDef(63, "🛡 RPG", "RPG"),
+            new SiteCategoryDef(42, "♟ STRATEJİ", "Strateji"),
+            new SiteCategoryDef(37, "⚙ SİMÜLASYON", "Simülasyon")
         };
+
+        public static string SanitizeDisplayCategory(string rawCategory)
+        {
+            if (string.IsNullOrWhiteSpace(rawCategory)) return "OYUN PAKETİ";
+            string c = rawCategory.Trim();
+            if (c.Equals("SteamRIP", StringComparison.OrdinalIgnoreCase) ||
+                c.Equals("FitGirl", StringComparison.OrdinalIgnoreCase) ||
+                c.Equals("OvaGames", StringComparison.OrdinalIgnoreCase) ||
+                c.Equals("FreeGOG", StringComparison.OrdinalIgnoreCase) ||
+                c.Equals("CroTorrents", StringComparison.OrdinalIgnoreCase))
+            {
+                return "OYUN PAKETİ";
+            }
+            return c.ToUpperInvariant();
+        }
 
         private static readonly Dictionary<string, string> SteamAppIdCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -115,48 +127,162 @@ namespace TitanGameHub
             int[] sources = new int[] { 0, -11, -14, -13, -12 };
             string[] names = new string[] { "SteamRIP", "FitGirl", "CroTorrents", "FreeGOG", "OvaGames" };
 
-            List<GameProfile>[] buckets = new List<GameProfile>[sources.Length];
-            string[] statuses = new string[sources.Length];
-            ManualResetEvent[] done = new ManualResetEvent[sources.Length];
+            bool fetchTwoPages = string.IsNullOrWhiteSpace(searchQuery);
+            int jobCount = fetchTwoPages ? sources.Length * 2 : sources.Length;
+            List<GameProfile>[] buckets = new List<GameProfile>[jobCount];
+            ManualResetEvent[] done = new ManualResetEvent[jobCount];
 
             for (int i = 0; i < sources.Length; i++)
             {
-                int idx = i;
-                done[i] = new ManualResetEvent(false);
+                int srcIdx = i;
+                int b0 = fetchTwoPages ? (i * 2) : i;
+                done[b0] = new ManualResetEvent(false);
                 ThreadPool.QueueUserWorkItem(delegate
                 {
                     try
                     {
                         string st;
-                        buckets[idx] = FetchWpJsonCatalogFromBaseUrl(GetBaseUrlForSource(sources[idx]), names[idx], 0, searchQuery, page, perPage, out st);
-                        statuses[idx] = st;
+                        buckets[b0] = FetchWpJsonCatalogFromBaseUrl(GetBaseUrlForSource(sources[srcIdx]), names[srcIdx], 0, searchQuery, fetchTwoPages ? ((page - 1) * 2 + 1) : page, perPage, out st);
                     }
-                    catch { buckets[idx] = null; statuses[idx] = names[idx] + " yanıt vermedi"; }
-                    finally { done[idx].Set(); }
+                    catch { buckets[b0] = null; }
+                    finally { try { done[b0].Set(); } catch { } }
                 });
+
+                if (fetchTwoPages)
+                {
+                    int b1 = i * 2 + 1;
+                    done[b1] = new ManualResetEvent(false);
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try
+                        {
+                            string st;
+                            buckets[b1] = FetchWpJsonCatalogFromBaseUrl(GetBaseUrlForSource(sources[srcIdx]), names[srcIdx], 0, searchQuery, (page - 1) * 2 + 2, perPage, out st);
+                        }
+                        catch { buckets[b1] = null; }
+                        finally { try { done[b1].Set(); } catch { } }
+                    });
+                }
             }
 
-            try { ManualResetEvent.WaitAll(done, 18000); }
+            try { ManualResetEvent.WaitAll(done, 16000); }
             catch { }
+            for (int i = 0; i < done.Length; i++)
+            {
+                try { if (done[i] != null) done[i].Dispose(); } catch { }
+            }
 
             List<GameProfile> merged = new List<GameProfile>();
-            int okSources = 0;
-            for (int i = 0; i < sources.Length; i++)
+            for (int i = 0; i < buckets.Length; i++)
             {
                 if (buckets[i] == null || buckets[i].Count == 0) continue;
-                okSources++;
                 foreach (GameProfile gp in buckets[i])
                 {
                     if (gp == null || string.IsNullOrWhiteSpace(gp.Name)) continue;
-                    if (string.IsNullOrEmpty(gp.Category)) gp.Category = names[i];
+                    gp.Category = SanitizeDisplayCategory(gp.Category);
                     merged.Add(gp);
                 }
             }
 
             merged = GameDeduplicationEngine.Deduplicate(merged);
 
-            statusMessage = string.Format("🌐 TÜM SİTELER: {0}/{1} kaynak yanıt verdi • {2} benzersiz oyun listelendi",
-                okSources, sources.Length, merged.Count);
+            statusMessage = string.Format("🌐 Mağaza hazır • {0} benzersiz oyun listelendi", merged.Count);
+            return merged;
+        }
+
+        private static List<GameProfile> FetchGenreTargetedGames(int genreId, string searchQuery, int page, int perPage, out string statusMessage)
+        {
+            string[] terms;
+            string genreLabel;
+            int wpCatFallback = 0;
+            if (genreId == -30)
+            {
+                genreLabel = "Futbol & Spor";
+                terms = new string[] { "football", "fifa", "soccer", "nba", "efootball" };
+            }
+            else if (genreId == -31)
+            {
+                genreLabel = "Araba & Yarış";
+                terms = new string[] { "racing", "forza", "need for speed", "assetto", "f1", "euro truck" };
+                wpCatFallback = 35;
+            }
+            else if (genreId == -32)
+            {
+                genreLabel = "Motor & Sürüş";
+                terms = new string[] { "motogp", "ride", "motocross", "motorcycle", "mx" };
+            }
+            else
+            {
+                genreLabel = "Co-Op & Online";
+                terms = new string[] { "coop", "multiplayer", "online" };
+                wpCatFallback = 1538;
+            }
+
+            if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                terms = new string[] { searchQuery.Trim() };
+            }
+
+            int[] sourceIds = new int[] { 0, -11, -12, -13 };
+            List<Tuple<int, string>> jobs = new List<Tuple<int, string>>();
+            if (wpCatFallback > 0 && string.IsNullOrWhiteSpace(searchQuery))
+                jobs.Add(Tuple.Create(wpCatFallback, ""));
+
+            for (int t = 0; t < terms.Length; t++)
+            {
+                for (int s = 0; s < sourceIds.Length; s++)
+                {
+                    if (jobs.Count >= 10) break;
+                    jobs.Add(Tuple.Create(sourceIds[s], terms[t]));
+                }
+                if (jobs.Count >= 10) break;
+            }
+
+            List<GameProfile>[] buckets = new List<GameProfile>[jobs.Count];
+            ManualResetEvent[] done = new ManualResetEvent[jobs.Count];
+
+            for (int i = 0; i < jobs.Count; i++)
+            {
+                int idx = i;
+                int src = jobs[i].Item1;
+                string term = jobs[i].Item2;
+                done[i] = new ManualResetEvent(false);
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try
+                    {
+                        string st;
+                        if (src > 0)
+                            buckets[idx] = FetchWpJsonCatalogFromBaseUrl("https://steamrip.com", genreLabel, src, "", page, perPage, out st);
+                        else
+                            buckets[idx] = FetchWpJsonCatalogFromBaseUrl(GetBaseUrlForSource(src), genreLabel, 0, term, page, perPage, out st);
+                    }
+                    catch { buckets[idx] = null; }
+                    finally { try { done[idx].Set(); } catch { } }
+                });
+            }
+
+            try { ManualResetEvent.WaitAll(done, 15000); }
+            catch { }
+            for (int i = 0; i < done.Length; i++)
+            {
+                try { if (done[i] != null) done[i].Dispose(); } catch { }
+            }
+
+            List<GameProfile> merged = new List<GameProfile>();
+            for (int i = 0; i < buckets.Length; i++)
+            {
+                if (buckets[i] == null) continue;
+                foreach (GameProfile gp in buckets[i])
+                {
+                    if (gp == null || string.IsNullOrWhiteSpace(gp.Name)) continue;
+                    gp.Category = genreLabel.ToUpperInvariant();
+                    merged.Add(gp);
+                }
+            }
+
+            merged = GameDeduplicationEngine.Deduplicate(merged);
+            statusMessage = string.Format("🎯 {0} • {1} oyun listelendi", genreLabel, merged.Count);
             return merged;
         }
 
@@ -217,6 +343,17 @@ namespace TitanGameHub
                 return results;
             }
 
+            // Akıllı Tür Kategorileri: Co-Op (1538), Futbol & Spor (-30), Araba & Yarış (-31), Motor & Sürüş (-32)
+            if (categoryId == -30 || categoryId == -31 || categoryId == -32 || categoryId == 1538)
+            {
+                results = FetchGenreTargetedGames(categoryId, searchQuery, page, perPage, out statusMessage);
+                lock (CatalogCache)
+                {
+                    CatalogCache[cacheKey] = new CachedCatalog { Games = new List<GameProfile>(results), Timestamp = DateTime.Now, Status = statusMessage };
+                }
+                return results;
+            }
+
             // Route to trusted partner sites if selected
             if (categoryId == -10)
             {
@@ -269,6 +406,10 @@ namespace TitanGameHub
 
             if (results != null)
             {
+                foreach (GameProfile gp in results)
+                {
+                    if (gp != null) gp.Category = SanitizeDisplayCategory(gp.Category);
+                }
                 results = GameDeduplicationEngine.Deduplicate(results);
             }
 
