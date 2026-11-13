@@ -783,14 +783,13 @@ namespace TitanGameHub
                     {
                         string _v = string.IsNullOrEmpty(profile.Version) ? profile.RemoteVersion : profile.Version;
                         _v = string.IsNullOrEmpty(_v) ? "Güncel" : _v;
-                        ReportProgress(profile.Name + " zaten güncel sürümde (" + _v + "). İndirme/güncelleme atlandı.", 100, "Güncel");
-                        ReportCompleted(profile, true, profile.Name + " güncel: " + _v);
                         lock (_queueList)
                         {
                             _queueList.RemoveAll(delegate(GameProfile g) { return g.Id == profile.Id; });
                         }
                         try { if (OnQueueChanged != null) OnQueueChanged(); } catch { }
-                        // StartNextQueuedProfile(); (queued download processing not implemented)
+                        ReportProgress(profile.Name + " zaten güncel sürümde (" + _v + "). İndirme/güncelleme atlandı.", 100, "Güncel");
+                        ReportCompleted(profile, true, profile.Name + " güncel: " + _v);
                         return;
                     }
                     // Sürüm bilgisi eksikse güncelmiş gibi kesin konuşma; güncelleme rozeti de UpdateAvailable=false olacağı için akış devam edebilir.
@@ -957,43 +956,27 @@ namespace TitanGameHub
                         return DownloadHostPolicy.SpeedScore(b.Url).CompareTo(DownloadHostPolicy.SpeedScore(a.Url));
                     });
 
-                    // En iyi ayna bile yalnızca tarayıcı oturumunda iniyorsa (Cloudflare 403),
-                    // boş yere 3 kez deneyip hata vermek yerine tarayıcı + indirme izleme moduna geç.
-                    if (candidates.Count > 0 && DownloadHostPolicy.NeedsBrowserSession(candidates[0].Url))
-                    {
-                        string browserUrl = candidates[0].Url.StartsWith("//") ? "https:" + candidates[0].Url : candidates[0].Url;
-                        string hostLabel = DownloadHostPolicy.HostLabel(browserUrl);
-
-                        bool allowBrowser = ResolveBrowserFallbackPolicy(hostLabel);
-
-                        if (!allowBrowser)
-                        {
-                            _isBusy = false;
-                            ReportCompleted(profile, false, "İndirme durduruldu: bu oyunun tüm aynaları bot korumalı (" + hostLabel + "). 'TORRENT İLE İNDİR' veya 'Alternatif Ayna' kullanın.");
-                            return;
-                        }
-
-                        // Gömülü tarayıcı ile uygulama içinde indir (403 koruması aşılır)
-                        string embPath;
-                        if (TryEmbeddedBrowserDownload(profile, browserUrl, out embPath))
-                        {
-                            ExtractArchiveAndConfigure(profile, embPath, GetTargetInstallDirectoryForGame(profile));
-                            return;
-                        }
-
-                        // Torrent otomatiği: magnet/.torrent varsa aria2 ile indir (seed kapalı)
-                        if (TryTorrentFallback(profile))
-                            return;
-
-                        ReportProgress(string.Format("[2/4] {0} — {1} doğrudan indirmeyi engelliyor, in-app indirme deneniyor...", profile.Name, hostLabel), 22, "Uygulama İçi");
-                        _isBusy = false;
-                        ReportCompleted(profile, false, "Durduruldu: " + hostLabel + " için uygulama içi indirme tamamlanamadı (doğrudan bağlantı ve arka plan indirme denendi).");
-                        return;
-                    }
-
-                    // Multi-Source In-App Direct Binary Stream Pass (PixelDrain, GoFile API, MediaFire, Direct .RAR/.ZIP)
+                    // Multi-Source Pass: Doğrudan akış (PixelDrain, GoFile API, MediaFire, Direct .RAR/.ZIP)
+                    // ve 403 korumalı hostlar için arka plan WebView2 indirmesi (başarısız olursa sonraki aynaya geçer)
                     foreach (SiteMirror mirror in candidates)
                     {
+                        if (DownloadHostPolicy.NeedsBrowserSession(mirror.Url))
+                        {
+                            string browserUrl = mirror.Url.StartsWith("//") ? "https:" + mirror.Url : mirror.Url;
+                            string hostLabel = DownloadHostPolicy.HostLabel(browserUrl);
+
+                            if (!ResolveBrowserFallbackPolicy(hostLabel))
+                                continue;
+
+                            string embPath;
+                            if (TryEmbeddedBrowserDownload(profile, browserUrl, out embPath))
+                            {
+                                ExtractArchiveAndConfigure(profile, embPath, GetTargetInstallDirectoryForGame(profile));
+                                return;
+                            }
+                            continue;
+                        }
+
                         ReportProgress(string.Format("[2/4] {0} - Uygulama içi doğrudan akış deneniyor: {1}...", profile.Name, mirror.HostName), 18, mirror.HostName);
                         if (TryDirectStreamDownload(profile, mirror.Url))
                         {
@@ -1079,6 +1062,16 @@ namespace TitanGameHub
                                     ReportCompleted(profile, false, "Durduruldu: " + (alt.HostLabel ?? "site") + " doğrudan indirmeye izin vermiyor.");
                                     return;
                                 }
+
+                                string embAltPath;
+                                if (TryEmbeddedBrowserDownload(profile, altUrl, out embAltPath))
+                                {
+                                    ExtractArchiveAndConfigure(profile, embAltPath, GetTargetInstallDirectoryForGame(profile));
+                                    return;
+                                }
+
+                                if (TryTorrentFallback(profile))
+                                    return;
 
                                 ReportProgress(string.Format("[2/4] {0} — {1} için doğrudan indirme uygulanamadı...", profile.Name, alt.HostLabel), 22, "Uygulama İçi");
                                 _isBusy = false;
