@@ -33,45 +33,60 @@ namespace TitanGameHub
             catch { }
         }
 
+        private static readonly object _playLock = new object();
+        private static long _lastPlayTicks = 0;
+
         public static void PlayHover()
         {
-            PlayMemoryWav(_navHoverWav);
+            long now = DateTime.UtcNow.Ticks;
+            if ((now - Interlocked.Read(ref _lastPlayTicks)) < TimeSpan.FromMilliseconds(110).Ticks) return;
+            PlayMemoryWav(_navHoverWav, true);
         }
 
         public static void PlaySelect()
         {
-            PlayMemoryWav(_navSelectWav);
+            PlayMemoryWav(_navSelectWav, false);
         }
 
         public static void PlayLaunch()
         {
-            PlayMemoryWav(_gameLaunchWav);
+            PlayMemoryWav(_gameLaunchWav, false);
         }
 
         public static void PlayDownloadComplete()
         {
-            PlayMemoryWav(_downloadCompleteWav);
+            PlayMemoryWav(_downloadCompleteWav, false);
         }
 
         public static void PlayAchievement()
         {
-            PlayMemoryWav(_achievementWav);
+            PlayMemoryWav(_achievementWav, false);
         }
 
-        private static void PlayMemoryWav(byte[] wav)
+        private static void PlayMemoryWav(byte[] wav, bool skipIfBusy)
         {
             if (_isMuted || wav == null || wav.Length == 0) return;
+            Interlocked.Exchange(ref _lastPlayTicks, DateTime.UtcNow.Ticks);
+
             ThreadPool.QueueUserWorkItem(delegate
             {
+                bool locked = false;
                 try
                 {
-                    using (MemoryStream ms = new MemoryStream(wav))
+                    locked = skipIfBusy ? Monitor.TryEnter(_playLock) : Monitor.TryEnter(_playLock, 300);
+                    if (!locked) return;
+
+                    using (MemoryStream ms = new MemoryStream(wav, false))
+                    using (SoundPlayer player = new SoundPlayer(ms))
                     {
-                        SoundPlayer player = new SoundPlayer(ms);
-                        player.Play();
+                        player.PlaySync();
                     }
                 }
                 catch { }
+                finally
+                {
+                    if (locked) { try { Monitor.Exit(_playLock); } catch { } }
+                }
             });
         }
 
@@ -103,39 +118,41 @@ namespace TitanGameHub
             return wav;
         }
 
-        // 1. Subtle, gentle hover chirp (20ms, 1200Hz down to 950Hz)
+        // 1. Yumuşak, kulak yormayan hover tıkı (24ms, 520Hz -> 440Hz, fade-in/out)
         private static byte[] GenerateHoverChirp()
         {
             int sampleRate = 44100;
-            int totalSamples = (int)(sampleRate * 0.022); // 22ms
+            int totalSamples = (int)(sampleRate * 0.024);
             short[] samples = new short[totalSamples];
 
             for (int i = 0; i < totalSamples; i++)
             {
                 double t = (double)i / sampleRate;
-                double freq = 1200.0 - (250.0 * (t / 0.022));
-                double env = Math.Exp(-t * 140.0);
+                double attack = Math.Min(1.0, t / 0.004);
+                double freq = 520.0 - (80.0 * (t / 0.024));
+                double env = attack * Math.Exp(-t * 150.0);
                 double s = Math.Sin(2.0 * Math.PI * freq * t) * env;
-                samples[i] = (short)(s * 4200.0);
+                samples[i] = (short)(s * 2400.0);
             }
             return BuildWav(samples, sampleRate);
         }
 
-        // 2. Crisp, modern select click (65ms, two-tone harmonic 880Hz + 1760Hz)
+        // 2. Yumuşak modern seçim sesi (55ms, 523Hz + 659Hz, fade-in/out)
         private static byte[] GenerateSelectTick()
         {
             int sampleRate = 44100;
-            int totalSamples = (int)(sampleRate * 0.065); // 65ms
+            int totalSamples = (int)(sampleRate * 0.055);
             short[] samples = new short[totalSamples];
 
             for (int i = 0; i < totalSamples; i++)
             {
                 double t = (double)i / sampleRate;
-                double env = Math.Exp(-t * 55.0);
-                double s1 = Math.Sin(2.0 * Math.PI * 880.0 * t);
-                double s2 = 0.4 * Math.Sin(2.0 * Math.PI * 1760.0 * t);
+                double attack = Math.Min(1.0, t / 0.005);
+                double env = attack * Math.Exp(-t * 65.0);
+                double s1 = Math.Sin(2.0 * Math.PI * 523.25 * t);
+                double s2 = 0.35 * Math.Sin(2.0 * Math.PI * 659.25 * t);
                 double combined = (s1 + s2) * env;
-                samples[i] = (short)(combined * 7500.0);
+                samples[i] = (short)(combined * 4200.0);
             }
             return BuildWav(samples, sampleRate);
         }

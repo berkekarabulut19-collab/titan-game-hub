@@ -175,19 +175,8 @@ namespace TitanGameHub
         {
             try
             {
-                System.Threading.ThreadPool.QueueUserWorkItem(delegate
-                {
-                    if (enabled)
-                    {
-                        Beep(1200, 45);
-                        Beep(1600, 45);
-                    }
-                    else
-                    {
-                        Beep(900, 45);
-                        Beep(600, 45);
-                    }
-                });
+                if (enabled) ProceduralSoundEngine.PlaySelect();
+                else ProceduralSoundEngine.PlayHover();
             }
             catch { }
         }

@@ -4119,7 +4119,7 @@ namespace TitanGameHub
             _txtP2PInstallPath.Text = "Kurulum Konumu: " + (!string.IsNullOrEmpty(gp.WorkingDirectory) ? gp.WorkingDirectory : defaultDir);
             _txtP2PVersionStatus.Text = gp.IsInstalled
                 ? ("Durum: 🟢 BİLGİSAYARDA YÜKLÜ (" + gp.Version + " • Spacewar AppID 480 Aktif)")
-                : ("Durum: ☁ STEAMRIP BULUT KATALOĞUNDA (" + gp.FileSize + " • Tek Tıkla İndirilebilir)");
+                : ("Durum: ☁ BULUT KATALOĞUNDA (" + gp.FileSize + " • Tek Tıkla İndirilebilir)");
 
             int saveCount = SaveSyncService.GetBackupCount(gp);
             _txtSaveBackupStatus.Text = saveCount > 0
