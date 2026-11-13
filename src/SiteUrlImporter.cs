@@ -19,6 +19,7 @@ namespace TitanGameHub
             "fitgirl-repacks.site", "www.fitgirl-repacks.site",
             "ovagames.com", "www.ovagames.com",
             "freegogpcgames.com", "www.freegogpcgames.com",
+            "crotorrents.com", "www.crotorrents.com",
             "online-fix.me", "www.online-fix.me"
         };
 
@@ -56,7 +57,7 @@ namespace TitanGameHub
 
             if (!IsSupportedHost(url))
             {
-                statusMessage = "Desteklenmeyen site. Şunlar destekli: SteamRIP, FitGirl, OvaGames, FreeGOG, Online-Fix.";
+                statusMessage = "Desteklenmeyen site. Şunlar destekli: SteamRIP, FitGirl, CroTorrents, OvaGames, FreeGOG, Online-Fix.";
                 return null;
             }
 
@@ -79,7 +80,7 @@ namespace TitanGameHub
                 html = FetchViaJina(url);
                 if (string.IsNullOrEmpty(html))
                 {
-                    statusMessage = "Sayfa açılamadı (site bot koruması olabilir). Linki tarayıcıda açıp kontrol edin.";
+                    statusMessage = "Sayfa içeriği şu an alınamadı (site koruma altında veya erişilemiyor).";
                     return null;
                 }
             }
@@ -132,7 +133,6 @@ namespace TitanGameHub
             gp.RemoteVersion = gp.Version;
             gp.FileSize = string.IsNullOrEmpty(size) ? "Bilinmiyor" : size;
             gp.SteamAppId = string.IsNullOrEmpty(appId) ? "480" : appId;
-            gp.DownloadUrl = url;
             gp.DownloadUrl = url;
             gp.OnlineFixUrl = "https://online-fix.me/index.php?do=search&subaction=search&story=" + Uri.EscapeDataString(gp.Name);
             gp.Description = string.IsNullOrEmpty(desc) ? (gp.Name + " — eklenen katalog kaydı.") : desc;
