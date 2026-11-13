@@ -3027,6 +3027,9 @@ namespace TitanGameHub
                     catch { }
                     if (ok && gp != null)
                     {
+                        if (_txtInAppDlTitle != null) _txtInAppDlTitle.Text = "✔ " + gp.Name + " — Kuruldu ve Oynamaya Hazır!";
+                        if (_txtInAppDlSpeed != null) _txtInAppDlSpeed.Text = "✔ HAZIR";
+                        if (_pbInAppDl != null) _pbInAppDl.Value = 100;
                         ShowSteamToast("✔ İndirme & Kurulum Tamamlandı", gp.Name + " oynamaya hazır!", NotificationType.Success);
                     }
                     if (!ok)

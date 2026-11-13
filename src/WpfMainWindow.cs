@@ -1141,6 +1141,8 @@ namespace TitanGameHub
             {
                 _libraryFilteredProfiles.Sort(delegate(GameProfile a, GameProfile b)
                 {
+                    int instCmp = b.IsInstalled.CompareTo(a.IsInstalled);
+                    if (instCmp != 0) return instCmp;
                     return string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
                 });
             }
