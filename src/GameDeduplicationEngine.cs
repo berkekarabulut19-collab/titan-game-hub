@@ -12,7 +12,8 @@ namespace TitanGameHub
             string clean = raw.Trim().ToLowerInvariant();
 
             // Strip download and repack suffixes
-            clean = Regex.Replace(clean, @"\s*free\s+download.*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s*(?:free|torrent)\s+download.*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s*\+?\s*bonus\s+osts?\b", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*\(v[0-9\.\s_ab-]+\)", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*\[v[0-9\.\s_ab-]+\]", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*v[0-9]+(\.[0-9]+)*([a-z])?", "", RegexOptions.IgnoreCase);
@@ -92,10 +93,13 @@ namespace TitanGameHub
                         continue;
                     }
 
-                    // Rule 3: Prefer profile with direct mirror URL (GoFile/PixelDrain)
-                    if (string.IsNullOrEmpty(existing.DirectMirrorUrl) && !string.IsNullOrEmpty(p.DirectMirrorUrl))
+                    // Rule 3: Prefer profile with clean, working direct mirror / magnet URL (ignore ad shorteners)
+                    bool existingWeak = string.IsNullOrEmpty(existing.DirectMirrorUrl) || DownloadHostPolicy.IsAdShortener(existing.DirectMirrorUrl);
+                    bool newClean = !string.IsNullOrEmpty(p.DirectMirrorUrl) && !DownloadHostPolicy.IsAdShortener(p.DirectMirrorUrl);
+                    if (newClean && (existingWeak || DownloadHostPolicy.SpeedScore(p.DirectMirrorUrl) > DownloadHostPolicy.SpeedScore(existing.DirectMirrorUrl)))
                     {
                         existing.DirectMirrorUrl = p.DirectMirrorUrl;
+                        if (!string.IsNullOrEmpty(p.DownloadUrl)) existing.DownloadUrl = p.DownloadUrl;
                     }
 
                     // Rule 4: Prefer profile with authentic cover art

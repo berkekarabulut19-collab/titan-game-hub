@@ -107,8 +107,8 @@ namespace TitanGameHub
         public static List<GameProfile> FetchAllSourcesMerged(string searchQuery, int page, int perPage, out string statusMessage)
         {
             statusMessage = "";
-            int[] sources = new int[] { 0, -11, -12, -13, -14 };
-            string[] names = new string[] { "SteamRIP", "FitGirl", "OvaGames", "FreeGOG", "CroTorrents" };
+            int[] sources = new int[] { 0, -11, -14, -13, -12 };
+            string[] names = new string[] { "SteamRIP", "FitGirl", "CroTorrents", "FreeGOG", "OvaGames" };
 
             List<GameProfile>[] buckets = new List<GameProfile>[sources.Length];
             string[] statuses = new string[sources.Length];
@@ -135,7 +135,6 @@ namespace TitanGameHub
             catch { }
 
             List<GameProfile> merged = new List<GameProfile>();
-            HashSet<string> seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int okSources = 0;
             for (int i = 0; i < sources.Length; i++)
             {
@@ -143,14 +142,15 @@ namespace TitanGameHub
                 okSources++;
                 foreach (GameProfile gp in buckets[i])
                 {
-                    string key = (gp.Name ?? "").Trim().ToLowerInvariant();
-                    if (key.Length == 0 || !seen.Add(key)) continue;
+                    if (gp == null || string.IsNullOrWhiteSpace(gp.Name)) continue;
                     if (string.IsNullOrEmpty(gp.Category)) gp.Category = names[i];
                     merged.Add(gp);
                 }
             }
 
-            statusMessage = string.Format("🌐 TÜM SİTELER: {0}/{1} kaynak yanıt verdi • {2} oyun listelendi",
+            merged = GameDeduplicationEngine.Deduplicate(merged);
+
+            statusMessage = string.Format("🌐 TÜM SİTELER: {0}/{1} kaynak yanıt verdi • {2} benzersiz oyun listelendi",
                 okSources, sources.Length, merged.Count);
             return merged;
         }

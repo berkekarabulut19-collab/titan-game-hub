@@ -34,10 +34,11 @@ namespace TitanGameHub
 
         private static readonly string[] Sources = new string[]
         {
-            "https://www.ovagames.com",
-            "https://fitgirl-repacks.site"
+            "https://fitgirl-repacks.site",
+            "https://crotorrents.com",
+            "https://www.ovagames.com"
         };
-        private static readonly string[] SourceNames = new string[] { "OvaGames", "FitGirl" };
+        private static readonly string[] SourceNames = new string[] { "FitGirl", "CroTorrents", "OvaGames" };
 
         public static Result GetCached(string gameName)
         {
@@ -296,6 +297,13 @@ namespace TitanGameHub
                     bestScore = score;
                     best = url;
                 }
+            }
+
+            if (string.IsNullOrEmpty(best))
+            {
+                Match mag = Regex.Match(html, @"magnet:\?xt=urn:btih:[^\s'<>\)\u0022]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+                if (mag.Success)
+                    best = System.Net.WebUtility.HtmlDecode(mag.Value);
             }
             return best;
         }
