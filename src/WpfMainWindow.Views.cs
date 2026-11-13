@@ -530,7 +530,44 @@ namespace TitanGameHub
                 try
                 {
                     string msg;
-                    List<GameProfile> liveGames = SiteParserService.FetchLiveSiteGames(catId, query, page, 24, out msg);
+                    List<GameProfile> liveGames = SiteParserService.FetchLiveSiteGames(catId, query, page, (catId == -20 ? 12 : 24), out msg);
+
+                    // Ağır tekilleştirme ve yerel kütüphane eşleştirmesini arka plan iş parçacığında yap (UI donmasın)
+                    if (liveGames != null && liveGames.Count > 0)
+                    {
+                        liveGames = GameDeduplicationEngine.Deduplicate(liveGames);
+
+                        Dictionary<string, GameProfile> localByNorm = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+                        Dictionary<string, GameProfile> localById = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+                        List<GameProfile> localSnapshot = (_allProfiles != null) ? new List<GameProfile>(_allProfiles) : new List<GameProfile>();
+                        foreach (GameProfile existing in localSnapshot)
+                        {
+                            if (existing == null) continue;
+                            string exNorm = GameDeduplicationEngine.NormalizeGameTitle(existing.Name);
+                            if (!string.IsNullOrEmpty(exNorm) && !localByNorm.ContainsKey(exNorm))
+                                localByNorm[exNorm] = existing;
+                            if (!string.IsNullOrEmpty(existing.Id) && !localById.ContainsKey(existing.Id))
+                                localById[existing.Id] = existing;
+                        }
+
+                        foreach (GameProfile lg in liveGames)
+                        {
+                            if (lg == null) continue;
+                            GameProfile match = null;
+                            string lgNorm = GameDeduplicationEngine.NormalizeGameTitle(lg.Name);
+                            if (!string.IsNullOrEmpty(lgNorm)) localByNorm.TryGetValue(lgNorm, out match);
+                            if (match == null && !string.IsNullOrEmpty(lg.Id)) localById.TryGetValue(lg.Id, out match);
+                            if (match != null)
+                            {
+                                lg.ExecutablePath = match.ExecutablePath;
+                                lg.WorkingDirectory = match.WorkingDirectory;
+                                lg.IsFavorite = match.IsFavorite;
+                                lg.PlayTimeMinutes = match.PlayTimeMinutes;
+                                if (!string.IsNullOrEmpty(match.BannerUrl))
+                                    lg.BannerUrl = match.BannerUrl;
+                            }
+                        }
+                    }
 
                     Dispatcher.BeginInvoke(new Action(delegate
                     {
@@ -539,50 +576,35 @@ namespace TitanGameHub
                             _isFetchingLiveSite = false;
                             if (liveGames != null && liveGames.Count > 0)
                             {
-                                liveGames = GameDeduplicationEngine.Deduplicate(liveGames);
-
-                                // Merge any already-installed status from local library
-                                foreach (GameProfile lg in liveGames)
-                                {
-                                    string lgNorm = GameDeduplicationEngine.NormalizeGameTitle(lg.Name);
-                                    foreach (GameProfile existing in _allProfiles)
-                                    {
-                                        string exNorm = GameDeduplicationEngine.NormalizeGameTitle(existing.Name);
-                                        if (exNorm == lgNorm || string.Equals(existing.Id, lg.Id, StringComparison.OrdinalIgnoreCase))
-                                        {
-                                            lg.ExecutablePath = existing.ExecutablePath;
-                                            lg.WorkingDirectory = existing.WorkingDirectory;
-                                            lg.IsFavorite = existing.IsFavorite;
-                                            lg.PlayTimeMinutes = existing.PlayTimeMinutes;
-                                            if (!string.IsNullOrEmpty(existing.BannerUrl))
-                                                lg.BannerUrl = existing.BannerUrl;
-                                            break;
-                                        }
-                                    }
-                                }
-
                                 _storeFilteredProfiles = liveGames;
-                                _txtStoreCountBadge.Text = msg;
-                                _txtStorePageIndicator.Text = string.Format("GÜVENLİ OYUN KATALOĞU — SAYFA {0} ({1} BENZERSİZ OYUN LİSTELENDİ)", page, liveGames.Count);
-                                _txtBottomStatus.Text = msg;
+                                if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = msg;
+                                if (_txtStorePageIndicator != null) _txtStorePageIndicator.Text = string.Format("GÜVENLİ OYUN KATALOĞU — SAYFA {0} ({1} BENZERSİZ OYUN LİSTELENDİ)", page, liveGames.Count);
+                                if (_txtBottomStatus != null) _txtBottomStatus.Text = msg;
                                 RefreshStorefrontGrid();
                             }
                             else
                             {
-                                _txtStoreCountBadge.Text = msg;
-                                _txtStorePageIndicator.Text = "Sonuç bulunamadı veya sayfa sonuna ulaşıldı.";
+                                if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = msg;
+                                if (_txtStorePageIndicator != null) _txtStorePageIndicator.Text = "Sonuç bulunamadı veya sayfa sonuna ulaşıldı.";
                             }
                         }
                         catch (Exception ex2)
                         {
-                            try { _txtBottomStatus.Text = "Canlı site taraması hatası: " + ex2.Message; } catch { }
+                            try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Canlı site taraması hatası: " + ex2.Message; } catch { }
                         }
                     }));
                 }
                 catch (Exception ex)
                 {
-                    try { _txtBottomStatus.Text = "Canlı site taraması başlatılamadı: " + ex.Message; } catch { }
                     _isFetchingLiveSite = false;
+                    try
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            try { if (_txtBottomStatus != null) _txtBottomStatus.Text = "Canlı site taraması başlatılamadı: " + ex.Message; } catch { }
+                        }));
+                    }
+                    catch { }
                 }
             });
         }
@@ -636,9 +658,6 @@ namespace TitanGameHub
             if (_storeRowsPanel == null) return;
             if (_storeFilteredProfiles == null) _storeFilteredProfiles = new List<GameProfile>();
 
-            try { _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(_storeFilteredProfiles); }
-            catch { _storeFilteredProfiles = _storeFilteredProfiles ?? new List<GameProfile>(); }
-
             _storeRowsPanel.Children.Clear();
             try { if (_storeScrollViewer != null) _storeScrollViewer.ScrollToTop(); } catch { }
 
@@ -649,7 +668,7 @@ namespace TitanGameHub
             // Incremental rendering: add rows in batches to keep UI responsive
             int generation = ++_storeRenderGeneration;
             int index = 0;
-            const int rowsPerBatch = 2; // render 2 rows at a time, then yield
+            const int rowsPerBatch = 3; // render 3 rows at a time, then yield
 
             Action renderBatch = null;
             renderBatch = delegate
@@ -4740,25 +4759,24 @@ namespace TitanGameHub
             // Mağaza ilk kez açıldığında Steam gibi gerçek vitrin: bağlı tüm siteler birleşik yüklenir.
             try
             {
-                if (targetView == _viewStore && _storeGridDirty)
+                if (targetView == _viewStore && !_storeAutoLoaded && _activeSiteCategoryId == -1 &&
+                    (_txtStoreSearch == null || string.IsNullOrWhiteSpace(_txtStoreSearch.Text)))
+                {
+                    _storeAutoLoaded = true;
+                    _storeGridDirty = false;
+                    _activeSiteCategoryId = -20;
+                    _currentStorePage = 1;
+                    HighlightStoreCategoryButtons();
+                    TriggerLiveSiteSearchOrCategoryFetch();
+                }
+                else if (targetView == _viewStore && _storeGridDirty)
                 {
                     _storeGridDirty = false;
-                    // Async grid refresh to prevent UI thread blocking during view transition
                     Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
                     {
                         try { RefreshStorefrontGrid(); }
                         catch { }
                     }));
-                }
-
-                if (targetView == _viewStore && !_storeAutoLoaded && _activeSiteCategoryId == -1 &&
-                    (_txtStoreSearch == null || string.IsNullOrWhiteSpace(_txtStoreSearch.Text)))
-                {
-                    _storeAutoLoaded = true;
-                    _activeSiteCategoryId = -20;
-                    _currentStorePage = 1;
-                    HighlightStoreCategoryButtons();
-                    TriggerLiveSiteSearchOrCategoryFetch();
                 }
             }
             catch (Exception ex)
