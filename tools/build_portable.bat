@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 
-call compile.bat
+call "%~dp0compile.bat"
 if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
 if exist "res\webview2" (
@@ -11,12 +11,12 @@ if exist "res\webview2" (
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "$srcRoot = '%~dp0'.TrimEnd('\'); " ^
+  "$srcRoot = (Get-Location).Path; " ^
   "$stage = Join-Path $env:TEMP 'TitanGameHub_Stage'; " ^
   "$zipOut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'TitanGameHub_Portable_Guncel.zip'; " ^
   "if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }; " ^
   "New-Item -ItemType Directory -Path $stage -Force | Out-Null; " ^
-  "$topFiles = @('ARKADASLA_OYNAMA.txt', 'KURULUM_VE_BASLAT.bat', 'README.txt', 'run.bat', 'compile.bat', 'selftest.bat', 'export_catalog.bat', 'TitanGameHub.csproj', 'GELISTIRME_NOTLARI.md', 'build_portable.bat'); " ^
+  "$topFiles = @('KURULUM.bat', 'README.md', 'TitanGameHub.csproj'); " ^
   "foreach ($f in $topFiles) { $p = Join-Path $srcRoot $f; if (Test-Path $p) { Copy-Item $p -Destination $stage -Force } }; " ^
   "Copy-Item (Join-Path $srcRoot 'src') -Destination (Join-Path $stage 'src') -Recurse -Force; " ^
   "Copy-Item (Join-Path $srcRoot 'res') -Destination (Join-Path $stage 'res') -Recurse -Force; " ^

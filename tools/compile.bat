@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+cd /d "%~dp0.."
 set CSC=C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe
 set RES_DIR=res
 set BIN_DIR=bin

@@ -9,7 +9,7 @@ if not exist "bin\cache" mkdir "bin\cache"
 
 if not exist "bin\TitanGameHub.exe" (
     echo [1/3] Uygulama derleniyor ve bilesenler kopyalaniyor...
-    call "%~dp0compile.bat"
+    call "%~dp0tools\compile.bat"
     if errorlevel 1 (
         echo [HATA] Derleme basarisiz. .NET Framework 4.x yuklu oldugundan emin olun.
         pause
