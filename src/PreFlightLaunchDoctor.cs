@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 
 namespace TitanGameHub
@@ -85,6 +86,13 @@ namespace TitanGameHub
                 }
                 catch { }
 
+                // 6. Clear Windows SmartScreen Zone.Identifier ADS on game binaries so launches never prompt
+                try
+                {
+                    UnblockSmartScreenZone(root);
+                }
+                catch { }
+
                 if (result.RepairedItemsCount > 0)
                 {
                     result.DiagnosticSummary = string.Format(
@@ -104,6 +112,29 @@ namespace TitanGameHub
                 result.DiagnosticSummary = "Teşhis tamamlandı: " + ex.Message;
                 return result;
             }
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DeleteFile(string lpFileName);
+
+        public static void UnblockSmartScreenZone(string folderPath)
+        {
+            if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath)) return;
+            try
+            {
+                string[] bins = Directory.GetFiles(folderPath, "*.exe", SearchOption.TopDirectoryOnly);
+                for (int i = 0; i < bins.Length; i++)
+                {
+                    try { DeleteFile(bins[i] + ":Zone.Identifier"); } catch { }
+                }
+                string[] dlls = Directory.GetFiles(folderPath, "*.dll", SearchOption.TopDirectoryOnly);
+                for (int i = 0; i < dlls.Length; i++)
+                {
+                    try { DeleteFile(dlls[i] + ":Zone.Identifier"); } catch { }
+                }
+            }
+            catch { }
         }
     }
 }
