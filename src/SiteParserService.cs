@@ -114,6 +114,17 @@ namespace TitanGameHub
             ServicePointManager.Expect100Continue = false;
         }
 
+        private static readonly Regex JunkGameRegex = new Regex(
+            @"\b(hentai|eroge|waifu|ecchi|succubus|oppai|furry|harem|sex|porn|nsfw|uncensored|lewd|milf|femboy|yuri|yaoi|dating\s*sim|senpai|neko|bishoujo|visual\s*novel|idol|kawaii|loli|shota|xxx|18\+|boobs|tits|panties|strip|lust|naughty|brothel|stripper|isekai|otome|galgame)\b",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        public static bool IsFilteredJunkGame(string title, string desc)
+        {
+            if (!string.IsNullOrEmpty(title) && JunkGameRegex.IsMatch(title)) return true;
+            if (!string.IsNullOrEmpty(desc) && JunkGameRegex.IsMatch(desc)) return true;
+            return false;
+        }
+
         // =========================================================================
         // 1. MULTI-SITE LIVE CATALOG FETCHER (STEAMRIP + FITGIRL + OVAGAMES + FREEGOG)
         // =========================================================================
@@ -179,6 +190,7 @@ namespace TitanGameHub
                 foreach (GameProfile gp in buckets[i])
                 {
                     if (gp == null || string.IsNullOrWhiteSpace(gp.Name)) continue;
+                    if (!gp.IsInstalled && IsFilteredJunkGame(gp.Name, gp.Description)) continue;
                     gp.Category = SanitizeDisplayCategory(gp.Category);
                     merged.Add(gp);
                 }
