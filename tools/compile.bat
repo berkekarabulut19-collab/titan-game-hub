@@ -9,6 +9,7 @@ if not exist %BIN_DIR% mkdir %BIN_DIR%
 echo [DERLEME] C# WPF kaynak kodlar derleniyor...
 "%CSC%" /nologo /target:winexe /platform:anycpu /optimize+ /warn:0 /codepage:65001 ^
   /win32icon:"%RES_DIR%\app.ico" ^
+  /win32manifest:"%RES_DIR%\app.manifest" ^
   /out:"%BIN_DIR%\TitanGameHub.exe" ^
   /r:System.dll ^
   /r:System.Core.dll ^
