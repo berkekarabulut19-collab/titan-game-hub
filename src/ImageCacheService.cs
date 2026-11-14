@@ -40,7 +40,7 @@ namespace TitanGameHub
 
         static ImageCacheService()
         {
-            try { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; } catch { }
+            try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)12288 | SecurityProtocolType.Tls12; } catch { }
             try
             {
                 if (!Directory.Exists(CacheDir))
@@ -108,6 +108,13 @@ namespace TitanGameHub
 
             string primaryUrl = !string.IsNullOrEmpty(gp.BannerUrl) ? gp.BannerUrl : gp.CapsuleUrl;
             string fallbackUrl = !string.IsNullOrEmpty(gp.CapsuleUrl) ? gp.CapsuleUrl : gp.BannerUrl;
+            string steamAppId = (gp.SteamAppId ?? "").Trim();
+            bool hasSteamId = !string.IsNullOrEmpty(steamAppId) && steamAppId != "480" && Regex.IsMatch(steamAppId, @"^\d{2,8}$");
+            if (string.IsNullOrEmpty(primaryUrl) && hasSteamId)
+            {
+                primaryUrl = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/header.jpg";
+                fallbackUrl = "https://cdn.cloudflare.steamstatic.com/steam/apps/" + steamAppId + "/header.jpg";
+            }
             if (string.IsNullOrEmpty(primaryUrl))
             {
                 if (onDone != null) onDone(false);
@@ -162,19 +169,29 @@ namespace TitanGameHub
                                         wc.Proxy = null;
                                         wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                                         bool ok = false;
-                                        try
+                                        List<string> candidates = new List<string>();
+                                        candidates.Add(primaryUrl);
+                                        if (!string.IsNullOrEmpty(fallbackUrl) && fallbackUrl != primaryUrl)
+                                            candidates.Add(fallbackUrl);
+                                        if (hasSteamId)
                                         {
-                                            wc.DownloadFile(primaryUrl, tmpPath);
-                                            ok = File.Exists(tmpPath) && new FileInfo(tmpPath).Length > 1024;
+                                            string s1 = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/header.jpg";
+                                            string s2 = "https://cdn.cloudflare.steamstatic.com/steam/apps/" + steamAppId + "/header.jpg";
+                                            if (!candidates.Contains(s1)) candidates.Add(s1);
+                                            if (!candidates.Contains(s2)) candidates.Add(s2);
                                         }
-                                        catch { ok = false; }
 
-                                        if (!ok && !string.IsNullOrEmpty(fallbackUrl) && fallbackUrl != primaryUrl)
+                                        foreach (string urlCand in candidates)
                                         {
                                             try
                                             {
-                                                wc.DownloadFile(fallbackUrl, tmpPath);
-                                                ok = File.Exists(tmpPath) && new FileInfo(tmpPath).Length > 1024;
+                                                if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                                                wc.DownloadFile(urlCand, tmpPath);
+                                                if (IsValidRasterFile(tmpPath))
+                                                {
+                                                    ok = true;
+                                                    break;
+                                                }
                                             }
                                             catch { ok = false; }
                                         }
@@ -246,13 +263,36 @@ namespace TitanGameHub
             });
         }
 
+        private static bool IsValidRasterFile(string path)
+        {
+            try
+            {
+                if (!File.Exists(path)) return false;
+                FileInfo fi = new FileInfo(path);
+                if (fi.Length <= 1024) return false;
+                byte[] hdr = new byte[4];
+                using (FileStream fs = File.OpenRead(path))
+                {
+                    if (fs.Read(hdr, 0, 4) < 4) return false;
+                }
+                bool isJpg = (hdr[0] == 0xFF && hdr[1] == 0xD8);
+                bool isPng = (hdr[0] == 0x89 && hdr[1] == 0x50 && hdr[2] == 0x4E && hdr[3] == 0x47);
+                bool isGif = (hdr[0] == 0x47 && hdr[1] == 0x49 && hdr[2] == 0x46);
+                bool isBmp = (hdr[0] == 0x42 && hdr[1] == 0x4D);
+                return isJpg || isPng || isGif || isBmp;
+            }
+            catch { return false; }
+        }
+
         private static BitmapImage LoadBitmapFromDisk(string path, int decodeWidth)
         {
             try
             {
-                if (!File.Exists(path)) return null;
-                FileInfo fi = new FileInfo(path);
-                if (fi.Length <= 1024) return null;
+                if (!IsValidRasterFile(path))
+                {
+                    try { if (File.Exists(path)) File.Delete(path); } catch { }
+                    return null;
+                }
 
                 byte[] bytes = File.ReadAllBytes(path);
                 if (bytes == null || bytes.Length <= 1024) return null;
@@ -271,6 +311,7 @@ namespace TitanGameHub
             }
             catch
             {
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
                 return null;
             }
         }
