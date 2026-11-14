@@ -274,6 +274,58 @@ namespace TitanGameHub
             return false;
         }
 
+        public static List<string> GetRemovedGameNames()
+        {
+            List<string> names = new List<string>();
+            try
+            {
+                foreach (string k in LoadRemovedKeys())
+                {
+                    if (k.StartsWith("name:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string n = k.Substring(5).Trim();
+                        if (!string.IsNullOrEmpty(n)) names.Add(n);
+                    }
+                }
+                names.Sort(StringComparer.OrdinalIgnoreCase);
+            }
+            catch { }
+            return names;
+        }
+
+        public static GameProfile RestoreRemovedGameByName(string normName)
+        {
+            if (string.IsNullOrWhiteSpace(normName)) return null;
+            string targetNorm = GameDeduplicationEngine.NormalizeGameTitle(normName);
+            try
+            {
+                GameProfile matchedDef = null;
+                foreach (GameProfile def in CreateDefaultCatalog())
+                {
+                    if (GameDeduplicationEngine.NormalizeGameTitle(def.Name) == targetNorm)
+                    {
+                        matchedDef = def;
+                        break;
+                    }
+                }
+
+                lock (RemovedSync)
+                {
+                    if (File.Exists(RemovedGamesPath))
+                    {
+                        HashSet<string> set = LoadRemovedKeys();
+                        set.Remove("name:" + targetNorm);
+                        if (matchedDef != null && !string.IsNullOrEmpty(matchedDef.Id))
+                            set.Remove("id:" + matchedDef.Id);
+                        List<string> outLines = new List<string>(set);
+                        File.WriteAllLines(RemovedGamesPath, outLines.ToArray(), Encoding.UTF8);
+                    }
+                }
+                return matchedDef;
+            }
+            catch { return null; }
+        }
+
         public static bool NeedsRealSize(string fileSize)
         {
             if (string.IsNullOrWhiteSpace(fileSize)) return true;

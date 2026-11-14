@@ -1569,5 +1569,53 @@ namespace TitanGameHub
             }
             return null;
         }
+
+        private static int _backfillStarted = 0;
+
+        public static void StartBackgroundCatalogSizeBackfill(List<GameProfile> catalog)
+        {
+            if (catalog == null) return;
+            if (System.Threading.Interlocked.Exchange(ref _backfillStarted, 1) == 1) return;
+
+            System.Threading.ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    System.Threading.Thread.Sleep(8000);
+                    List<GameProfile> snapshot;
+                    lock (catalog) { snapshot = new List<GameProfile>(catalog); }
+
+                    int updatedBatch = 0;
+                    int checkedCount = 0;
+                    foreach (GameProfile gp in snapshot)
+                    {
+                        if (gp == null || !ProfileStore.NeedsRealSize(gp.FileSize)) continue;
+                        if (checkedCount >= 300) break;
+
+                        bool hasSteamId = (!string.IsNullOrEmpty(gp.SteamAppId) && gp.SteamAppId != "480" && Regex.IsMatch(gp.SteamAppId.Trim(), @"^\d+$")) ||
+                                          (!string.IsNullOrEmpty(gp.BannerUrl) && gp.BannerUrl.IndexOf("/apps/", StringComparison.OrdinalIgnoreCase) >= 0);
+                        if (!hasSteamId) continue;
+
+                        checkedCount++;
+                        string sz = ResolveSteamStorageSize(gp);
+                        if (!string.IsNullOrEmpty(sz))
+                        {
+                            gp.FileSize = sz;
+                            updatedBatch++;
+                            if (updatedBatch >= 20)
+                            {
+                                ProfileStore.SaveProfiles(catalog);
+                                updatedBatch = 0;
+                            }
+                        }
+                        System.Threading.Thread.Sleep(250);
+                    }
+
+                    if (updatedBatch > 0)
+                        ProfileStore.SaveProfiles(catalog);
+                }
+                catch { }
+            });
+        }
     }
 }

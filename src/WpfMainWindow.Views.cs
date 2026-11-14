@@ -4105,6 +4105,7 @@ namespace TitanGameHub
             StartupTimer.Mark("UI kuruldu, arka plan servisleri başlıyor");
             _cloudLobby.Start();
             _autoUpdater.Start(_allProfiles);
+            SiteParserService.StartBackgroundCatalogSizeBackfill(_allProfiles);
             if (SteamClientBridgeService.IsUpdateCheckEnabled())
             {
                 LiveGameUpdateWatchdogService.StartWatchdog(_allProfiles, 15);
@@ -4654,6 +4655,93 @@ namespace TitanGameHub
             chkThrottle.Checked += delegate { DownloadInstallService.AutoThrottleWhenGameRunning = true; };
             chkThrottle.Unchecked += delegate { DownloadInstallService.AutoThrottleWhenGameRunning = false; };
             updateStack.Children.Add(chkThrottle);
+
+            // 2B. Activity History & Restore Removed Games Card
+            Border historyCard = CreateSettingsCard("📋 SON KURULUM & KALDIRMA GEÇMİŞİ VE GERİ GETİRME");
+            mainStack.Children.Add(historyCard);
+            StackPanel historyStack = (StackPanel)historyCard.Child;
+
+            TextBox txtActivityLog = new TextBox()
+            {
+                Height = 110,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.NoWrap,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Background = HexBrush("#0B0814"),
+                Foreground = ThemeManager.AccentTealBrush,
+                BorderBrush = ThemeManager.BorderSubtleBrush,
+                BorderThickness = new Thickness(1),
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 10.5,
+                Padding = new Thickness(8),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            Action refreshActivityBox = delegate
+            {
+                List<string> rec = GameMaintenanceService.GetRecentActivityLines(20);
+                txtActivityLog.Text = rec.Count > 0 ? string.Join("\r\n", rec.ToArray()) : "Henüz kurulum veya kaldırma kaydı yok.";
+            };
+            refreshActivityBox();
+            historyStack.Children.Add(txtActivityLog);
+
+            Grid restoreGrid = new Grid() { Margin = new Thickness(0, 2, 0, 0) };
+            restoreGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            restoreGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+            restoreGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            ComboBox cmbRemovedGames = new ComboBox()
+            {
+                Height = 30,
+                Background = HexBrush("#0F131A"),
+                Foreground = Brushes.White,
+                BorderBrush = ThemeManager.BorderSubtleBrush,
+                FontSize = 11
+            };
+            Action refreshRemovedCombo = delegate
+            {
+                cmbRemovedGames.Items.Clear();
+                foreach (string rn in ProfileStore.GetRemovedGameNames())
+                    cmbRemovedGames.Items.Add(rn);
+                if (cmbRemovedGames.Items.Count > 0) cmbRemovedGames.SelectedIndex = 0;
+            };
+            refreshRemovedCombo();
+            Grid.SetColumn(cmbRemovedGames, 0);
+            restoreGrid.Children.Add(cmbRemovedGames);
+
+            Button btnRestoreRemoved = CreateSteamUtilityButton("♻ GERİ GETİR", "Kaldırılan oyunu kataloğa yeniden ekle");
+            btnRestoreRemoved.Margin = new Thickness(6, 0, 0, 0);
+            btnRestoreRemoved.Click += delegate
+            {
+                string chosen = cmbRemovedGames.SelectedItem as string;
+                if (string.IsNullOrEmpty(chosen))
+                {
+                    MessageBox.Show("Geri getirilecek kaldırılmış oyun yok.", "Bilgi", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                GameProfile restored = ProfileStore.RestoreRemovedGameByName(chosen);
+                _allProfiles = ProfileStore.LoadProfiles() ?? new List<GameProfile>();
+                try { InvalidateLibraryLookupCache(); } catch { }
+                try { ApplyLibraryFilter(); } catch { }
+                try { RefreshLibrarySidebarList(); } catch { }
+                try { RefreshStorefrontGrid(); } catch { }
+                refreshRemovedCombo();
+                refreshActivityBox();
+                _txtBottomStatus.Text = restored != null
+                    ? ("♻ '" + restored.Name + "' kataloğa geri getirildi.")
+                    : ("♻ '" + chosen + "' kaldırma listesinden çıkarıldı.");
+                Win32.PlayTechChirp(true);
+            };
+            Grid.SetColumn(btnRestoreRemoved, 1);
+            restoreGrid.Children.Add(btnRestoreRemoved);
+
+            Button btnRefreshHist = CreateSteamUtilityButton("🔄 YENİLE", "Geçmişi ve kaldırılanlar listesini yenile");
+            btnRefreshHist.Margin = new Thickness(6, 0, 0, 0);
+            btnRefreshHist.Click += delegate { refreshActivityBox(); refreshRemovedCombo(); };
+            Grid.SetColumn(btnRefreshHist, 2);
+            restoreGrid.Children.Add(btnRefreshHist);
+
+            historyStack.Children.Add(restoreGrid);
 
             // 3. Steam Overlay & In-Game Shortcuts Card
             Border overlayCard = CreateSettingsCard("🎮 STEAM ARAYÜZÜ, KISAYOLLAR & OYUN İÇİ HUD");

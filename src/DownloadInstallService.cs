@@ -129,6 +129,7 @@ namespace TitanGameHub
         /// Arayüz tarafından doldurulur; null ise harici tarayıcıya düşülür.
         /// </summary>
         public static Func<string, string, Action<int, long, long>, Func<bool>, int, string> EmbeddedBrowserDownloader { get; set; }
+        private static readonly Dictionary<string, string> _preferredMirrorCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Gömülü tarayıcı ile indirmeyi dener; başarılıysa dosya yolunu döndürür.</summary>
         private bool TryEmbeddedBrowserDownload(GameProfile profile, string url, out string downloadedPath)
@@ -950,6 +951,29 @@ namespace TitanGameHub
                         return DownloadHostPolicy.SpeedScore(b.Url).CompareTo(DownloadHostPolicy.SpeedScore(a.Url));
                     });
 
+                    // Çalışan Ayna Önbelleği: daha önce başarıyla indiren hızlı aynayı en başa al
+                    string cachedMirrorUrl = null;
+                    string cacheKey = profile.Id ?? profile.Name ?? "";
+                    lock (_preferredMirrorCache)
+                    {
+                        if (!string.IsNullOrEmpty(cacheKey))
+                            _preferredMirrorCache.TryGetValue(cacheKey, out cachedMirrorUrl);
+                    }
+                    if (!string.IsNullOrEmpty(cachedMirrorUrl))
+                    {
+                        int idxPref = candidates.FindIndex(delegate(SiteMirror m) { return string.Equals(m.Url, cachedMirrorUrl, StringComparison.OrdinalIgnoreCase); });
+                        if (idxPref > 0)
+                        {
+                            SiteMirror pref = candidates[idxPref];
+                            candidates.RemoveAt(idxPref);
+                            candidates.Insert(0, pref);
+                        }
+                        else if (idxPref < 0)
+                        {
+                            candidates.Insert(0, new SiteMirror { HostName = "Önbellek Ayna", Url = cachedMirrorUrl, IsDirectArchive = true });
+                        }
+                    }
+
                     // Multi-Source Pass: Doğrudan akış (PixelDrain, GoFile API, MediaFire, Direct .RAR/.ZIP)
                     // ve 403 korumalı hostlar için arka plan WebView2 indirmesi (başarısız olursa sonraki aynaya geçer)
                     foreach (SiteMirror mirror in candidates)
@@ -990,6 +1014,11 @@ namespace TitanGameHub
                         if (TryDirectStreamDownload(profile, mirror.Url))
                         {
                             profile.DirectMirrorUrl = mirror.Url;
+                            string cKey = profile.Id ?? profile.Name ?? "";
+                            if (!string.IsNullOrEmpty(cKey))
+                            {
+                                lock (_preferredMirrorCache) { _preferredMirrorCache[cKey] = mirror.Url; }
+                            }
                             return; // Successfully downloaded and installed 100% inside the app!
                         }
 
