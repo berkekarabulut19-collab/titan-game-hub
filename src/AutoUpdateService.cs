@@ -743,6 +743,30 @@ namespace TitanGameHub
             if (catalog == null) return;
             try
             {
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                try
+                {
+                    string icoTarget = Path.Combine(baseDir, "app.ico");
+                    string logoTarget = Path.Combine(baseDir, "app_logo.png");
+                    if (!File.Exists(icoTarget))
+                    {
+                        using (WebClient awc = new WebClient())
+                        {
+                            awc.Proxy = null;
+                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/res/app.ico", icoTarget);
+                        }
+                    }
+                    if (!File.Exists(logoTarget))
+                    {
+                        using (WebClient awc = new WebClient())
+                        {
+                            awc.Proxy = null;
+                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/res/app_logo.png", logoTarget);
+                        }
+                    }
+                }
+                catch { }
+
                 using (WebClient cwc = new WebClient())
                 {
                     cwc.Proxy = null;

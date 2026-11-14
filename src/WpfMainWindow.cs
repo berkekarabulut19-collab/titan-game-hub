@@ -253,9 +253,29 @@ namespace TitanGameHub
 
             try
             {
-                string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
+                string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string iconPath = System.IO.Path.Combine(baseDir, "app.ico");
+                if (!File.Exists(iconPath))
+                    iconPath = System.IO.Path.Combine(baseDir, "res", "app.ico");
+                if (!File.Exists(iconPath))
+                    iconPath = System.IO.Path.Combine(baseDir, "..", "res", "app.ico");
+
                 if (File.Exists(iconPath))
-                    this.Icon = BitmapFrame.Create(new Uri(System.IO.Path.GetFullPath(iconPath), UriKind.Absolute));
+                {
+                    BitmapDecoder dec = BitmapDecoder.Create(new Uri(System.IO.Path.GetFullPath(iconPath), UriKind.Absolute), BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
+                    if (dec != null && dec.Frames.Count > 0) this.Icon = dec.Frames[0];
+                }
+                else
+                {
+                    using (System.Drawing.Icon ico = System.Drawing.Icon.ExtractAssociatedIcon(System.Reflection.Assembly.GetExecutingAssembly().Location))
+                    {
+                        if (ico != null)
+                        {
+                            this.Icon = System.Windows.Interop.Imaging.CreateBitmapSourceFromHIcon(
+                                ico.Handle, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
+                        }
+                    }
+                }
             }
             catch { }
 
@@ -330,18 +350,37 @@ namespace TitanGameHub
             string logoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_logo.png");
             if (!File.Exists(logoPath))
                 logoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "app_logo.png");
+            if (!File.Exists(logoPath))
+                logoPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "res", "app_logo.png");
+
+            bool logoLoaded = false;
             if (File.Exists(logoPath))
             {
-                Image logoImg = new Image()
+                try
                 {
-                    Source = new BitmapImage(new Uri(System.IO.Path.GetFullPath(logoPath), UriKind.Absolute)),
-                    Width = 32,
-                    Height = 32,
-                    Stretch = Stretch.Uniform
-                };
-                logoCircle.Child = logoImg;
+                    BitmapImage bmp = new BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = BitmapCacheOption.OnLoad;
+                    bmp.UriSource = new Uri(System.IO.Path.GetFullPath(logoPath), UriKind.Absolute);
+                    bmp.DecodePixelWidth = 80;
+                    bmp.EndInit();
+                    bmp.Freeze();
+
+                    Image logoImg = new Image()
+                    {
+                        Source = bmp,
+                        Width = 36,
+                        Height = 36,
+                        Stretch = Stretch.UniformToFill,
+                        Clip = new RectangleGeometry(new Rect(0, 0, 36, 36), 10, 10)
+                    };
+                    RenderOptions.SetBitmapScalingMode(logoImg, BitmapScalingMode.HighQuality);
+                    logoCircle.Child = logoImg;
+                    logoLoaded = true;
+                }
+                catch { }
             }
-            else
+            if (!logoLoaded)
             {
                 logoCircle.Child = steamIconPath;
             }

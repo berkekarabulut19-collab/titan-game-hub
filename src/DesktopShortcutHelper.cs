@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 
 namespace TitanGameHub
 {
@@ -11,6 +12,8 @@ namespace TitanGameHub
     /// </summary>
     public static class DesktopShortcutHelper
     {
+        [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        private static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
         public static bool CreateGameDesktopShortcut(GameProfile profile, out string error)
         {
             error = null;
@@ -63,7 +66,11 @@ namespace TitanGameHub
                 }
 
                 string icoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app.ico");
-                string iconTarget = File.Exists(icoPath) ? icoPath : exePath;
+                if (!File.Exists(icoPath))
+                    icoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "app.ico");
+                if (!File.Exists(icoPath))
+                    icoPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "res", "app.ico");
+                string iconTarget = File.Exists(icoPath) ? Path.GetFullPath(icoPath) : exePath;
 
                 try
                 {
@@ -77,6 +84,7 @@ namespace TitanGameHub
                         shortcut.IconLocation = iconTarget + ",0";
                         shortcut.Description = "Titan Game Hub - Steam Co-Op & Topluluk Arayüzü";
                         shortcut.Save();
+                        try { SHChangeNotify(0x08000000, 0x0000, IntPtr.Zero, IntPtr.Zero); } catch { }
                         return true;
                     }
                 }
