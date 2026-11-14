@@ -94,6 +94,19 @@ namespace TitanGameHub
             BindImageAsync(targetBorder, gp, decodeWidth, opacity, null);
         }
 
+        private static bool IsUsableImageUrl(string url)
+        {
+            if (string.IsNullOrEmpty(url)) return false;
+            string u = url.Trim();
+            if (!u.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                !u.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                return false;
+            string pathOnly = u.Split('?')[0];
+            if (pathOnly.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                return false;
+            return true;
+        }
+
         /// <summary>
         /// onDone(true/false): görsel yüklendi mi? Disk okuma ve decode tamamen arka planda yapılır,
         /// UI thread asla kilitlenmez.
@@ -106,8 +119,10 @@ namespace TitanGameHub
                 return;
             }
 
-            string primaryUrl = !string.IsNullOrEmpty(gp.BannerUrl) ? gp.BannerUrl : gp.CapsuleUrl;
-            string fallbackUrl = !string.IsNullOrEmpty(gp.CapsuleUrl) ? gp.CapsuleUrl : gp.BannerUrl;
+            string bUrl = IsUsableImageUrl(gp.BannerUrl) ? gp.BannerUrl.Trim() : null;
+            string cUrl = IsUsableImageUrl(gp.CapsuleUrl) ? gp.CapsuleUrl.Trim() : null;
+            string primaryUrl = bUrl ?? cUrl;
+            string fallbackUrl = cUrl ?? bUrl;
             string steamAppId = (gp.SteamAppId ?? "").Trim();
             bool hasSteamId = !string.IsNullOrEmpty(steamAppId) && steamAppId != "480" && Regex.IsMatch(steamAppId, @"^\d{2,8}$");
             if (string.IsNullOrEmpty(primaryUrl) && hasSteamId)

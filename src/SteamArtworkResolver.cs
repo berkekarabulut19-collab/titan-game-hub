@@ -222,10 +222,61 @@ namespace TitanGameHub
             art = QueryCheapSharkArtwork(clean);
             if (!string.IsNullOrEmpty(art)) return art;
 
-            // 3. İnternet Kaynağı: Wikipedia OpenSearch + Summary kapak görseli
+            // 3. İnternet Kaynağı: GOG Katalog API
+            art = QueryGogArtwork(clean);
+            if (!string.IsNullOrEmpty(art)) return art;
+
+            // 4. İnternet Kaynağı: Wikipedia OpenSearch + Summary kapak görseli
             art = QueryWikipediaArtwork(clean);
             if (!string.IsNullOrEmpty(art)) return art;
 
+            return null;
+        }
+
+        private static string QueryGogArtwork(string clean)
+        {
+            try
+            {
+                string json;
+                using (TimeoutWebClient wc = new TimeoutWebClient(6000))
+                {
+                    wc.Proxy = null;
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    wc.Encoding = Encoding.UTF8;
+                    json = wc.DownloadString("https://embed.gog.com/games/ajax/filtered?mediaType=game&search=" + Uri.EscapeDataString(clean));
+                }
+                System.Web.Script.Serialization.JavaScriptSerializer ser =
+                    new System.Web.Script.Serialization.JavaScriptSerializer();
+                Dictionary<string, object> root = ser.DeserializeObject(json) as Dictionary<string, object>;
+                if (root == null || !root.ContainsKey("products")) return null;
+                object[] products = root["products"] as object[];
+                if (products == null || products.Length == 0) return null;
+
+                string wanted = Normalize(clean);
+                string bestImg = null;
+                double bestScore = 0;
+                foreach (object o in products)
+                {
+                    Dictionary<string, object> item = o as Dictionary<string, object>;
+                    if (item == null) continue;
+                    string title = item.ContainsKey("title") ? Convert.ToString(item["title"]) : null;
+                    string img = item.ContainsKey("image") ? Convert.ToString(item["image"]) : null;
+                    if (string.IsNullOrEmpty(title) || string.IsNullOrEmpty(img)) continue;
+                    double score = Similarity(wanted, Normalize(title));
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestImg = img;
+                    }
+                }
+                if (bestScore >= 0.55 && !string.IsNullOrEmpty(bestImg))
+                {
+                    if (bestImg.StartsWith("//")) bestImg = "https:" + bestImg;
+                    string url = bestImg + "_product_tile_256.jpg";
+                    if (UrlExists(url)) return url;
+                }
+            }
+            catch { }
             return null;
         }
 
@@ -402,6 +453,10 @@ namespace TitanGameHub
                 string detailsArt = QueryAppDetailsArtwork(bestId);
                 if (!string.IsNullOrEmpty(detailsArt)) return detailsArt;
 
+                // 1b) Store sayfası og:image (appdetails 403/rate-limit yerse 616x353 kapsül çeker)
+                string ogArt = QuerySteamStoreOgImage(bestId);
+                if (!string.IsNullOrEmpty(ogArt)) return ogArt;
+
                 List<string> candidates = new List<string>();
 
                 // Yeni Steam CDN şeması (2024+ oyunlar): store_item_assets
@@ -429,6 +484,30 @@ namespace TitanGameHub
 
                 if (!string.IsNullOrEmpty(bestTinyImage)) return bestTinyImage;
             }
+            return null;
+        }
+
+        private static string QuerySteamStoreOgImage(string appId)
+        {
+            try
+            {
+                string html;
+                using (TimeoutWebClient wc = new TimeoutWebClient(6000))
+                {
+                    wc.Proxy = null;
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    wc.Encoding = Encoding.UTF8;
+                    html = wc.DownloadString("https://store.steampowered.com/app/" + appId + "/");
+                }
+                Match m = Regex.Match(html, @"<meta[^>]+property=[""']og:image[""'][^>]+content=[""']([^""']+)", RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    string u = m.Groups[1].Value.Trim();
+                    if (u.StartsWith("http") && u.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) < 0)
+                        return u;
+                }
+            }
+            catch { }
             return null;
         }
 
@@ -486,7 +565,7 @@ namespace TitanGameHub
             if (string.IsNullOrEmpty(raw)) return "";
             string s = raw;
             s = Regex.Replace(s, @"\[[^\]]*\]|\([^\)]*\)", " ");
-            s = Regex.Replace(s, @"(?i)\b(free download|pre-?installed|repack|fitgirl|elamigos|tenoke|steamrip|ovagames|freegog|crotorrents|online-?fix|all dlcs?|dlcs?|bonuses|bonus|deluxe|ultimate|complete|definitive|remastered|goty|gold|digital|edition|multi\d+|build\s*\d+|update|hotfix|portable|cracked|v?\d+(\.\d+)+)\b", " ");
+            s = Regex.Replace(s, @"(?i)\b(free download|pre-?installed|repack|updated|fitgirl|elamigos|tenoke|steamrip|ovagames|freegog|crotorrents|online-?fix|gog|codex|flt|razor1911|skidrow|plaza|empress|rune|dodi|xatab|kaos|p2p|all dlcs?|dlcs?|bonuses|bonus|osts?|deluxe|ultimate|complete|definitive|remastered|goty|gold|digital|edition|enhanced|anniversary|director'?s cut|year \d+ bundle|bundle|collection|multi\d+|build[_\s]*\d+|update|hotfix|portable|cracked|captain'?s|v?\d+(?:[._]\d+)+)\b", " ");
             s = Regex.Replace(s, @"[\u2013\u2014\-_:+]+", " ");
             s = Regex.Replace(s, @"[^A-Za-z0-9 ]", " ");
             s = Regex.Replace(s, @"\s{2,}", " ").Trim(' ', ':', '.');
