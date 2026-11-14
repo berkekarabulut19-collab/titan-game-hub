@@ -1013,6 +1013,17 @@ namespace TitanGameHub
                             }
                             catch { }
                         }
+                        else
+                        {
+                            try
+                            {
+                                Dispatcher.BeginInvoke(new Action(delegate
+                                {
+                                    sizeBadge.Visibility = Visibility.Collapsed;
+                                }));
+                            }
+                            catch { }
+                        }
                     }
                     catch { }
                 });
