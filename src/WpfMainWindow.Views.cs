@@ -660,6 +660,40 @@ namespace TitanGameHub
                             _isFetchingLiveSite = false;
                             if (liveGames != null && liveGames.Count > 0)
                             {
+                                // Enrich live-scraped games with verified covers, SteamAppId, and real GB sizes from _allProfiles
+                                if (_allProfiles != null && _allProfiles.Count > 0)
+                                {
+                                    Dictionary<string, GameProfile> catMap = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+                                    foreach (GameProfile cp in _allProfiles)
+                                    {
+                                        if (cp == null || string.IsNullOrEmpty(cp.Name)) continue;
+                                        string nKey = GameDeduplicationEngine.NormalizeGameTitle(cp.Name);
+                                        if (!string.IsNullOrEmpty(nKey) && !catMap.ContainsKey(nKey)) catMap[nKey] = cp;
+                                    }
+                                    foreach (GameProfile lg in liveGames)
+                                    {
+                                        if (lg == null || string.IsNullOrEmpty(lg.Name)) continue;
+                                        string nKey = GameDeduplicationEngine.NormalizeGameTitle(lg.Name);
+                                        GameProfile catMatch;
+                                        if (!string.IsNullOrEmpty(nKey) && catMap.TryGetValue(nKey, out catMatch))
+                                        {
+                                            if (ProfileStore.NeedsRealSize(lg.FileSize) && !ProfileStore.NeedsRealSize(catMatch.FileSize))
+                                                lg.FileSize = catMatch.FileSize;
+                                            if (!string.IsNullOrEmpty(catMatch.SteamAppId) && catMatch.SteamAppId != "480" &&
+                                                (string.IsNullOrEmpty(lg.SteamAppId) || lg.SteamAppId == "480"))
+                                                lg.SteamAppId = catMatch.SteamAppId;
+                                            bool lgBadImg = string.IsNullOrEmpty(lg.BannerUrl) || lg.BannerUrl == "480" ||
+                                                            lg.BannerUrl.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) >= 0;
+                                            if ((lgBadImg || (!string.IsNullOrEmpty(catMatch.BannerUrl) && catMatch.BannerUrl.IndexOf("steamstatic", StringComparison.OrdinalIgnoreCase) >= 0)) &&
+                                                !string.IsNullOrEmpty(catMatch.BannerUrl) && catMatch.BannerUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                            {
+                                                lg.BannerUrl = catMatch.BannerUrl;
+                                                lg.CapsuleUrl = !string.IsNullOrEmpty(catMatch.CapsuleUrl) ? catMatch.CapsuleUrl : catMatch.BannerUrl;
+                                            }
+                                        }
+                                    }
+                                }
+
                                 if (appendMode && _storeFilteredProfiles != null && _storeFilteredProfiles.Count > 0)
                                 {
                                     List<GameProfile> combined = new List<GameProfile>(_storeFilteredProfiles);

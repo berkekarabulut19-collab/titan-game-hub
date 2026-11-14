@@ -646,18 +646,19 @@ namespace TitanGameHub
                 if (!string.IsNullOrEmpty(remoteSha) && string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase))
                     return;
 
-                try { SyncCatalogFromGitHubRaw(catalog); } catch { }
+                try { SyncCatalogFromGitHubRaw(catalog, remoteSha); } catch { }
 
                 string stageDir = Path.Combine(appDir, "ota_stage");
                 string stagedExe = Path.Combine(stageDir, "TitanGameHub.exe");
                 if (Directory.Exists(stageDir)) { try { Directory.Delete(stageDir, true); } catch { } }
                 Directory.CreateDirectory(stageDir);
 
+                string branchOrSha = !string.IsNullOrEmpty(remoteSha) ? remoteSha : "main";
                 using (WebClient dwc = new WebClient())
                 {
                     dwc.Proxy = null;
                     dwc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/11.0");
-                    dwc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/bin/TitanGameHub.exe", stagedExe);
+                    dwc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + branchOrSha + "/bin/TitanGameHub.exe", stagedExe);
                 }
 
                 if (!File.Exists(stagedExe) || new FileInfo(stagedExe).Length < 102400)
@@ -718,7 +719,7 @@ namespace TitanGameHub
                 if (!string.IsNullOrEmpty(remoteSha))
                 {
                     bat.AppendLine("if not exist \"" + Path.GetDirectoryName(shaFile) + "\" mkdir \"" + Path.GetDirectoryName(shaFile) + "\"");
-                    bat.AppendLine("echo " + remoteSha + "> \"" + shaFile + "\"");
+                    bat.AppendLine("(echo " + remoteSha + ")> \"" + shaFile + "\"");
                 }
                 bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
                 bat.AppendLine("start \"\" \"" + currentExe + "\"");
@@ -738,12 +739,13 @@ namespace TitanGameHub
             catch { }
         }
 
-        private void SyncCatalogFromGitHubRaw(List<GameProfile> catalog)
+        private void SyncCatalogFromGitHubRaw(List<GameProfile> catalog, string commitSha)
         {
             if (catalog == null) return;
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+                string refName = !string.IsNullOrEmpty(commitSha) ? commitSha : "main";
                 try
                 {
                     string icoTarget = Path.Combine(baseDir, "app.ico");
@@ -753,7 +755,7 @@ namespace TitanGameHub
                         using (WebClient awc = new WebClient())
                         {
                             awc.Proxy = null;
-                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/res/app.ico", icoTarget);
+                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/res/app.ico", icoTarget);
                         }
                     }
                     if (!File.Exists(logoTarget))
@@ -761,7 +763,7 @@ namespace TitanGameHub
                         using (WebClient awc = new WebClient())
                         {
                             awc.Proxy = null;
-                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/res/app_logo.png", logoTarget);
+                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/res/app_logo.png", logoTarget);
                         }
                     }
                 }
@@ -772,7 +774,7 @@ namespace TitanGameHub
                     cwc.Proxy = null;
                     cwc.Encoding = Encoding.UTF8;
                     cwc.Headers.Add("User-Agent", "TitanGameHub-CatalogSync/8.1");
-                    string rawCfg = cwc.DownloadString("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/bin/games_v6.cfg");
+                    string rawCfg = cwc.DownloadString("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/bin/games_v6.cfg");
                     if (string.IsNullOrWhiteSpace(rawCfg)) return;
 
                     Dictionary<string, GameProfile> byId = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
@@ -801,6 +803,9 @@ namespace TitanGameHub
                         if (ProfileStore.IsGameRemoved(id, name)) continue;
 
                         string remoteSize = (p[14] ?? "").Trim();
+                        string remoteAppId = (p[9] ?? "").Trim();
+                        string remoteBanner = (p[12] ?? "").Trim();
+                        string remoteCapsule = (p[13] ?? "").Trim();
                         string norm = GameDeduplicationEngine.NormalizeGameTitle(name);
 
                         GameProfile existing = null;
@@ -812,6 +817,23 @@ namespace TitanGameHub
                             if (ProfileStore.NeedsRealSize(existing.FileSize) && !ProfileStore.NeedsRealSize(remoteSize))
                             {
                                 existing.FileSize = remoteSize;
+                                changed++;
+                            }
+                            if (!string.IsNullOrEmpty(remoteAppId) && remoteAppId != "0" && remoteAppId != "480" &&
+                                (string.IsNullOrEmpty(existing.SteamAppId) || existing.SteamAppId == "0" || existing.SteamAppId == "480"))
+                            {
+                                existing.SteamAppId = remoteAppId;
+                                changed++;
+                            }
+                            bool localBannerBad = string.IsNullOrEmpty(existing.BannerUrl) || existing.BannerUrl == "480" ||
+                                                  !existing.BannerUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ||
+                                                  existing.BannerUrl.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) >= 0;
+                            bool remoteBannerGood = !string.IsNullOrEmpty(remoteBanner) && remoteBanner.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
+                                                    remoteBanner.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) < 0;
+                            if (remoteBannerGood && (localBannerBad || !string.Equals(existing.BannerUrl, remoteBanner, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                existing.BannerUrl = remoteBanner;
+                                existing.CapsuleUrl = !string.IsNullOrEmpty(remoteCapsule) ? remoteCapsule : remoteBanner;
                                 changed++;
                             }
                             if (string.IsNullOrEmpty(existing.DirectMirrorUrl) && !string.IsNullOrEmpty(p[15]) && p[15].StartsWith("http", StringComparison.OrdinalIgnoreCase))
