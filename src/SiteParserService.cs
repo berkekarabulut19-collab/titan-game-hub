@@ -574,9 +574,11 @@ namespace TitanGameHub
 
                 if (string.IsNullOrEmpty(ogImage) && !string.IsNullOrEmpty(contentHtml))
                 {
-                    Match imgMatch = Regex.Match(contentHtml, @"https?://[^""'\s<>]+\.(?:jpg|jpeg|png|webp)", RegexOptions.IgnoreCase);
+                    Match imgMatch = Regex.Match(contentHtml, @"https?://[^""'\s<>]+\.(?:jpg|jpeg|png)", RegexOptions.IgnoreCase);
                     if (imgMatch.Success) ogImage = imgMatch.Value;
                 }
+                if (!string.IsNullOrEmpty(ogImage) && ogImage.EndsWith(".webp", StringComparison.OrdinalIgnoreCase))
+                    ogImage = "";
 
                 SitePageAnalysis details = ParseHtmlContentDetails(contentHtml, link);
 
@@ -597,7 +599,8 @@ namespace TitanGameHub
                 string primaryMirror = (details.Mirrors.Count > 0) ? details.Mirrors[0].Url : "";
                 string versionStr = !string.IsNullOrEmpty(details.LiveVersion) ? details.LiveVersion : "Son Sürüm";
                 string sizeStr = !string.IsNullOrEmpty(details.LiveFileSize) ? details.LiveFileSize : ExtractFallbackSizeFromHtml(contentHtml);
-                if (string.IsNullOrEmpty(sizeStr)) sizeStr = "Hazır Paket";
+                if (string.IsNullOrEmpty(sizeStr))
+                    sizeStr = DownloadInstallService.GetDownloadSizeDisplay(new GameProfile { Name = cleanName, Category = categoryTag });
                 string descStr = !string.IsNullOrEmpty(details.CleanDescription)
                     ? details.CleanDescription
                     : (cleanName + " — Pre-Installed hazır oyun paketi. Tek tıkla doğrudan uygulama içinden indirilebilir.");
