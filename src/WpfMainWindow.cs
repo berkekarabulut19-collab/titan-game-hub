@@ -122,6 +122,8 @@ namespace TitanGameHub
         private TextBlock _txtInAppDlTitle;
         private TextBlock _txtInAppDlSpeed;
         private ProgressBar _pbInAppDl;
+        private System.Windows.Shapes.Polyline _dlSpeedSparkline;
+        private readonly List<double> _dlSpeedSamples = new List<double>();
         private WrapPanel _liveMirrorsWrapPanel;
         private TextBlock _txtLiveMirrorsStatus;
 
@@ -3379,15 +3381,28 @@ namespace TitanGameHub
             Grid.SetColumn(_txtInAppDlTitle, 0);
             dlStripTop.Children.Add(_txtInAppDlTitle);
 
+            StackPanel speedWithGraph = new StackPanel() { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            _dlSpeedSparkline = new System.Windows.Shapes.Polyline()
+            {
+                Width = 76,
+                Height = 16,
+                Stroke = ThemeManager.AccentGreenBrush,
+                StrokeThickness = 1.6,
+                Margin = new Thickness(0, 0, 8, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            speedWithGraph.Children.Add(_dlSpeedSparkline);
             _txtInAppDlSpeed = new TextBlock()
             {
                 Text = "0.0 MB/sn",
                 Foreground = ThemeManager.AccentGreenBrush,
                 FontSize = 11.2,
-                FontWeight = FontWeights.ExtraBold
+                FontWeight = FontWeights.ExtraBold,
+                VerticalAlignment = VerticalAlignment.Center
             };
-            Grid.SetColumn(_txtInAppDlSpeed, 1);
-            dlStripTop.Children.Add(_txtInAppDlSpeed);
+            speedWithGraph.Children.Add(_txtInAppDlSpeed);
+            Grid.SetColumn(speedWithGraph, 1);
+            dlStripTop.Children.Add(speedWithGraph);
 
             _pbInAppDl = new ProgressBar()
             {

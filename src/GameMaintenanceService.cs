@@ -97,6 +97,7 @@ namespace TitanGameHub
 
                 CleanupGameArtifacts(gp);
                 ProfileStore.MarkGameRemoved(gp);
+                RecordActivity("KALDIRILDI", gp.Name, gp.FileSize);
 
                 List<GameProfile> list = ProfileStore.LoadProfiles();
                 list.RemoveAll(delegate(GameProfile p)
@@ -303,6 +304,51 @@ namespace TitanGameHub
                 total = di.TotalSize;
             }
             catch { }
+        }
+
+        private static readonly object ActivitySync = new object();
+
+        public static void RecordActivity(string action, string gameName, string sizeText)
+        {
+            try
+            {
+                string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "activity_history.log");
+                string dir = Path.GetDirectoryName(logPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                string entry = string.Format("[{0:yyyy-MM-dd HH:mm}] {1} | {2} | {3}",
+                    DateTime.Now,
+                    string.IsNullOrEmpty(action) ? "ISLEM" : action,
+                    string.IsNullOrEmpty(gameName) ? "Oyun" : gameName,
+                    string.IsNullOrEmpty(sizeText) ? "-" : sizeText);
+
+                lock (ActivitySync)
+                {
+                    List<string> lines = File.Exists(logPath)
+                        ? new List<string>(File.ReadAllLines(logPath, Encoding.UTF8))
+                        : new List<string>();
+                    lines.Insert(0, entry);
+                    if (lines.Count > 200) lines.RemoveRange(200, lines.Count - 200);
+                    File.WriteAllLines(logPath, lines.ToArray(), Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+
+        public static List<string> GetRecentActivityLines(int max = 20)
+        {
+            try
+            {
+                string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "activity_history.log");
+                if (!File.Exists(logPath)) return new List<string>();
+                lock (ActivitySync)
+                {
+                    string[] all = File.ReadAllLines(logPath, Encoding.UTF8);
+                    List<string> res = new List<string>();
+                    for (int i = 0; i < all.Length && i < max; i++) res.Add(all[i]);
+                    return res;
+                }
+            }
+            catch { return new List<string>(); }
         }
     }
 }

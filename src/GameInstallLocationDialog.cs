@@ -304,12 +304,17 @@ namespace TitanGameHub
                             {
                                 double freeGb = d.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
                                 double totalGb = d.TotalSize / (1024.0 * 1024.0 * 1024.0);
+                                double pkgGb = EstimatePackageGb(profile.FileSize);
+                                double recGb = pkgGb > 0 ? pkgGb * 1.8 : 0;
+                                string warnLine = (pkgGb > 0 && freeGb < recGb)
+                                    ? string.Format("\n⚠️ UYARI: Arşiv+kurulum için ~{0:0.0} GB önerilir (Boş: {1:0.0} GB)!", recGb, freeGb)
+                                    : "";
                                 tbDiskInfo.Text = string.Format(
                                     "• Hedef sürücü: {0}  ({1:0.0} GB boş / {2:0.0} GB toplam)\n" +
                                     "• İndirilecek paket: {3}\n" +
                                     "• Kütüphane: {4}\n" +
-                                    "• Çok oyunculu: Spacewar (AppID 480) & Goldberg LAN kalkanı dahil.",
-                                    driveRoot, freeGb, totalGb, profile.FileSize ?? "Hazır", rootPath);
+                                    "• Çok oyunculu: Spacewar (AppID 480) & Goldberg LAN kalkanı dahil.{5}",
+                                    driveRoot, freeGb, totalGb, profile.FileSize ?? "Hazır", rootPath, warnLine);
                                 return;
                             }
                         }
@@ -432,6 +437,30 @@ namespace TitanGameHub
                 }
 
                 string target = Path.Combine(choice.RootPath, safeName);
+                try
+                {
+                    string driveRoot = Path.GetPathRoot(target);
+                    double pkgGb = EstimatePackageGb(profile.FileSize);
+                    if (!string.IsNullOrEmpty(driveRoot) && pkgGb > 0)
+                    {
+                        DriveInfo di = new DriveInfo(driveRoot);
+                        if (di.IsReady)
+                        {
+                            double freeGb = di.AvailableFreeSpace / (1024.0 * 1024.0 * 1024.0);
+                            if (freeGb < pkgGb)
+                            {
+                                MessageBoxResult warnRes = MessageBox.Show(
+                                    win,
+                                    string.Format("Seçili sürücüde ({0}) yeterli boş alan olmayabilir.\n\n• Gerekli minimum: {1:0.0} GB\n• Mevcut boş alan: {2:0.0} GB\n\nYine de devam edilsin mi?", driveRoot, pkgGb, freeGb),
+                                    "Titan // Yetersiz Disk Alanı",
+                                    MessageBoxButton.YesNo,
+                                    MessageBoxImage.Warning);
+                                if (warnRes != MessageBoxResult.Yes) return;
+                            }
+                        }
+                    }
+                }
+                catch { }
                 try
                 {
                     if (!Directory.Exists(target)) Directory.CreateDirectory(target);
@@ -574,6 +603,26 @@ namespace TitanGameHub
 
             if (markCustom) label = label + "  [önerilen]";
             return new LibraryChoice { RootPath = rootPath, Display = label };
+        }
+
+        private static double EstimatePackageGb(string fileSize)
+        {
+            if (string.IsNullOrWhiteSpace(fileSize)) return 0;
+            try
+            {
+                string s = fileSize.Trim().ToUpperInvariant().Replace(',', '.');
+                System.Text.RegularExpressions.Match m = System.Text.RegularExpressions.Regex.Match(s, @"([0-9]+(?:\.[0-9]+)?)\s*(TB|GB|MB)");
+                if (!m.Success) return 0;
+                double val;
+                if (!double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out val))
+                    return 0;
+                string unit = m.Groups[2].Value;
+                if (unit == "TB") return val * 1024.0;
+                if (unit == "GB") return val;
+                if (unit == "MB") return Math.Max(0.1, val / 1024.0);
+            }
+            catch { }
+            return 0;
         }
 
         private static SolidColorBrush HexBrush(string hex)

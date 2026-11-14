@@ -634,6 +634,8 @@ namespace TitanGameHub
                 if (string.IsNullOrEmpty(remoteSha)) return;
                 if (string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase)) return;
 
+                try { SyncCatalogFromGitHubRaw(catalog); } catch { }
+
                 string stageDir = Path.Combine(appDir, "ota_stage");
                 string stagedExe = Path.Combine(stageDir, "TitanGameHub.exe");
                 if (Directory.Exists(stageDir)) { try { Directory.Delete(stageDir, true); } catch { } }
@@ -712,6 +714,101 @@ namespace TitanGameHub
                 };
                 Process.Start(psi);
                 Environment.Exit(0);
+            }
+            catch { }
+        }
+
+        private void SyncCatalogFromGitHubRaw(List<GameProfile> catalog)
+        {
+            if (catalog == null) return;
+            try
+            {
+                using (WebClient cwc = new WebClient())
+                {
+                    cwc.Proxy = null;
+                    cwc.Encoding = Encoding.UTF8;
+                    cwc.Headers.Add("User-Agent", "TitanGameHub-CatalogSync/8.1");
+                    string rawCfg = cwc.DownloadString("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/bin/games_v6.cfg");
+                    if (string.IsNullOrWhiteSpace(rawCfg)) return;
+
+                    Dictionary<string, GameProfile> byId = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+                    Dictionary<string, GameProfile> byNorm = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+                    lock (catalog)
+                    {
+                        foreach (GameProfile g in catalog)
+                        {
+                            if (g == null) continue;
+                            if (!string.IsNullOrEmpty(g.Id) && !byId.ContainsKey(g.Id)) byId[g.Id] = g;
+                            string nm = GameDeduplicationEngine.NormalizeGameTitle(g.Name);
+                            if (!string.IsNullOrEmpty(nm) && !byNorm.ContainsKey(nm)) byNorm[nm] = g;
+                        }
+                    }
+
+                    int changed = 0;
+                    string[] lines = rawCfg.Split(new char[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string line in lines)
+                    {
+                        if (line.StartsWith("#")) continue;
+                        string[] p = line.Split('|');
+                        if (p.Length < 16) continue;
+                        string id = (p[0] ?? "").Trim();
+                        string name = (p[1] ?? "").Trim();
+                        if (string.IsNullOrEmpty(id) || string.IsNullOrEmpty(name)) continue;
+                        if (ProfileStore.IsGameRemoved(id, name)) continue;
+
+                        string remoteSize = (p[14] ?? "").Trim();
+                        string norm = GameDeduplicationEngine.NormalizeGameTitle(name);
+
+                        GameProfile existing = null;
+                        if (!byId.TryGetValue(id, out existing) && !string.IsNullOrEmpty(norm))
+                            byNorm.TryGetValue(norm, out existing);
+
+                        if (existing != null)
+                        {
+                            if (ProfileStore.NeedsRealSize(existing.FileSize) && !ProfileStore.NeedsRealSize(remoteSize))
+                            {
+                                existing.FileSize = remoteSize;
+                                changed++;
+                            }
+                            if (string.IsNullOrEmpty(existing.DirectMirrorUrl) && !string.IsNullOrEmpty(p[15]) && p[15].StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                            {
+                                existing.DirectMirrorUrl = p[15].Trim();
+                                changed++;
+                            }
+                        }
+                        else
+                        {
+                            GameProfile ng = new GameProfile
+                            {
+                                Id = id,
+                                Name = name,
+                                Category = p[2],
+                                Version = p[5],
+                                RemoteVersion = p[6],
+                                DownloadUrl = p[7],
+                                OnlineFixUrl = p[8],
+                                SteamAppId = string.IsNullOrEmpty(p[9]) ? "480" : p[9],
+                                Description = p[10],
+                                MaxPlayers = p[11],
+                                BannerUrl = p[12],
+                                CapsuleUrl = p[13],
+                                FileSize = string.IsNullOrEmpty(remoteSize) ? "Hazır Paket" : remoteSize,
+                                DirectMirrorUrl = p[15]
+                            };
+                            lock (catalog) { catalog.Add(ng); }
+                            if (!byId.ContainsKey(id)) byId[id] = ng;
+                            if (!string.IsNullOrEmpty(norm) && !byNorm.ContainsKey(norm)) byNorm[norm] = ng;
+                            changed++;
+                        }
+                    }
+
+                    if (changed > 0)
+                    {
+                        ProfileStore.SaveProfiles(catalog);
+                        if (OnOtaStatusChanged != null)
+                            OnOtaStatusChanged("☁ GitHub katalog güncellemesi uygulandı (" + changed + " oyun/boyut yenilendi).", 1);
+                    }
+                }
             }
             catch { }
         }

@@ -3030,6 +3030,7 @@ namespace TitanGameHub
                     if (_txtInAppDlTitle != null) _txtInAppDlTitle.Text = status;
                     if (_txtInAppDlSpeed != null) _txtInAppDlSpeed.Text = speed;
                     if (_pbInAppDl != null) _pbInAppDl.Value = pct;
+                    UpdateDownloadSpeedSparkline(speed);
 
                     if (_txtDownloadStatus != null) _txtDownloadStatus.Text = status;
                     if (_txtDownloadSpeed != null) _txtDownloadSpeed.Text = speed;
@@ -5619,6 +5620,38 @@ namespace TitanGameHub
             cg.Children.Add(btnAct);
 
             return card;
+        }
+
+        private void UpdateDownloadSpeedSparkline(string speed)
+        {
+            if (_dlSpeedSparkline == null || string.IsNullOrEmpty(speed)) return;
+            try
+            {
+                Match m = Regex.Match(speed.Replace(',', '.'), @"([0-9]+(?:\.[0-9]+)?)\s*MB", RegexOptions.IgnoreCase);
+                if (!m.Success) return;
+                double val;
+                if (!double.TryParse(m.Groups[1].Value, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out val))
+                    return;
+
+                _dlSpeedSamples.Add(Math.Max(0.0, val));
+                if (_dlSpeedSamples.Count > 16) _dlSpeedSamples.RemoveAt(0);
+
+                double maxVal = 1.0;
+                foreach (double v in _dlSpeedSamples) if (v > maxVal) maxVal = v;
+
+                PointCollection pts = new PointCollection();
+                double w = 74.0;
+                double h = 14.0;
+                int n = _dlSpeedSamples.Count;
+                for (int i = 0; i < n; i++)
+                {
+                    double x = n > 1 ? (i * w) / (n - 1) : w;
+                    double y = h - (_dlSpeedSamples[i] / maxVal) * (h - 2.0) + 1.0;
+                    pts.Add(new Point(x, y));
+                }
+                _dlSpeedSparkline.Points = pts;
+            }
+            catch { }
         }
     }
 }

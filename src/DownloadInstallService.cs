@@ -2034,6 +2034,7 @@ namespace TitanGameHub
                     // Bütünlük doğrulaması için kurulum kaydı (manifest) oluştur
                     try { GameFileManifest.SaveSnapshot(profile); } catch { }
                     try { UpdateLedger.MarkUpToDate(profile, profile.RemoteVersion); } catch { }
+                    try { GameMaintenanceService.RecordActivity("KURULDU", profile.Name, profile.FileSize); } catch { }
 
                     _isBusy = false;
                     string patchNote = TryApplyAutoTurkishPatch(profile, "kurulum");
