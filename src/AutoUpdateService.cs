@@ -70,6 +70,12 @@ namespace TitanGameHub
         {
             if (_isUpdatingBinary) return;
 
+            if (manualTrigger || (DateTime.UtcNow - _lastGitHubCheckUtc).TotalMinutes >= 10.0)
+            {
+                _lastGitHubCheckUtc = DateTime.UtcNow;
+                CheckGitHubMainUpdate(catalog);
+            }
+
             if (manualTrigger && OnOtaStatusChanged != null)
                 OnOtaStatusChanged("Bulut OTA sunucusundan uygulama ve katalog güncellemeleri denetleniyor...", 0);
 
@@ -611,6 +617,8 @@ namespace TitanGameHub
             return null;
         }
 
+        private DateTime _lastGitHubCheckUtc = DateTime.MinValue;
+
         private void CheckGitHubMainUpdate(List<GameProfile> catalog)
         {
             if (_isUpdatingBinary) return;
@@ -621,18 +629,22 @@ namespace TitanGameHub
                 string shaFile = Path.Combine(appDir, "data", "last_github_sha.txt");
                 string localSha = File.Exists(shaFile) ? File.ReadAllText(shaFile, Encoding.UTF8).Trim() : "";
 
-                string commitJson;
-                using (WebClient wc = new WebClient())
+                string remoteSha = null;
+                try
                 {
-                    wc.Proxy = null;
-                    wc.Encoding = Encoding.UTF8;
-                    wc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/8.1");
-                    commitJson = wc.DownloadString("https://api.github.com/repos/berkekarabulut19-collab/titan-game-hub/commits/main");
+                    using (WebClient wc = new WebClient())
+                    {
+                        wc.Proxy = null;
+                        wc.Encoding = Encoding.UTF8;
+                        wc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/11.0");
+                        string commitJson = wc.DownloadString("https://api.github.com/repos/berkekarabulut19-collab/titan-game-hub/commits/main");
+                        remoteSha = ExtractJsonField(commitJson, "sha");
+                    }
                 }
+                catch { }
 
-                string remoteSha = ExtractJsonField(commitJson, "sha");
-                if (string.IsNullOrEmpty(remoteSha)) return;
-                if (string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase)) return;
+                if (!string.IsNullOrEmpty(remoteSha) && string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase))
+                    return;
 
                 try { SyncCatalogFromGitHubRaw(catalog); } catch { }
 
@@ -644,7 +656,7 @@ namespace TitanGameHub
                 using (WebClient dwc = new WebClient())
                 {
                     dwc.Proxy = null;
-                    dwc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/8.1");
+                    dwc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/11.0");
                     dwc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/bin/TitanGameHub.exe", stagedExe);
                 }
 
@@ -668,15 +680,17 @@ namespace TitanGameHub
                 string curHash = ComputeFileSha256(currentExe);
                 string newHash = ComputeFileSha256(stagedExe);
 
-                try
-                {
-                    Directory.CreateDirectory(Path.GetDirectoryName(shaFile));
-                    File.WriteAllText(shaFile, remoteSha, Encoding.UTF8);
-                }
-                catch { }
-
                 if (string.Equals(curHash, newHash, StringComparison.OrdinalIgnoreCase))
                 {
+                    if (!string.IsNullOrEmpty(remoteSha))
+                    {
+                        try
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(shaFile));
+                            File.WriteAllText(shaFile, remoteSha, Encoding.UTF8);
+                        }
+                        catch { }
+                    }
                     try { Directory.Delete(stageDir, true); } catch { }
                     return;
                 }
@@ -700,6 +714,12 @@ namespace TitanGameHub
                 bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
                 bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
                 bat.AppendLine("copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1");
+                bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 2 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
+                if (!string.IsNullOrEmpty(remoteSha))
+                {
+                    bat.AppendLine("if not exist \"" + Path.GetDirectoryName(shaFile) + "\" mkdir \"" + Path.GetDirectoryName(shaFile) + "\"");
+                    bat.AppendLine("echo " + remoteSha + "> \"" + shaFile + "\"");
+                }
                 bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
                 bat.AppendLine("start \"\" \"" + currentExe + "\"");
                 bat.AppendLine("del \"%~f0\"");

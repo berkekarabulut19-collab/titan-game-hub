@@ -4971,7 +4971,7 @@ namespace TitanGameHub
             doctorActions.Children.Add(btnDoctorBackupSaves);
 
             Button btnOpenTimeline = CreateSteamUtilityButton("🕒 SAVE ZAMAN TÜNELİ", "Seçili oyunun eski save slotlarını görüntüle ve geri yükle");
-            btnOpenTimeline.Margin = new Thickness(0, 0, 0, 6);
+            btnOpenTimeline.Margin = new Thickness(0, 0, 8, 6);
             btnOpenTimeline.Click += delegate
             {
                 if (_selectedProfile == null)
@@ -4982,6 +4982,17 @@ namespace TitanGameHub
                 ShowSaveTimeMachineWindow(_selectedProfile);
             };
             doctorActions.Children.Add(btnOpenTimeline);
+
+            Button btnCheckGithubNow = CreateSteamUtilityButton("🔄 GÜNCELLEME DENETLE (GITHUB)", "GitHub üzerinden son sürümü ve güncel oyun kataloğunu anında kontrol eder");
+            btnCheckGithubNow.Margin = new Thickness(0, 0, 0, 6);
+            btnCheckGithubNow.Click += delegate
+            {
+                txtDoctorStatus.Text = "🔄 GitHub üzerinden en güncel sürüm ve katalog kontrol ediliyor...";
+                _txtBottomStatus.Text = txtDoctorStatus.Text;
+                if (_autoUpdater != null) _autoUpdater.CheckForUpdatesAsync(_allProfiles, true);
+                Win32.PlayTechChirp(true);
+            };
+            doctorActions.Children.Add(btnCheckGithubNow);
 
             doctorStack.Children.Add(doctorActions);
 
