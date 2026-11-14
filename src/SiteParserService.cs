@@ -1431,7 +1431,52 @@ namespace TitanGameHub
             return null;
         }
 
-        private static readonly System.Threading.SemaphoreSlim _sizeResolveGate = new System.Threading.SemaphoreSlim(3, 3);
+        private static readonly System.Threading.SemaphoreSlim _sizeResolveGate = new System.Threading.SemaphoreSlim(5, 5);
+
+        private static string ResolveSteamStorageSize(GameProfile gp)
+        {
+            try
+            {
+                string appId = null;
+                if (!string.IsNullOrEmpty(gp.SteamAppId) && gp.SteamAppId != "480" && Regex.IsMatch(gp.SteamAppId.Trim(), @"^\d+$"))
+                    appId = gp.SteamAppId.Trim();
+
+                if (string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(gp.BannerUrl))
+                {
+                    Match bm = Regex.Match(gp.BannerUrl, @"/apps/(\d+)/");
+                    if (bm.Success) appId = bm.Groups[1].Value;
+                }
+
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Proxy = null;
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "TitanGameHub/1.0");
+
+                    if (string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(gp.Name))
+                    {
+                        string clean = Regex.Replace(gp.Name, @"(?i)\b(deluxe|ultimate|complete|definitive|goty|remastered|edition|repack|multi\d+|elamigos|v\d[\d\.]*)\b", "").Trim();
+                        if (clean.Length >= 3)
+                        {
+                            string sr = wc.DownloadString("https://store.steampowered.com/api/storesearch/?term=" + Uri.EscapeDataString(clean) + "&l=english&cc=US");
+                            Match idm = Regex.Match(sr, @"""id"":(\d+)");
+                            if (idm.Success) appId = idm.Groups[1].Value;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(appId))
+                    {
+                        string det = wc.DownloadString("https://store.steampowered.com/api/appdetails?appids=" + appId + "&l=english");
+                        Match sm = Regex.Match(det, @"(?i)(?:Storage|Hard Drive|Disk Space)\s*:\s*(?:<[^>]+>)*\s*([0-9]+(?:[\.,][0-9]+)?\s*(?:GB|MB))");
+                        if (sm.Success)
+                            return CleanTextFragment(sm.Groups[1].Value).ToUpperInvariant();
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
 
         public static string ResolveLiveFileSizeQuick(GameProfile gp)
         {
@@ -1445,8 +1490,11 @@ namespace TitanGameHub
                     if (!string.IsNullOrEmpty(diskSz)) return diskSz;
                 }
 
-                entered = _sizeResolveGate.Wait(4000);
+                entered = _sizeResolveGate.Wait(5000);
                 if (!entered) return null;
+
+                string steamSz = ResolveSteamStorageSize(gp);
+                if (!string.IsNullOrEmpty(steamSz)) return steamSz;
 
                 if (!string.IsNullOrEmpty(gp.DownloadUrl) && gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {

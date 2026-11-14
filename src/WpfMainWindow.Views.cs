@@ -967,13 +967,13 @@ namespace TitanGameHub
             bool needsSizeResolve = ProfileStore.NeedsRealSize(sizeText);
             TextBlock sizeBadgeText = new TextBlock()
             {
-                Text = needsSizeResolve ? "..." : sizeText,
+                Text = needsSizeResolve ? "⏳ ... GB" : sizeText,
                 Foreground = ThemeManager.AccentTealBrush,
                 FontSize = 9.5,
                 FontWeight = FontWeights.ExtraBold
             };
             sizeBadge.Child = sizeBadgeText;
-            sizeBadge.Visibility = needsSizeResolve ? Visibility.Collapsed : Visibility.Visible;
+            sizeBadge.Visibility = Visibility.Visible;
             overlayBadges.Children.Add(sizeBadge);
 
             if (needsSizeResolve)
