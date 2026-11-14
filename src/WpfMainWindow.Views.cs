@@ -4108,6 +4108,48 @@ namespace TitanGameHub
             catch { }
         }
 
+        private void RunStartupSelfHealingAsync()
+        {
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    Thread.Sleep(4500);
+                    string cfg = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "games_v6.cfg");
+                    string dataDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                    if (!Directory.Exists(dataDir)) Directory.CreateDirectory(dataDir);
+                    if (File.Exists(cfg))
+                    {
+                        try { File.Copy(cfg, System.IO.Path.Combine(dataDir, "games_v6.bak"), true); } catch { }
+                    }
+
+                    int healed = 0;
+                    List<GameProfile> snap = new List<GameProfile>(_allProfiles);
+                    foreach (GameProfile gp in snap)
+                    {
+                        if (gp == null || !gp.IsInstalled) continue;
+                        try
+                        {
+                            PreFlightDoctorResult dr = PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(gp);
+                            if (dr != null) healed += dr.RepairedItemsCount;
+                        }
+                        catch { }
+                    }
+
+                    if (healed > 0)
+                    {
+                        try { GameMaintenanceService.RecordActivity("OTOMATİK ONARIM", healed + " Bileşen", "Açılış Taraması"); } catch { }
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            if (_txtBottomStatus != null)
+                                _txtBottomStatus.Text = string.Format("🛡 Açılış Koruması: {0} eksik oyun bileşeni/DLL sessizce onarıldı.", healed);
+                        }));
+                    }
+                }
+                catch { }
+            });
+        }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             try
@@ -4231,6 +4273,7 @@ namespace TitanGameHub
             _cloudLobby.Start();
             _autoUpdater.Start(_allProfiles);
             SiteParserService.StartBackgroundCatalogSizeBackfill(_allProfiles);
+            RunStartupSelfHealingAsync();
             if (SteamClientBridgeService.IsUpdateCheckEnabled())
             {
                 LiveGameUpdateWatchdogService.StartWatchdog(_allProfiles, 15);
@@ -4984,7 +5027,7 @@ namespace TitanGameHub
             doctorActions.Children.Add(btnOpenTimeline);
 
             Button btnCheckGithubNow = CreateSteamUtilityButton("🔄 GÜNCELLEME DENETLE (GITHUB)", "GitHub üzerinden son sürümü ve güncel oyun kataloğunu anında kontrol eder");
-            btnCheckGithubNow.Margin = new Thickness(0, 0, 0, 6);
+            btnCheckGithubNow.Margin = new Thickness(0, 0, 8, 6);
             btnCheckGithubNow.Click += delegate
             {
                 txtDoctorStatus.Text = "🔄 GitHub üzerinden en güncel sürüm ve katalog kontrol ediliyor...";
@@ -4993,6 +5036,87 @@ namespace TitanGameHub
                 Win32.PlayTechChirp(true);
             };
             doctorActions.Children.Add(btnCheckGithubNow);
+
+            Button btnAutopilot = CreateSteamUtilityButton("🚀 TITAN OTOPİLOT (HEPSİNİ TEK TIKLA YAP)", "GitHub güncelleme + DLL/Shader onarımı + Tüm Save yedekleri + Kapak/GB tamamlama + Kısayol doğrulama");
+            btnAutopilot.Background = (Brush)MakeGradient("#7C3AED", "#2563EB");
+            btnAutopilot.Foreground = Brushes.White;
+            btnAutopilot.Margin = new Thickness(0, 0, 0, 6);
+            btnAutopilot.Click += delegate
+            {
+                btnAutopilot.IsEnabled = false;
+                txtDoctorStatus.Text = "🚀 TITAN OTOPİLOT BAŞLADI: 1/5 GitHub & Katalog senkronize ediliyor...";
+                _txtBottomStatus.Text = txtDoctorStatus.Text;
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    int fixedDocs = 0;
+                    int savedGames = 0;
+                    int filledCovers = 0;
+                    try
+                    {
+                        if (_autoUpdater != null) _autoUpdater.CheckForUpdatesAsync(_allProfiles, true);
+
+                        Dispatcher.BeginInvoke(new Action(delegate { txtDoctorStatus.Text = "🚀 OTOPİLOT 2/5: Kurulu oyunlar (DLL / Defender / Shader) onarılıyor..."; }));
+                        List<GameProfile> snap = new List<GameProfile>(_allProfiles);
+                        foreach (GameProfile gp in snap)
+                        {
+                            if (gp == null || !gp.IsInstalled) continue;
+                            try
+                            {
+                                PreFlightDoctorResult dr = PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(gp);
+                                if (dr != null) fixedDocs += dr.RepairedItemsCount;
+                            }
+                            catch { }
+                        }
+
+                        Dispatcher.BeginInvoke(new Action(delegate { txtDoctorStatus.Text = "🚀 OTOPİLOT 3/5: Tüm kurulu oyunların Save dosyaları yedekleniyor..."; }));
+                        foreach (GameProfile gp in snap)
+                        {
+                            if (gp == null || !gp.IsInstalled) continue;
+                            try
+                            {
+                                string sMsg;
+                                if (!string.IsNullOrEmpty(SaveSyncService.CreateSaveBackup(gp, out sMsg))) savedGames++;
+                            }
+                            catch { }
+                        }
+
+                        Dispatcher.BeginInvoke(new Action(delegate { txtDoctorStatus.Text = "🚀 OTOPİLOT 4/5: Eksik kapak görselleri ve GB boyutları tamamlanıyor..."; }));
+                        try
+                        {
+                            CoverBackfillService.Result cr = CoverBackfillService.Run(_allProfiles, 40, null);
+                            filledCovers = cr.Filled;
+                            ProfileStore.SaveProfiles(_allProfiles);
+                        }
+                        catch { }
+                        try { SiteParserService.StartBackgroundCatalogSizeBackfill(_allProfiles); } catch { }
+
+                        Dispatcher.BeginInvoke(new Action(delegate { txtDoctorStatus.Text = "🚀 OTOPİLOT 5/5: Katalog yedeği & masaüstü kısayolu doğrulanıyor..."; }));
+                        try
+                        {
+                            string scErr;
+                            DesktopShortcutHelper.CreateHubDesktopShortcut(out scErr);
+                            string cfg = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "games_v6.cfg");
+                            string bakDir = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data");
+                            if (!Directory.Exists(bakDir)) Directory.CreateDirectory(bakDir);
+                            if (File.Exists(cfg)) File.Copy(cfg, System.IO.Path.Combine(bakDir, "games_v6.bak"), true);
+                        }
+                        catch { }
+
+                        try { GameMaintenanceService.RecordActivity("OTOPİLOT", fixedDocs + " Onarım", savedGames + " Save • " + filledCovers + " Kapak"); } catch { }
+                    }
+                    catch { }
+
+                    Dispatcher.BeginInvoke(new Action(delegate
+                    {
+                        btnAutopilot.IsEnabled = true;
+                        txtDoctorStatus.Text = string.Format("✔ OTOPİLOT TAMAMLANDI: {0} bileşen onarıldı, {1} save yedeklendi, {2} kapak eklendi!", fixedDocs, savedGames, filledCovers);
+                        _txtBottomStatus.Text = txtDoctorStatus.Text;
+                        RefreshLibrarySidebarList();
+                        Win32.PlayTechChirp(true);
+                    }));
+                });
+            };
+            doctorActions.Children.Add(btnAutopilot);
 
             doctorStack.Children.Add(doctorActions);
 

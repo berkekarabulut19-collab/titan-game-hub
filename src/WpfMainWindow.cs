@@ -864,7 +864,7 @@ namespace TitanGameHub
             btnManageDownloads.Click += delegate { SwitchView(_viewDownload, _navBtnDownload); RefreshDownloadQueueUI(); };
             centerFooterStack.Children.Add(btnManageDownloads);
 
-            // Right Footer: Hardware Summary
+            // Right Footer: Hardware Summary + Live Disk & Queue Telemetry
             _txtMetricHardware = new TextBlock()
             {
                 Text = Win32.GetSystemHardwareSummary(),
@@ -873,6 +873,22 @@ namespace TitanGameHub
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            System.Windows.Threading.DispatcherTimer footerTelTimer = new System.Windows.Threading.DispatcherTimer();
+            footerTelTimer.Interval = TimeSpan.FromSeconds(10);
+            footerTelTimer.Tick += delegate
+            {
+                try
+                {
+                    string root = System.IO.Path.GetPathRoot(AppDomain.CurrentDomain.BaseDirectory) ?? "C:\\";
+                    DriveInfo di = new DriveInfo(root);
+                    double freeGb = di.IsReady ? (di.AvailableFreeSpace / 1073741824.0) : 0.0;
+                    int qCount = DownloadInstallService.GetQueuedGames().Count;
+                    _txtMetricHardware.Text = string.Format("{0}  •  💾 {1} {2:0} GB Boş  •  Kuyruk: {3}",
+                        Win32.GetSystemHardwareSummary(), root.TrimEnd('\\'), freeGb, qCount);
+                }
+                catch { }
+            };
+            footerTelTimer.Start();
             Grid.SetColumn(_txtMetricHardware, 2);
             footerGrid.Children.Add(_txtMetricHardware);
         }
