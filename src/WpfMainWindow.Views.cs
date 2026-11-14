@@ -639,7 +639,15 @@ namespace TitanGameHub
                                 lg.PlayTimeMinutes = match.PlayTimeMinutes;
                                 if (!string.IsNullOrEmpty(match.BannerUrl))
                                     lg.BannerUrl = match.BannerUrl;
+                                if (!string.IsNullOrEmpty(match.CapsuleUrl))
+                                    lg.CapsuleUrl = match.CapsuleUrl;
+                                if (!string.IsNullOrEmpty(match.SteamAppId) && match.SteamAppId != "480" && (string.IsNullOrEmpty(lg.SteamAppId) || lg.SteamAppId == "480"))
+                                    lg.SteamAppId = match.SteamAppId;
+                                if (!ProfileStore.NeedsRealSize(match.FileSize) && ProfileStore.NeedsRealSize(lg.FileSize))
+                                    lg.FileSize = match.FileSize;
                             }
+                            if (ProfileStore.NeedsRealSize(lg.FileSize))
+                                lg.FileSize = DownloadInstallService.GetDownloadSizeDisplay(lg);
                             lg.Category = SiteParserService.SanitizeDisplayCategory(lg.Category);
                         }
                     }
@@ -953,7 +961,8 @@ namespace TitanGameHub
                 }
             };
 
-            if (string.IsNullOrEmpty(gp.BannerUrl) && string.IsNullOrEmpty(gp.CapsuleUrl))
+            bool hasValidSteamId = !string.IsNullOrEmpty(gp.SteamAppId) && gp.SteamAppId != "480" && System.Text.RegularExpressions.Regex.IsMatch(gp.SteamAppId.Trim(), @"^\d{2,8}$");
+            if (string.IsNullOrEmpty(gp.BannerUrl) && string.IsNullOrEmpty(gp.CapsuleUrl) && !hasValidSteamId)
             {
                 trySteamArtworkFallback();
             }
@@ -984,9 +993,10 @@ namespace TitanGameHub
             };
             string sizeText = (gp.FileSize ?? "").Trim();
             bool needsSizeResolve = ProfileStore.NeedsRealSize(sizeText);
+            string displaySizeNow = needsSizeResolve ? DownloadInstallService.GetDownloadSizeDisplay(gp) : sizeText;
             TextBlock sizeBadgeText = new TextBlock()
             {
-                Text = needsSizeResolve ? "⏳ ... GB" : sizeText,
+                Text = displaySizeNow,
                 Foreground = ThemeManager.AccentTealBrush,
                 FontSize = 9.5,
                 FontWeight = FontWeights.ExtraBold
