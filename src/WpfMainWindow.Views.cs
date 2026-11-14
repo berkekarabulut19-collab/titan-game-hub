@@ -964,20 +964,43 @@ namespace TitanGameHub
                 VerticalAlignment = VerticalAlignment.Top
             };
             string sizeText = (gp.FileSize ?? "").Trim();
-            bool showSize = sizeText.Length > 0 &&
-                            !sizeText.Equals("Hazır Paket", StringComparison.OrdinalIgnoreCase) &&
-                            !sizeText.Equals("Hazır", StringComparison.OrdinalIgnoreCase) &&
-                            !sizeText.Equals("Kurulu", StringComparison.OrdinalIgnoreCase) &&
-                            !sizeText.Equals("Bulut", StringComparison.OrdinalIgnoreCase);
-            sizeBadge.Child = new TextBlock()
+            bool needsSizeResolve = ProfileStore.NeedsRealSize(sizeText);
+            TextBlock sizeBadgeText = new TextBlock()
             {
-                Text = sizeText,
+                Text = needsSizeResolve ? "..." : sizeText,
                 Foreground = ThemeManager.AccentTealBrush,
                 FontSize = 9.5,
                 FontWeight = FontWeights.ExtraBold
             };
-            sizeBadge.Visibility = showSize ? Visibility.Visible : Visibility.Collapsed;
+            sizeBadge.Child = sizeBadgeText;
+            sizeBadge.Visibility = needsSizeResolve ? Visibility.Collapsed : Visibility.Visible;
             overlayBadges.Children.Add(sizeBadge);
+
+            if (needsSizeResolve)
+            {
+                GameProfile sizeTarget = gp;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                {
+                    try
+                    {
+                        string resolvedSize = SiteParserService.ResolveLiveFileSizeQuick(sizeTarget);
+                        if (!string.IsNullOrEmpty(resolvedSize))
+                        {
+                            sizeTarget.FileSize = resolvedSize;
+                            try
+                            {
+                                Dispatcher.BeginInvoke(new Action(delegate
+                                {
+                                    sizeBadgeText.Text = resolvedSize;
+                                    sizeBadge.Visibility = Visibility.Visible;
+                                }));
+                            }
+                            catch { }
+                        }
+                    }
+                    catch { }
+                });
+            }
 
             Border statusBadge = new Border()
             {

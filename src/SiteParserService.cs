@@ -575,15 +575,19 @@ namespace TitanGameHub
                 }
 
                 string categoryTag = ResolveCategoryTag(post, requestedCatId);
-                if (!string.IsNullOrEmpty(sourceLabel) && sourceLabel != "SteamRIP")
+                if (!string.IsNullOrEmpty(sourceLabel) &&
+                    !sourceLabel.Equals("SteamRIP", StringComparison.OrdinalIgnoreCase) &&
+                    !sourceLabel.Equals("FitGirl", StringComparison.OrdinalIgnoreCase) &&
+                    !sourceLabel.Equals("OvaGames", StringComparison.OrdinalIgnoreCase))
                     categoryTag = sourceLabel + " • " + categoryTag;
 
                 string primaryMirror = (details.Mirrors.Count > 0) ? details.Mirrors[0].Url : "";
                 string versionStr = !string.IsNullOrEmpty(details.LiveVersion) ? details.LiveVersion : "Son Sürüm";
-                string sizeStr = !string.IsNullOrEmpty(details.LiveFileSize) ? details.LiveFileSize : "Hazır Paket";
+                string sizeStr = !string.IsNullOrEmpty(details.LiveFileSize) ? details.LiveFileSize : ExtractFallbackSizeFromHtml(contentHtml);
+                if (string.IsNullOrEmpty(sizeStr)) sizeStr = "Hazır Paket";
                 string descStr = !string.IsNullOrEmpty(details.CleanDescription)
                     ? details.CleanDescription
-                    : (cleanName + " — " + sourceLabel + " Pre-Installed hazır oyun paketi. Tek tıkla doğrudan uygulama içinden indirilebilir ve Spacewar (AppID 480) ile oynanabilir.");
+                    : (cleanName + " — Pre-Installed hazır oyun paketi. Tek tıkla doğrudan uygulama içinden indirilebilir.");
 
                 bool isMultiplayer = (requestedCatId == 1538) ||
                                      contentHtml.IndexOf("Multiplayer", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -970,6 +974,8 @@ namespace TitanGameHub
             Match sizeMatch = Regex.Match(html, @"(?:Game\s+Size|File\s+Size|Repack\s+Size|Original\s+Size|Size)\s*[:<>/strong\sbspan]*([0-9]+(?:[\.,][0-9]+)?\s*(?:GB|MB|TB))", RegexOptions.IgnoreCase);
             if (sizeMatch.Success)
                 res.LiveFileSize = CleanTextFragment(sizeMatch.Groups[1].Value);
+            else
+                res.LiveFileSize = ExtractFallbackSizeFromHtml(html);
 
             // 3. Parse Released By
             Match relMatch = Regex.Match(html, @"<strong>\s*Released\s+By\s*[:]*\s*</strong>\s*[:]*\s*([^<\r\n]+)", RegexOptions.IgnoreCase);
@@ -1157,18 +1163,18 @@ namespace TitanGameHub
                     {
                         Id = ExtractSlugFromUrl(link) ?? Guid.NewGuid().ToString("N").Substring(0, 8),
                         Name = title,
-                        Category = "SteamRIP Bulut",
+                        Category = "Bulut Katalog",
                         Version = "Son Sürüm",
                         RemoteVersion = "Son Sürüm",
                         FileSize = "Bulut",
                         MaxPlayers = "Online & Tek Oyunculu",
                         SteamAppId = "480",
                         DownloadUrl = link,
-                        Description = title + " — SteamRIP hazır oyun paketi."
+                        Description = title + " — Hazır oyun paketi."
                     });
                 }
 
-                statusMsg = string.Format("SteamRIP Jina Kanalı: {0} oyun bulundu.", list.Count);
+                statusMsg = string.Format("Bulut Kanalı: {0} oyun bulundu.", list.Count);
             }
             catch (Exception ex)
             {
@@ -1406,6 +1412,64 @@ namespace TitanGameHub
                 return false;
             }
             return false;
+        }
+
+        public static string ExtractFallbackSizeFromHtml(string html)
+        {
+            if (string.IsNullOrEmpty(html)) return null;
+            try
+            {
+                string plain = StripHtmlTags(html);
+                Match m = Regex.Match(plain, @"\b([0-9]{1,4}(?:[\.,][0-9]{1,2})?\s*(?:GB|MB|TB))\b", RegexOptions.IgnoreCase);
+                if (m.Success)
+                {
+                    string val = CleanTextFragment(m.Groups[1].Value);
+                    if (!string.IsNullOrEmpty(val)) return val.ToUpperInvariant();
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public static string ResolveLiveFileSizeQuick(GameProfile gp)
+        {
+            if (gp == null) return null;
+            try
+            {
+                if (gp.IsInstalled)
+                {
+                    string diskSz = ProfileStore.ComputeFolderSizeText(!string.IsNullOrEmpty(gp.WorkingDirectory) ? gp.WorkingDirectory : System.IO.Path.GetDirectoryName(gp.ExecutablePath));
+                    if (!string.IsNullOrEmpty(diskSz)) return diskSz;
+                }
+
+                if (!string.IsNullOrEmpty(gp.DownloadUrl) && gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    SitePageAnalysis an = AnalyzeGameOnSteamRip(gp);
+                    if (an != null && !string.IsNullOrEmpty(an.LiveFileSize))
+                        return an.LiveFileSize;
+                }
+
+                if (!string.IsNullOrEmpty(gp.DirectMirrorUrl) && gp.DirectMirrorUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                    HttpWebRequest req = (HttpWebRequest)WebRequest.Create(gp.DirectMirrorUrl);
+                    req.Method = "HEAD";
+                    req.Timeout = 5000;
+                    req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TitanGameHub/1.0";
+                    using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                    {
+                        if (resp.ContentLength > 1048576L)
+                        {
+                            long len = resp.ContentLength;
+                            if (len >= 1073741824L)
+                                return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.0} GB", len / 1073741824.0);
+                            return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0} MB", len / 1048576.0);
+                        }
+                    }
+                }
+            }
+            catch { }
+            return null;
         }
     }
 }

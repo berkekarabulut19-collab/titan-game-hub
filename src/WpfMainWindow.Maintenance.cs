@@ -101,6 +101,24 @@ namespace TitanGameHub
                             try
                             {
                                 _allProfiles = ProfileStore.LoadProfiles() ?? new List<GameProfile>();
+                                try { InvalidateLibraryLookupCache(); } catch { }
+                                try
+                                {
+                                    string normRm = GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
+                                    foreach (List<GameProfile> pool in new List<GameProfile>[] { _storeFilteredProfiles, _sidebarCloudAll })
+                                    {
+                                        if (pool == null) continue;
+                                        foreach (GameProfile sg in pool)
+                                        {
+                                            if (sg != null && (sg.Id == gp.Id || GameDeduplicationEngine.NormalizeGameTitle(sg.Name) == normRm))
+                                            {
+                                                sg.ExecutablePath = "";
+                                                sg.WorkingDirectory = "";
+                                            }
+                                        }
+                                    }
+                                }
+                                catch { }
                                 SelectGameProfile(_allProfiles.Count > 0 ? _allProfiles[0] : null);
                                 try { ApplyLibraryFilter(); } catch { }
                                 try { RefreshLibrarySidebarList(); } catch { }

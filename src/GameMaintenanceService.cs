@@ -70,6 +70,24 @@ namespace TitanGameHub
                         }
                         try { Directory.Delete(target, true); } catch { }
                     }
+
+                    // Eğer iç içe oyun klasörü (ör. D:\Games\Oyun\Oyun) silindiyse ve üst klasör boş kaldıysa onu da kaldır
+                    try
+                    {
+                        string parent = Path.GetDirectoryName(target);
+                        if (!string.IsNullOrEmpty(parent) && Directory.Exists(parent))
+                        {
+                            bool isRoot = false;
+                            foreach (string root in GamePathResolver.GetLibraryRoots(false))
+                            {
+                                string r = Path.GetFullPath(root).TrimEnd('\\');
+                                if (string.Equals(Path.GetFullPath(parent).TrimEnd('\\'), r, StringComparison.OrdinalIgnoreCase)) { isRoot = true; break; }
+                            }
+                            if (!isRoot && Directory.GetFileSystemEntries(parent).Length == 0)
+                                Directory.Delete(parent, false);
+                        }
+                    }
+                    catch { }
                     message = "Oyun dosyaları silindi: " + target;
                 }
                 else

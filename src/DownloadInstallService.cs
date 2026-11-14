@@ -834,20 +834,10 @@ namespace TitanGameHub
             }
 
             if (!string.IsNullOrEmpty(profile.DirectMirrorUrl) &&
-                profile.DirectMirrorUrl.StartsWith("steam://", StringComparison.OrdinalIgnoreCase) &&
-                string.IsNullOrEmpty(profile.DownloadUrl))
+                profile.DirectMirrorUrl.StartsWith("steam://", StringComparison.OrdinalIgnoreCase))
             {
-                ReportProgress(profile.Name + " resmi ücretsiz Steam oyunu olarak Steam üzerinden başlatılıyor...", 50, "Steam Başlatılıyor");
-                try
-                {
-                    Process.Start(profile.DirectMirrorUrl);
-                    ReportCompleted(profile, true, profile.Name + " resmi Steam üzerinden ücretsiz kuruluyor / başlatılıyor.");
-                }
-                catch (Exception ex)
-                {
-                    ReportCompleted(profile, false, "Steam başlatılamadı: " + ex.Message);
-                }
-                return;
+                // Harici Steam/site penceresi açma; uygulama içi doğrudan aynalarla devam et
+                profile.DirectMirrorUrl = "";
             }
 
             try { ProfileStore.UnmarkGameRemoved(profile); } catch { }
