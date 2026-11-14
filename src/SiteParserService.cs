@@ -1431,7 +1431,21 @@ namespace TitanGameHub
             return null;
         }
 
-        private static readonly System.Threading.SemaphoreSlim _sizeResolveGate = new System.Threading.SemaphoreSlim(5, 5);
+        private static readonly System.Threading.SemaphoreSlim _sizeResolveGate = new System.Threading.SemaphoreSlim(8, 8);
+
+        private class FastSizeWebClient : WebClient
+        {
+            private readonly int _timeoutMs;
+            public FastSizeWebClient(int timeoutMs) { _timeoutMs = timeoutMs; }
+            protected override WebRequest GetWebRequest(Uri address)
+            {
+                WebRequest wr = base.GetWebRequest(address);
+                if (wr != null) wr.Timeout = _timeoutMs;
+                HttpWebRequest hwr = wr as HttpWebRequest;
+                if (hwr != null) hwr.ReadWriteTimeout = _timeoutMs;
+                return wr;
+            }
+        }
 
         private static string ResolveSteamStorageSize(GameProfile gp)
         {
@@ -1448,7 +1462,7 @@ namespace TitanGameHub
                 }
 
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
-                using (WebClient wc = new WebClient())
+                using (FastSizeWebClient wc = new FastSizeWebClient(4500))
                 {
                     wc.Proxy = null;
                     wc.Encoding = Encoding.UTF8;
@@ -1490,7 +1504,7 @@ namespace TitanGameHub
                     if (!string.IsNullOrEmpty(diskSz)) return diskSz;
                 }
 
-                entered = _sizeResolveGate.Wait(5000);
+                entered = _sizeResolveGate.Wait(45000);
                 if (!entered) return null;
 
                 string steamSz = ResolveSteamStorageSize(gp);
@@ -1505,7 +1519,7 @@ namespace TitanGameHub
                     try
                     {
                         ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
-                        using (WebClient jwc = new WebClient())
+                        using (FastSizeWebClient jwc = new FastSizeWebClient(4500))
                         {
                             jwc.Proxy = null;
                             jwc.Encoding = Encoding.UTF8;
