@@ -194,6 +194,120 @@ namespace TitanGameHub
     public static class ProfileStore
     {
         private static readonly string ConfigPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "games_v6.cfg");
+        private static readonly string RemovedGamesPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "removed_games.cfg");
+        private static readonly object RemovedSync = new object();
+
+        private static HashSet<string> LoadRemovedKeys()
+        {
+            HashSet<string> set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                lock (RemovedSync)
+                {
+                    if (!File.Exists(RemovedGamesPath)) return set;
+                    foreach (string raw in File.ReadAllLines(RemovedGamesPath, Encoding.UTF8))
+                    {
+                        string k = (raw ?? "").Trim();
+                        if (!string.IsNullOrEmpty(k)) set.Add(k);
+                    }
+                }
+            }
+            catch { }
+            return set;
+        }
+
+        public static void MarkGameRemoved(GameProfile gp)
+        {
+            if (gp == null) return;
+            try
+            {
+                lock (RemovedSync)
+                {
+                    HashSet<string> set = LoadRemovedKeys();
+                    if (!string.IsNullOrEmpty(gp.Id)) set.Add("id:" + gp.Id.Trim());
+                    string norm = GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
+                    if (!string.IsNullOrEmpty(norm)) set.Add("name:" + norm);
+
+                    string dir = Path.GetDirectoryName(RemovedGamesPath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+                    List<string> outLines = new List<string>(set);
+                    File.WriteAllLines(RemovedGamesPath, outLines.ToArray(), Encoding.UTF8);
+                }
+            }
+            catch { }
+        }
+
+        public static void UnmarkGameRemoved(GameProfile gp)
+        {
+            if (gp == null) return;
+            try
+            {
+                lock (RemovedSync)
+                {
+                    if (!File.Exists(RemovedGamesPath)) return;
+                    HashSet<string> set = LoadRemovedKeys();
+                    bool changed = false;
+                    if (!string.IsNullOrEmpty(gp.Id)) changed |= set.Remove("id:" + gp.Id.Trim());
+                    string norm = GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
+                    if (!string.IsNullOrEmpty(norm)) changed |= set.Remove("name:" + norm);
+                    if (changed)
+                    {
+                        List<string> outLines = new List<string>(set);
+                        File.WriteAllLines(RemovedGamesPath, outLines.ToArray(), Encoding.UTF8);
+                    }
+                }
+            }
+            catch { }
+        }
+
+        public static bool IsGameRemoved(string id, string name, HashSet<string> cached = null)
+        {
+            try
+            {
+                HashSet<string> set = cached ?? LoadRemovedKeys();
+                if (set.Count == 0) return false;
+                if (!string.IsNullOrEmpty(id) && set.Contains("id:" + id.Trim())) return true;
+                string norm = GameDeduplicationEngine.NormalizeGameTitle(name);
+                if (!string.IsNullOrEmpty(norm) && set.Contains("name:" + norm)) return true;
+            }
+            catch { }
+            return false;
+        }
+
+        public static bool NeedsRealSize(string fileSize)
+        {
+            if (string.IsNullOrWhiteSpace(fileSize)) return true;
+            string s = fileSize.Trim();
+            return s.Equals("Kurulu", StringComparison.OrdinalIgnoreCase) ||
+                   s.Equals("Bilinmiyor", StringComparison.OrdinalIgnoreCase) ||
+                   s.Equals("Hazır", StringComparison.OrdinalIgnoreCase) ||
+                   s.Equals("Hazır Paket", StringComparison.OrdinalIgnoreCase) ||
+                   s.Equals("Hazır Arşiv", StringComparison.OrdinalIgnoreCase) ||
+                   s.Equals("Bulut", StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static string ComputeFolderSizeText(string folder)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return null;
+                long total = 0;
+                int count = 0;
+                DirectoryInfo di = new DirectoryInfo(folder);
+                foreach (FileInfo fi in di.EnumerateFiles("*", SearchOption.AllDirectories))
+                {
+                    try { total += fi.Length; } catch { }
+                    if (++count >= 60000) break;
+                }
+                if (total <= 0) return null;
+                if (total >= 1073741824L)
+                    return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0.0} GB", total / 1073741824.0);
+                if (total >= 1048576L)
+                    return string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:0} MB", Math.Max(1.0, total / 1048576.0));
+                return "1 MB";
+            }
+            catch { return null; }
+        }
 
         public static List<GameProfile> LoadProfiles()
         {
@@ -286,6 +400,8 @@ namespace TitanGameHub
                 list = defaults;
             }
 
+            HashSet<string> removedKeys = LoadRemovedKeys();
+
             if (list.Count == 0)
             {
                 list = defaults;
@@ -303,6 +419,7 @@ namespace TitanGameHub
                 bool addedNew = false;
                 foreach (GameProfile def in defaults)
                 {
+                    if (IsGameRemoved(def.Id, def.Name, removedKeys)) continue;
                     if (!existingIds.Contains(def.Id))
                     {
                         list.Add(def);
@@ -310,6 +427,7 @@ namespace TitanGameHub
                     }
                 }
                 int countBefore = list.Count;
+                list.RemoveAll(delegate(GameProfile p) { return p != null && IsGameRemoved(p.Id, p.Name, removedKeys); });
                 list = GameDeduplicationEngine.Deduplicate(list);
                 if (addedNew || list.Count != countBefore) { SaveProfiles(list); dedupChanged = true; }
             }
@@ -317,9 +435,22 @@ namespace TitanGameHub
             // ÖNEMLİ SIRA: önce kurulu oyun yollarını çöz, SONRA dedupe.
             // Ters sırada, site kaydı kurulu kaydı yutuyor ve oyun "kurulu değil" görünüyordu.
             int relocated = AutoDiscoverInstalledGames(list);
+            int sizeUpdated = 0;
+            foreach (GameProfile gp in list)
+            {
+                if (gp != null && gp.IsInstalled && NeedsRealSize(gp.FileSize))
+                {
+                    string sz = ComputeFolderSizeText(!string.IsNullOrEmpty(gp.WorkingDirectory) ? gp.WorkingDirectory : Path.GetDirectoryName(gp.ExecutablePath));
+                    if (!string.IsNullOrEmpty(sz))
+                    {
+                        gp.FileSize = sz;
+                        sizeUpdated++;
+                    }
+                }
+            }
             int beforeDedupe = list.Count;
             list = GameDeduplicationEngine.Deduplicate(list);
-            if (relocated > 0 || dedupChanged || list.Count != beforeDedupe) SaveProfiles(list);
+            if (relocated > 0 || sizeUpdated > 0 || dedupChanged || list.Count != beforeDedupe) SaveProfiles(list);
             return list;
         }
 
@@ -433,23 +564,26 @@ namespace TitanGameHub
 
                         string norm = GameDeduplicationEngine.NormalizeGameTitle(dirName);
                         if (string.IsNullOrEmpty(norm) || knownNorms.Contains(norm)) continue;
+                        if (IsGameRemoved("local_" + norm, dirName)) continue;
 
                         string exe = FindMainExeInFolder(dir);
                         if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
                         {
+                            string gameDir = Path.GetDirectoryName(exe);
+                            string diskSize = ComputeFolderSizeText(gameDir) ?? "Kurulu";
                             GameProfile discovered = new GameProfile
                             {
                                 Id = "local_" + norm,
                                 Name = dirName,
                                 Category = "Kurulu Oyun",
                                 ExecutablePath = exe,
-                                WorkingDirectory = Path.GetDirectoryName(exe),
+                                WorkingDirectory = gameDir,
                                 Version = "Kurulu",
                                 RemoteVersion = "Kurulu",
                                 SteamAppId = "480",
                                 Description = dirName + " — Bilgisayarda kurulu oyun.",
                                 MaxPlayers = "Tek & Çok Oyunculu",
-                                FileSize = "Kurulu"
+                                FileSize = diskSize
                             };
                             catalog.Add(discovered);
                             knownNorms.Add(norm);

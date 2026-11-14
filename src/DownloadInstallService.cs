@@ -833,7 +833,9 @@ namespace TitanGameHub
                 return;
             }
 
-            if (!string.IsNullOrEmpty(profile.DirectMirrorUrl) && profile.DirectMirrorUrl.StartsWith("steam://", StringComparison.OrdinalIgnoreCase))
+            if (!string.IsNullOrEmpty(profile.DirectMirrorUrl) &&
+                profile.DirectMirrorUrl.StartsWith("steam://", StringComparison.OrdinalIgnoreCase) &&
+                string.IsNullOrEmpty(profile.DownloadUrl))
             {
                 ReportProgress(profile.Name + " resmi ücretsiz Steam oyunu olarak Steam üzerinden başlatılıyor...", 50, "Steam Başlatılıyor");
                 try
@@ -847,6 +849,8 @@ namespace TitanGameHub
                 }
                 return;
             }
+
+            try { ProfileStore.UnmarkGameRemoved(profile); } catch { }
 
             string existingArchive = FindMatchingArchiveInDownloads(profile.Name);
             if (!string.IsNullOrEmpty(existingArchive))
@@ -1073,6 +1077,8 @@ namespace TitanGameHub
 
                                 if (!allowBrowser2)
                                 {
+                                    if (TryTorrentFallback(profile))
+                                        return;
                                     _isBusy = false;
                                     ReportCompleted(profile, false, "Durduruldu: " + (alt.HostLabel ?? "site") + " doğrudan indirmeye izin vermiyor.");
                                     return;
@@ -1998,10 +2004,17 @@ namespace TitanGameHub
                     if (!string.IsNullOrEmpty(profile.RemoteVersion))
                         profile.Version = profile.RemoteVersion;
 
+                    if (ProfileStore.NeedsRealSize(profile.FileSize))
+                    {
+                        string realSz = ProfileStore.ComputeFolderSizeText(profile.WorkingDirectory);
+                        if (!string.IsNullOrEmpty(realSz)) profile.FileSize = realSz;
+                    }
+
                     try { string scErr; DesktopShortcutHelper.CreateGameDesktopShortcut(profile, out scErr); } catch { }
 
                     try
                     {
+                        ProfileStore.UnmarkGameRemoved(profile);
                         List<GameProfile> curList = ProfileStore.LoadProfiles();
                         bool matchedEx = false;
                         foreach (GameProfile p in curList)
@@ -2011,6 +2024,7 @@ namespace TitanGameHub
                                 p.ExecutablePath = profile.ExecutablePath;
                                 p.WorkingDirectory = profile.WorkingDirectory;
                                 p.Version = profile.Version;
+                                if (!ProfileStore.NeedsRealSize(profile.FileSize)) p.FileSize = profile.FileSize;
                                 matchedEx = true;
                                 break;
                             }

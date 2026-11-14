@@ -34,10 +34,14 @@ namespace TitanGameHub
 
             try
             {
-                if (deleteFiles && !string.IsNullOrEmpty(gp.WorkingDirectory) && Directory.Exists(gp.WorkingDirectory))
+                string workDir = !string.IsNullOrEmpty(gp.WorkingDirectory)
+                    ? gp.WorkingDirectory
+                    : (!string.IsNullOrEmpty(gp.ExecutablePath) ? Path.GetDirectoryName(gp.ExecutablePath) : "");
+
+                if (deleteFiles && !string.IsNullOrEmpty(workDir) && Directory.Exists(workDir))
                 {
                     // Güvenlik: yalnızca bilinen kütüphane kökleri altındaysa sil
-                    string target = Path.GetFullPath(gp.WorkingDirectory).TrimEnd('\\');
+                    string target = Path.GetFullPath(workDir).TrimEnd('\\');
                     bool allowed = false;
                     foreach (string root in GamePathResolver.GetLibraryRoots(false))
                     {
@@ -54,7 +58,18 @@ namespace TitanGameHub
                     {
                         try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
                     }
-                    Directory.Delete(target, true);
+                    try
+                    {
+                        Directory.Delete(target, true);
+                    }
+                    catch
+                    {
+                        foreach (string f in Directory.GetFiles(target, "*", SearchOption.AllDirectories))
+                        {
+                            try { File.Delete(f); } catch { }
+                        }
+                        try { Directory.Delete(target, true); } catch { }
+                    }
                     message = "Oyun dosyaları silindi: " + target;
                 }
                 else
@@ -63,6 +78,7 @@ namespace TitanGameHub
                 }
 
                 CleanupGameArtifacts(gp);
+                ProfileStore.MarkGameRemoved(gp);
 
                 List<GameProfile> list = ProfileStore.LoadProfiles();
                 list.RemoveAll(delegate(GameProfile p)

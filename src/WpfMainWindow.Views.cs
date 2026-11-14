@@ -3195,27 +3195,6 @@ namespace TitanGameHub
                         _txtLiveMirrorsStatus.Text = gp.Name + " — Doğrudan güvenli indirme hattı hazır:";
                     }
 
-                    if (!string.IsNullOrEmpty(gp.DownloadUrl))
-                    {
-                        Button btnPage = new Button()
-                        {
-                            Content = "🌐 KAYNAK SAYFASI",
-                            Height = 30,
-                            Padding = new Thickness(12, 0, 12, 0),
-                            Margin = new Thickness(0, 0, 8, 6),
-                            Background = ThemeManager.DarkCardBrush,
-                            Foreground = ThemeManager.ForegroundSubBrush,
-                            BorderBrush = HexBrush("#374151"),
-                            BorderThickness = new Thickness(1),
-                            FontSize = 10,
-                            FontWeight = FontWeights.Bold,
-                            Cursor = Cursors.Hand
-                        };
-                        ApplyRoundedButtonTemplate(btnPage, 3);
-                        btnPage.Click += delegate { MessageBox.Show("İndirme işlemi uygulama içi yapılıyor.", "Bilgi", MessageBoxButton.OK, MessageBoxImage.Information); };
-                        _liveMirrorsWrapPanel.Children.Add(btnPage);
-                    }
-
                     Button btnMagnetSwarm = new Button()
                     {
                         Content = "🧲 P2P TORRENT SWARM",

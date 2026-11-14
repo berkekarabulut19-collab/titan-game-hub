@@ -4031,9 +4031,15 @@ namespace TitanGameHub
 
             _txtHeroTitle.Text = gp.Name;
 
+            if (gp.IsInstalled && ProfileStore.NeedsRealSize(gp.FileSize))
+            {
+                string computedSz = ProfileStore.ComputeFolderSizeText(!string.IsNullOrEmpty(gp.WorkingDirectory) ? gp.WorkingDirectory : System.IO.Path.GetDirectoryName(gp.ExecutablePath));
+                if (!string.IsNullOrEmpty(computedSz)) gp.FileSize = computedSz;
+            }
+
             string safeCat = string.IsNullOrEmpty(gp.Category) ? "Co-Op & Online" : gp.Category;
             string safePlayers = string.IsNullOrEmpty(gp.MaxPlayers) ? "Çok Oyunculu" : gp.MaxPlayers;
-            string safeSize = string.IsNullOrEmpty(gp.FileSize) ? "3.0 GB" : gp.FileSize;
+            string safeSize = string.IsNullOrEmpty(gp.FileSize) ? "Boyut Bilinmiyor" : gp.FileSize;
 
             if (safeCat.Contains("http") || safeCat.Contains("/")) safeCat = "Simülasyon & Co-Op";
             if (safePlayers.Contains("http") || safePlayers.Contains("/")) safePlayers = "16 Kişilik Online Co-Op";
@@ -4057,7 +4063,7 @@ namespace TitanGameHub
 
             _txtSteamBarLastPlayed.Text = gp.LastPlayedText ?? "Henüz Oynanmadı";
             _txtSteamBarPlayTime.Text = gp.FormattedPlayTime;
-            _txtSteamBarSizeVersion.Text = gp.FileSize + " • " + gp.Version;
+            _txtSteamBarSizeVersion.Text = safeSize + " • " + gp.Version;
             _txtSteamBarCloudStatus.Text = gp.IsInstalled ? "✔ Yüklü • Spacewar P2P Hazır" : "☁ Bulut Mağazada Hazır";
 
             _btnHeroFav.Content = gp.IsFavorite ? "★ FAVORİDE" : "☆ FAVORİ";
@@ -4189,27 +4195,6 @@ namespace TitanGameHub
             {
                 AddMirrorDownloadButton(gp, "⚡ KAYITLI DOĞRUDAN SUNUCU", gp.DirectMirrorUrl, true);
             }
-            if (!string.IsNullOrEmpty(gp.DownloadUrl))
-            {
-                Button btnPage = new Button()
-                {
-                    Content = "🌐 KAYNAK SAYFASINI AÇ",
-                    Height = 30,
-                    Padding = new Thickness(12, 0, 12, 0),
-                    Margin = new Thickness(0, 0, 8, 6),
-                    Background = ThemeManager.DarkCardBrush,
-                    Foreground = ThemeManager.ForegroundSubBrush,
-                    BorderBrush = HexBrush("#374151"),
-                    BorderThickness = new Thickness(1),
-                    FontSize = 10,
-                    FontWeight = FontWeights.Bold,
-                    Cursor = Cursors.Hand
-                };
-                ApplyRoundedButtonTemplate(btnPage, 3);
-                btnPage.Click += delegate { MessageBox.Show("İndirme işlemi uygulama içi yapılıyor.", "Bilgi", MessageBoxButton.OK, MessageBoxImage.Information); };
-                _liveMirrorsWrapPanel.Children.Add(btnPage);
-            }
-
             Button btnMagnetSwarm = new Button()
             {
                 Content = "🧲 P2P TORRENT SWARM",

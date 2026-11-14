@@ -967,7 +967,7 @@ namespace TitanGameHub
                 res.LiveVersion = CleanTextFragment(verMatch.Groups[1].Value);
 
             // 2. Parse Game Size
-            Match sizeMatch = Regex.Match(html, @"(?:Game\s+Size|File\s+Size|Repack\s+Size)\s*[:<>/strong\s]*([0-9\.,]+\s*(?:GB|MB))", RegexOptions.IgnoreCase);
+            Match sizeMatch = Regex.Match(html, @"(?:Game\s+Size|File\s+Size|Repack\s+Size|Original\s+Size|Size)\s*[:<>/strong\sbspan]*([0-9]+(?:[\.,][0-9]+)?\s*(?:GB|MB|TB))", RegexOptions.IgnoreCase);
             if (sizeMatch.Success)
                 res.LiveFileSize = CleanTextFragment(sizeMatch.Groups[1].Value);
 
