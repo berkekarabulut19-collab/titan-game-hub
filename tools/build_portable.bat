@@ -20,10 +20,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "foreach ($f in $topFiles) { $p = Join-Path $srcRoot $f; if (Test-Path $p) { Copy-Item $p -Destination $stage -Force } }; " ^
   "Copy-Item (Join-Path $srcRoot 'src') -Destination (Join-Path $stage 'src') -Recurse -Force; " ^
   "Copy-Item (Join-Path $srcRoot 'res') -Destination (Join-Path $stage 'res') -Recurse -Force; " ^
+  "Copy-Item (Join-Path $srcRoot 'tools') -Destination (Join-Path $stage 'tools') -Recurse -Force; " ^
   "$binStage = Join-Path $stage 'bin'; New-Item -ItemType Directory -Path $binStage -Force | Out-Null; " ^
   "Get-ChildItem (Join-Path $srcRoot 'bin') -File | Where-Object { $_.Name -notin @('titan_user.cfg') } | Copy-Item -Destination $binStage -Force; " ^
+  "if (Test-Path (Join-Path $srcRoot 'bin\\data')) { Copy-Item (Join-Path $srcRoot 'bin\\data') -Destination (Join-Path $binStage 'data') -Recurse -Force }; " ^
   "New-Item -ItemType Directory -Path (Join-Path $binStage 'Games') -Force | Out-Null; " ^
-  "New-Item -ItemType Directory -Path (Join-Path $binStage 'data') -Force | Out-Null; " ^
   "New-Item -ItemType Directory -Path (Join-Path $stage 'SaveBackups') -Force | Out-Null; " ^
   "if (Test-Path $zipOut) { Remove-Item $zipOut -Force }; " ^
   "Add-Type -AssemblyName System.IO.Compression.FileSystem; " ^

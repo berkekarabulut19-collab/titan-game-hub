@@ -1,11 +1,15 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.IO.Compression;
+using System.Net;
 using System.Reflection;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
+using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 
@@ -38,15 +42,27 @@ namespace TitanSetup
         public SetupWindow()
         {
             _rootDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\');
+            // Eğer başka PC'de Masaüstü veya İndirilenler'den tek başına çalıştırılıyorsa C:\TitanGameHub'a kur
+            string lowerRoot = _rootDir.ToLowerInvariant();
+            if (!File.Exists(Path.Combine(_rootDir, "bin", "TitanGameHub.exe")) &&
+                (lowerRoot.EndsWith("\\desktop") || lowerRoot.EndsWith("\\downloads") || lowerRoot.Contains("\\temp")))
+            {
+                _rootDir = @"C:\TitanGameHub";
+            }
+
             this.Title = "Titan Game Hub // Kurulum";
-            this.Width = 480;
-            this.Height = 300;
+            this.Width = 510;
+            this.Height = 320;
             this.WindowStartupLocation = WindowStartupLocation.CenterScreen;
             this.ResizeMode = ResizeMode.NoResize;
-            this.Background = BrushFromHex("#0E0A18");
+            this.WindowStyle = WindowStyle.None;
+            this.AllowsTransparency = true;
+            this.Background = Brushes.Transparent;
+            this.Opacity = 0;
             this.FontFamily = new FontFamily("Segoe UI");
 
-            string ico = Path.Combine(_rootDir, "res", "app.ico");
+            string ico = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "app.ico");
+            if (!File.Exists(ico)) ico = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "app.ico");
             if (!File.Exists(ico)) ico = Path.Combine(_rootDir, "bin", "app.ico");
             if (File.Exists(ico))
             {
@@ -55,14 +71,31 @@ namespace TitanSetup
 
             Border card = new Border()
             {
-                Background = BrushFromHex("#151024"),
-                BorderBrush = BrushFromHex("#3A2C63"),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(10),
-                Margin = new Thickness(14),
-                Padding = new Thickness(20)
+                Background = new LinearGradientBrush(
+                    (Color)ColorConverter.ConvertFromString("#151026"),
+                    (Color)ColorConverter.ConvertFromString("#0B0814"),
+                    90),
+                BorderBrush = BrushFromHex("#7C3AED"),
+                BorderThickness = new Thickness(1.2),
+                CornerRadius = new CornerRadius(12),
+                Margin = new Thickness(16),
+                Padding = new Thickness(22),
+                Effect = new DropShadowEffect
+                {
+                    Color = (Color)ColorConverter.ConvertFromString("#7C3AED"),
+                    BlurRadius = 22,
+                    ShadowDepth = 0,
+                    Opacity = 0.55
+                }
             };
+            card.MouseLeftButtonDown += delegate { try { this.DragMove(); } catch { } };
             this.Content = card;
+
+            this.Loaded += delegate
+            {
+                DoubleAnimation fade = new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(320));
+                this.BeginAnimation(Window.OpacityProperty, fade);
+            };
 
             Grid g = new Grid();
             g.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
@@ -70,10 +103,14 @@ namespace TitanSetup
             g.RowDefinitions.Add(new RowDefinition() { Height = GridLength.Auto });
             card.Child = g;
 
-            // Header with logo + title
-            StackPanel hdr = new StackPanel() { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 16) };
-            string png = Path.Combine(_rootDir, "res", "app_logo.png");
-            if (!File.Exists(png)) png = Path.Combine(_rootDir, "bin", "app_logo.png");
+            // Header with logo + title + close button
+            Grid hdrGrid = new Grid() { Margin = new Thickness(0, 0, 0, 16) };
+            hdrGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = new GridLength(1, GridUnitType.Star) });
+            hdrGrid.ColumnDefinitions.Add(new ColumnDefinition() { Width = GridLength.Auto });
+
+            StackPanel hdr = new StackPanel() { Orientation = Orientation.Horizontal };
+            string png = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "app_logo.png");
+            if (!File.Exists(png)) png = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "bin", "app_logo.png");
             if (File.Exists(png))
             {
                 try
@@ -81,8 +118,8 @@ namespace TitanSetup
                     Image img = new Image()
                     {
                         Source = new BitmapImage(new Uri(png, UriKind.Absolute)),
-                        Width = 38,
-                        Height = 38,
+                        Width = 40,
+                        Height = 40,
                         Margin = new Thickness(0, 0, 12, 0)
                     };
                     hdr.Children.Add(img);
@@ -95,19 +132,39 @@ namespace TitanSetup
             {
                 Text = "TITAN GAME HUB",
                 Foreground = Brushes.White,
-                FontSize = 17,
+                FontSize = 18,
                 FontWeight = FontWeights.ExtraBold
             });
             titleStack.Children.Add(new TextBlock()
             {
-                Text = "Sürüm v9.4 • Otomatik Kurulum & Masaüstü Kısayolu",
-                Foreground = BrushFromHex("#A855F7"),
+                Text = "Sürüm v9.4 • Akıllı Kurulum & Masaüstü Kısayolu",
+                Foreground = BrushFromHex("#C084FC"),
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold
             });
             hdr.Children.Add(titleStack);
-            Grid.SetRow(hdr, 0);
-            g.Children.Add(hdr);
+            Grid.SetColumn(hdr, 0);
+            hdrGrid.Children.Add(hdr);
+
+            Button btnClose = new Button()
+            {
+                Content = "✕",
+                Width = 26,
+                Height = 26,
+                VerticalAlignment = VerticalAlignment.Top,
+                Background = Brushes.Transparent,
+                Foreground = BrushFromHex("#9CA3AF"),
+                BorderThickness = new Thickness(0),
+                FontSize = 13,
+                FontWeight = FontWeights.Bold,
+                Cursor = System.Windows.Input.Cursors.Hand
+            };
+            btnClose.Click += delegate { this.Close(); };
+            Grid.SetColumn(btnClose, 1);
+            hdrGrid.Children.Add(btnClose);
+
+            Grid.SetRow(hdrGrid, 0);
+            g.Children.Add(hdrGrid);
 
             // Center progress
             StackPanel mid = new StackPanel() { VerticalAlignment = VerticalAlignment.Center };
@@ -203,7 +260,13 @@ namespace TitanSetup
 
                 if (!File.Exists(exePath))
                 {
-                    SetProgress(60, "[2/4] TitanGameHub.exe derleniyor...", "csc.exe (.NET 4.x)");
+                    SetProgress(50, "[2/4] Güncel paket GitHub üzerinden indiriliyor...", "titan-game-hub (main)");
+                    BootstrapFromGitHub(_rootDir);
+                }
+
+                if (!File.Exists(exePath))
+                {
+                    SetProgress(65, "[2/4] TitanGameHub.exe derleniyor...", "csc.exe (.NET 4.x)");
                     string compileBat = Path.Combine(_rootDir, "tools", "compile.bat");
                     if (File.Exists(compileBat))
                     {
@@ -275,10 +338,62 @@ namespace TitanSetup
         {
             Dispatcher.BeginInvoke(new Action(delegate
             {
-                _pb.Value = val;
+                DoubleAnimation anim = new DoubleAnimation(_pb.Value, val, TimeSpan.FromMilliseconds(260));
+                _pb.BeginAnimation(ProgressBar.ValueProperty, anim);
                 _txtStep.Text = step;
                 _txtDetail.Text = detail;
             }));
+        }
+
+        private static void BootstrapFromGitHub(string targetRoot)
+        {
+            string tmpZip = Path.Combine(Path.GetTempPath(), "titan_setup_" + Guid.NewGuid().ToString("N") + ".zip");
+            string tmpExt = Path.Combine(Path.GetTempPath(), "titan_ext_" + Guid.NewGuid().ToString("N"));
+            try
+            {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Proxy = null;
+                    wc.Headers.Add("User-Agent", "TitanGameHub-Setup/9.4");
+                    wc.DownloadFile("https://github.com/berkekarabulut19-collab/titan-game-hub/archive/refs/heads/main.zip", tmpZip);
+                }
+
+                if (!File.Exists(tmpZip) || new FileInfo(tmpZip).Length < 10240) return;
+                ZipFile.ExtractToDirectory(tmpZip, tmpExt);
+
+                string[] dirs = Directory.GetDirectories(tmpExt);
+                if (dirs.Length == 0) return;
+                string extractedRoot = dirs[0];
+
+                foreach (string sub in new string[] { "bin", "res", "src", "tools" })
+                {
+                    string srcSub = Path.Combine(extractedRoot, sub);
+                    string dstSub = Path.Combine(targetRoot, sub);
+                    if (Directory.Exists(srcSub)) CopyDirectoryRecursive(srcSub, dstSub);
+                }
+            }
+            catch { }
+            finally
+            {
+                try { if (File.Exists(tmpZip)) File.Delete(tmpZip); } catch { }
+                try { if (Directory.Exists(tmpExt)) Directory.Delete(tmpExt, true); } catch { }
+            }
+        }
+
+        private static void CopyDirectoryRecursive(string srcDir, string dstDir)
+        {
+            Directory.CreateDirectory(dstDir);
+            foreach (string file in Directory.GetFiles(srcDir))
+            {
+                string name = Path.GetFileName(file);
+                if (string.Equals(name, "titan_user.cfg", StringComparison.OrdinalIgnoreCase)) continue;
+                File.Copy(file, Path.Combine(dstDir, name), true);
+            }
+            foreach (string sub in Directory.GetDirectories(srcDir))
+            {
+                CopyDirectoryRecursive(sub, Path.Combine(dstDir, Path.GetFileName(sub)));
+            }
         }
 
         private static void CopyIfExists(string src, string dst)
