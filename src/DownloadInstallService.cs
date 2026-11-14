@@ -1037,6 +1037,10 @@ namespace TitanGameHub
                             }
                             return; // Successfully downloaded and installed 100% inside the app!
                         }
+                        else if (!string.IsNullOrEmpty(cachedMirrorUrl) && string.Equals(mirror.Url, cachedMirrorUrl, StringComparison.OrdinalIgnoreCase))
+                        {
+                            lock (_preferredMirrorCache) { _preferredMirrorCache.Remove(cacheKey); }
+                        }
 
                         // Kullanıcı iptal etti: kalan aynaları denemeyin, kısmi dosyayı koruyun.
                         if (_cancelRequested)
