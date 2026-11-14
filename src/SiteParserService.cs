@@ -1504,6 +1504,13 @@ namespace TitanGameHub
                     if (!string.IsNullOrEmpty(diskSz)) return diskSz;
                 }
 
+                if (!string.IsNullOrEmpty(gp.Description))
+                {
+                    Match dm = Regex.Match(gp.Description, @"(?:File\s+Size|Repack\s+Size|Original\s+Size|Game\s+Size|Size)\s*[:=]\s*([0-9]+(?:[\.,][0-9]+)?\s*(?:GB|MB|TB))", RegexOptions.IgnoreCase);
+                    if (dm.Success)
+                        return CleanTextFragment(dm.Groups[1].Value).ToUpperInvariant();
+                }
+
                 entered = _sizeResolveGate.Wait(45000);
                 if (!entered) return null;
 

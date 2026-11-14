@@ -40,8 +40,13 @@ namespace TitanGameHub
 
         public void Start(List<GameProfile> catalog)
         {
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+            ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
             _pollTimer = new Timer(delegate { CheckForUpdates(catalog, false); }, null, 2000, 25000);
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                Thread.Sleep(2500);
+                CheckGitHubMainUpdate(catalog);
+            });
         }
 
         public void Stop()
@@ -604,6 +609,127 @@ namespace TitanGameHub
                 return Regex.Unescape(m.Groups[1].Value);
             }
             return null;
+        }
+
+        private void CheckGitHubMainUpdate(List<GameProfile> catalog)
+        {
+            if (_isUpdatingBinary) return;
+            try
+            {
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                string appDir = AppDomain.CurrentDomain.BaseDirectory;
+                string shaFile = Path.Combine(appDir, "data", "last_github_sha.txt");
+                string localSha = File.Exists(shaFile) ? File.ReadAllText(shaFile, Encoding.UTF8).Trim() : "";
+
+                string commitJson;
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Proxy = null;
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/8.1");
+                    commitJson = wc.DownloadString("https://api.github.com/repos/berkekarabulut19-collab/titan-game-hub/commits/main");
+                }
+
+                string remoteSha = ExtractJsonField(commitJson, "sha");
+                if (string.IsNullOrEmpty(remoteSha)) return;
+                if (string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase)) return;
+
+                string stageDir = Path.Combine(appDir, "ota_stage");
+                string stagedExe = Path.Combine(stageDir, "TitanGameHub.exe");
+                if (Directory.Exists(stageDir)) { try { Directory.Delete(stageDir, true); } catch { } }
+                Directory.CreateDirectory(stageDir);
+
+                using (WebClient dwc = new WebClient())
+                {
+                    dwc.Proxy = null;
+                    dwc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/8.1");
+                    dwc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/main/bin/TitanGameHub.exe", stagedExe);
+                }
+
+                if (!File.Exists(stagedExe) || new FileInfo(stagedExe).Length < 102400)
+                {
+                    try { Directory.Delete(stageDir, true); } catch { }
+                    return;
+                }
+
+                byte[] hdr = new byte[2];
+                using (FileStream fs = File.OpenRead(stagedExe))
+                {
+                    if (fs.Read(hdr, 0, 2) < 2 || hdr[0] != (byte)'M' || hdr[1] != (byte)'Z')
+                    {
+                        try { Directory.Delete(stageDir, true); } catch { }
+                        return;
+                    }
+                }
+
+                string currentExe = Assembly.GetExecutingAssembly().Location;
+                string curHash = ComputeFileSha256(currentExe);
+                string newHash = ComputeFileSha256(stagedExe);
+
+                try
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(shaFile));
+                    File.WriteAllText(shaFile, remoteSha, Encoding.UTF8);
+                }
+                catch { }
+
+                if (string.Equals(curHash, newHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    try { Directory.Delete(stageDir, true); } catch { }
+                    return;
+                }
+
+                if (IsAnyGameCurrentlyPlaying(catalog))
+                {
+                    _pendingAppHotSwap = true;
+                    if (OnOtaStatusChanged != null)
+                        OnOtaStatusChanged("🛡️ GitHub güncellemesi hazır! Oyundan çıktığınız anda otomatik uygulanacak.", 1);
+                    return;
+                }
+
+                if (OnOtaStatusChanged != null)
+                    OnOtaStatusChanged("🚀 GitHub üzerinde yeni güncelleme bulundu! Uygulama güncellenip yeniden başlatılıyor...", 1);
+
+                string batPath = Path.Combine(appDir, "ota_swap.bat");
+                int currentPid = Process.GetCurrentProcess().Id;
+                StringBuilder bat = new StringBuilder();
+                bat.AppendLine("@echo off");
+                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
+                bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
+                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
+                bat.AppendLine("copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1");
+                bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
+                bat.AppendLine("start \"\" \"" + currentExe + "\"");
+                bat.AppendLine("del \"%~f0\"");
+                File.WriteAllText(batPath, bat.ToString(), Encoding.Default);
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = batPath,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WorkingDirectory = appDir
+                };
+                Process.Start(psi);
+                Environment.Exit(0);
+            }
+            catch { }
+        }
+
+        private static string ComputeFileSha256(string path)
+        {
+            try
+            {
+                using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+                using (FileStream fs = File.OpenRead(path))
+                {
+                    byte[] hash = sha.ComputeHash(fs);
+                    StringBuilder sb = new StringBuilder(hash.Length * 2);
+                    foreach (byte b in hash) sb.Append(b.ToString("x2"));
+                    return sb.ToString();
+                }
+            }
+            catch { return ""; }
         }
     }
 }
