@@ -30,6 +30,12 @@ namespace TitanGameHub
         {
             try
             {
+                ServicePointManager.DefaultConnectionLimit = 64;
+                ServicePointManager.Expect100Continue = false;
+            }
+            catch { }
+            try
+            {
                 string[] cfgPaths = new string[]
                 {
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "titan_user.cfg"),
@@ -1181,6 +1187,162 @@ namespace TitanGameHub
             });
         }
 
+        /// <summary>
+        /// 8-segment parallel HTTP Range downloader (IDM/aria2c style) for maximum throughput.
+        /// Falls back cleanly to single-stream if server rejects 206 Partial Content or any segment fails.
+        /// </summary>
+        private bool TryParallelSegmentedDownload(
+            GameProfile profile, string directUrl, string partialFile, long fullSize,
+            string customReferer, string authCookie, int segmentCount)
+        {
+            if (fullSize < 8L * 1024 * 1024 || segmentCount < 2) return false;
+            try
+            {
+                using (FileStream pre = new FileStream(partialFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+                {
+                    pre.SetLength(fullSize);
+                }
+
+                long chunkSize = fullSize / segmentCount;
+                long totalWritten = 0;
+                int failedCount = 0;
+                int activeWorkers = segmentCount;
+                ManualResetEvent allDone = new ManualResetEvent(false);
+
+                for (int i = 0; i < segmentCount; i++)
+                {
+                    int segIdx = i;
+                    long segStart = segIdx * chunkSize;
+                    long segEnd = (segIdx == segmentCount - 1) ? (fullSize - 1) : ((segIdx + 1) * chunkSize - 1);
+
+                    Thread t = new Thread(delegate()
+                    {
+                        long curPos = segStart;
+                        bool segOk = false;
+                        for (int attempt = 0; attempt < 3 && !segOk && !_cancelRequested; attempt++)
+                        {
+                            try
+                            {
+                                HttpWebRequest sReq = (HttpWebRequest)WebRequest.Create(directUrl);
+                                sReq.Proxy = null;
+                                sReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+                                sReq.Referer = customReferer;
+                                sReq.Timeout = 20000;
+                                sReq.ReadWriteTimeout = 35000;
+                                sReq.ServicePoint.UseNagleAlgorithm = false;
+                                sReq.ServicePoint.ConnectionLimit = 64;
+                                sReq.ServicePoint.ReceiveBufferSize = 2097152;
+                                if (!string.IsNullOrEmpty(authCookie)) sReq.Headers["Cookie"] = authCookie;
+                                sReq.AddRange(curPos, segEnd);
+
+                                using (HttpWebResponse sResp = (HttpWebResponse)sReq.GetResponse())
+                                {
+                                    if (sResp.StatusCode != HttpStatusCode.PartialContent)
+                                        break;
+
+                                    using (Stream rs = sResp.GetResponseStream())
+                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+                                    {
+                                        try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
+                                        fs.Seek(curPos, SeekOrigin.Begin);
+                                        byte[] buf = new byte[524288]; // 512 KB per segment
+                                        long remaining = (segEnd - curPos) + 1;
+                                        while (remaining > 0)
+                                        {
+                                            while (_isPaused && !_cancelRequested) Thread.Sleep(200);
+                                            if (_cancelRequested) break;
+
+                                            int toRead = (int)Math.Min(buf.Length, remaining);
+                                            int r = rs.Read(buf, 0, toRead);
+                                            if (r <= 0) break;
+
+                                            fs.Write(buf, 0, r);
+                                            curPos += r;
+                                            remaining -= r;
+                                            Interlocked.Add(ref totalWritten, r);
+                                        }
+                                        if (remaining == 0) segOk = true;
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                if (attempt < 2 && !_cancelRequested) Thread.Sleep(400);
+                            }
+                        }
+
+                        if (!segOk) Interlocked.Increment(ref failedCount);
+                        if (Interlocked.Decrement(ref activeWorkers) == 0)
+                        {
+                            try { allDone.Set(); } catch { }
+                        }
+                    });
+                    t.IsBackground = true;
+                    t.Start();
+                }
+
+                Stopwatch sw = Stopwatch.StartNew();
+                long lastBytes = 0;
+                long lastMs = 0;
+                double smoothSpeed = 0.0;
+                double mbTot = fullSize / (1024.0 * 1024.0);
+
+                while (!allDone.WaitOne(150))
+                {
+                    if (_cancelRequested) break;
+                    long cur = Interlocked.Read(ref totalWritten);
+                    long nowMs = sw.ElapsedMilliseconds;
+                    double secDelta = (nowMs - lastMs) / 1000.0;
+                    long bytesDelta = cur - lastBytes;
+                    lastMs = nowMs;
+                    lastBytes = cur;
+
+                    double inst = (secDelta > 0.001) ? ((bytesDelta / (1024.0 * 1024.0)) / secDelta) : 0.0;
+                    smoothSpeed = (smoothSpeed <= 0.01) ? inst : (0.30 * inst + 0.70 * smoothSpeed);
+
+                    double mbRec = cur / (1024.0 * 1024.0);
+                    int pct = (int)Math.Min(85, (cur * 85) / fullSize);
+                    string eta = "";
+                    if (smoothSpeed > 0.05 && cur < fullSize)
+                    {
+                        double remSec = (fullSize - cur) / (smoothSpeed * 1048576.0);
+                        if (remSec > 0 && remSec < 86400)
+                        {
+                            TimeSpan ts = TimeSpan.FromSeconds(remSec);
+                            eta = ts.TotalHours >= 1
+                                ? string.Format(" • kalan {0:0} sa {1:00} dk", Math.Floor(ts.TotalHours), ts.Minutes)
+                                : string.Format(" • kalan {0:0} dk {1:00} sn", ts.Minutes, ts.Seconds);
+                        }
+                    }
+
+                    ReportProgress(
+                        string.Format("[2/4] {0} İndiriliyor (8x Turbo): {1:0.0} MB / {2:0.0} MB{3}", profile.Name, mbRec, mbTot, eta),
+                        pct,
+                        string.Format("{0:0.0} MB/sn", smoothSpeed));
+                }
+
+                allDone.Dispose();
+
+                long finalBytes = Interlocked.Read(ref totalWritten);
+                if (!_cancelRequested && failedCount == 0 && finalBytes == fullSize)
+                {
+                    ReportProgress(
+                        string.Format("[2/4] {0} İndirme Tamamlandı: {1:0.0} MB — Arşiv doğrulanıyor...", profile.Name, finalBytes / 1048576.0),
+                        85,
+                        "Doğrulanıyor");
+                    return true;
+                }
+
+                try { if (File.Exists(partialFile)) File.Delete(partialFile); } catch { }
+                return false;
+            }
+            catch
+            {
+                try { if (File.Exists(partialFile)) File.Delete(partialFile); } catch { }
+                return false;
+            }
+        }
+
         private bool TryDirectStreamDownload(GameProfile profile, string url)
         {
             string authCookie;
@@ -1353,8 +1515,48 @@ namespace TitanGameHub
 
                         expectedTotal = fullSize;
 
-                        using (Stream rs = resp.GetResponseStream())
-                        using (FileStream fs = new FileStream(partialFile, mode, FileAccess.Write, FileShare.Read))
+                        bool multiDone = false;
+                        bool tryMulti = (existingLength == 0 && fullSize >= 8L * 1024 * 1024 &&
+                                         SpeedLimitBytesPerSec <= 0 && !AutoThrottleWhenGameRunning &&
+                                         string.Equals(resp.Headers["Accept-Ranges"], "bytes", StringComparison.OrdinalIgnoreCase));
+                        if (tryMulti)
+                        {
+                            try { resp.Close(); } catch { }
+                            if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, 8))
+                            {
+                                receivedTotal = fullSize;
+                                multiDone = true;
+                            }
+                            else if (_cancelRequested)
+                            {
+                                return false;
+                            }
+                        }
+
+                        if (!multiDone)
+                        {
+                            HttpWebResponse activeResp = resp;
+                            HttpWebResponse reopenedResp = null;
+                            if (tryMulti)
+                            {
+                                HttpWebRequest fbReq = (HttpWebRequest)WebRequest.Create(directUrl);
+                                fbReq.Proxy = null;
+                                fbReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+                                fbReq.Referer = customReferer;
+                                fbReq.Timeout = 20000;
+                                fbReq.ReadWriteTimeout = 35000;
+                                fbReq.ServicePoint.UseNagleAlgorithm = false;
+                                fbReq.ServicePoint.ConnectionLimit = 64;
+                                fbReq.ServicePoint.ReceiveBufferSize = 2097152;
+                                if (!string.IsNullOrEmpty(authCookie)) fbReq.Headers["Cookie"] = authCookie;
+                                reopenedResp = (HttpWebResponse)fbReq.GetResponse();
+                                activeResp = reopenedResp;
+                            }
+
+                            try
+                            {
+                                using (Stream rs = activeResp.GetResponseStream())
+                                using (FileStream fs = new FileStream(partialFile, mode, FileAccess.Write, FileShare.Read))
                         {
                             try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
                             byte[] buf = new byte[1048576]; // 1MB ultra-throughput socket buffer
@@ -1473,6 +1675,12 @@ namespace TitanGameHub
                                 string.Format("[2/4] {0} İndirme Tamamlandı: {1:0.0} MB — Arşiv doğrulanıyor...", profile.Name, receivedTotal / 1048576.0),
                                 85,
                                 "Doğrulanıyor");
+                                }
+                            }
+                            finally
+                            {
+                                if (reopenedResp != null) { try { reopenedResp.Close(); } catch { } }
+                            }
                         }
                     }
 

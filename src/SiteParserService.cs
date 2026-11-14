@@ -115,7 +115,7 @@ namespace TitanGameHub
         }
 
         private static readonly Regex JunkGameRegex = new Regex(
-            @"\b(hentai|eroge|waifu|ecchi|succubus|oppai|furry|harem|sex|porn|nsfw|uncensored|lewd|milf|femboy|yuri|yaoi|dating\s*sim|senpai|neko|bishoujo|visual\s*novel|idol|kawaii|loli|shota|xxx|18\+|boobs|tits|panties|strip|lust|naughty|brothel|stripper|isekai|otome|galgame)\b",
+            @"\b(hentai|eroge|waifu|ecchi|succubus|oppai|furry|harem|sex|porn|nsfw|uncensored|lewd|milf|femboy|yuri|yaoi|dating\s*sim|senpai|neko|bishoujo|visual\s*novel|idol|kawaii|loli|shota|xxx|18\+|boobs|tits|panties|strip|lust|naughty|brothel|stripper|isekai|otome|galgame|upcoming\s*repacks|updates\s*digest)\b|repack\s+updated$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         public static bool IsFilteredJunkGame(string title, string desc)
