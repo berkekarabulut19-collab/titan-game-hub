@@ -376,9 +376,28 @@ namespace TitanGameHub
                             }
                         }
 
-                        if (!string.IsNullOrEmpty(gp.FileSize) && gp.FileSize.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                        if (!string.IsNullOrEmpty(gp.FileSize) &&
+                            (gp.FileSize.StartsWith("http", StringComparison.OrdinalIgnoreCase) ||
+                             gp.FileSize.Length > 24 ||
+                             gp.FileSize.IndexOf("Direct Download", StringComparison.OrdinalIgnoreCase) >= 0))
                         {
-                            gp.FileSize = "2.5 GB";
+                            gp.FileSize = "Hazır Paket";
+                        }
+
+                        if (!string.IsNullOrEmpty(gp.DirectMirrorUrl) &&
+                            !gp.DirectMirrorUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+                            !gp.DirectMirrorUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase) &&
+                            !gp.DirectMirrorUrl.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase))
+                        {
+                            gp.DirectMirrorUrl = "";
+                        }
+
+                        if (!string.IsNullOrEmpty(gp.DownloadUrl) &&
+                            (!gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ||
+                             gp.DownloadUrl.IndexOf("store.steampowered.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                             Regex.IsMatch(gp.DownloadUrl, @"^https?://[^/]+/?$")))
+                        {
+                            gp.DownloadUrl = "";
                         }
 
                         if (!string.IsNullOrEmpty(gp.MaxPlayers) && gp.MaxPlayers.Length <= 8 && !gp.MaxPlayers.Contains(" "))
