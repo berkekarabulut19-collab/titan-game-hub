@@ -989,6 +989,22 @@ namespace TitanGameHub
                             sizeTarget.FileSize = resolvedSize;
                             try
                             {
+                                if (_allProfiles != null)
+                                {
+                                    foreach (GameProfile ap in _allProfiles)
+                                    {
+                                        if (ap != null && string.Equals(ap.Id, sizeTarget.Id, StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            ap.FileSize = resolvedSize;
+                                            break;
+                                        }
+                                    }
+                                    ProfileStore.SaveProfiles(_allProfiles);
+                                }
+                            }
+                            catch { }
+                            try
+                            {
                                 Dispatcher.BeginInvoke(new Action(delegate
                                 {
                                     sizeBadgeText.Text = resolvedSize;

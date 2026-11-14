@@ -1431,9 +1431,12 @@ namespace TitanGameHub
             return null;
         }
 
+        private static readonly System.Threading.SemaphoreSlim _sizeResolveGate = new System.Threading.SemaphoreSlim(3, 3);
+
         public static string ResolveLiveFileSizeQuick(GameProfile gp)
         {
             if (gp == null) return null;
+            bool entered = false;
             try
             {
                 if (gp.IsInstalled)
@@ -1442,11 +1445,33 @@ namespace TitanGameHub
                     if (!string.IsNullOrEmpty(diskSz)) return diskSz;
                 }
 
+                entered = _sizeResolveGate.Wait(4000);
+                if (!entered) return null;
+
                 if (!string.IsNullOrEmpty(gp.DownloadUrl) && gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
                     SitePageAnalysis an = AnalyzeGameOnSteamRip(gp);
                     if (an != null && !string.IsNullOrEmpty(an.LiveFileSize))
                         return an.LiveFileSize;
+
+                    try
+                    {
+                        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                        using (WebClient jwc = new WebClient())
+                        {
+                            jwc.Proxy = null;
+                            jwc.Encoding = Encoding.UTF8;
+                            jwc.Headers.Add("User-Agent", "TitanGameHub/1.0");
+                            string md = jwc.DownloadString("https://r.jina.ai/" + gp.DownloadUrl);
+                            if (!string.IsNullOrEmpty(md))
+                            {
+                                Match jm = Regex.Match(md, @"(?:Game\s+Size|File\s+Size|Repack\s+Size|Original\s+Size|Size)\s*[:\*]*\s*([0-9]+(?:[\.,][0-9]+)?\s*(?:GB|MB|TB))", RegexOptions.IgnoreCase);
+                                if (jm.Success)
+                                    return CleanTextFragment(jm.Groups[1].Value).ToUpperInvariant();
+                            }
+                        }
+                    }
+                    catch { }
                 }
 
                 if (!string.IsNullOrEmpty(gp.DirectMirrorUrl) && gp.DirectMirrorUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
@@ -1469,6 +1494,10 @@ namespace TitanGameHub
                 }
             }
             catch { }
+            finally
+            {
+                if (entered) { try { _sizeResolveGate.Release(); } catch { } }
+            }
             return null;
         }
     }
