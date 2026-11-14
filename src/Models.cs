@@ -433,7 +433,11 @@ namespace TitanGameHub
                              gp.FileSize.Length > 24 ||
                              gp.FileSize.IndexOf("Direct Download", StringComparison.OrdinalIgnoreCase) >= 0))
                         {
-                            gp.FileSize = "Hazır Paket";
+                            gp.FileSize = DownloadInstallService.GetDownloadSizeDisplay(gp);
+                        }
+                        if (NeedsRealSize(gp.FileSize))
+                        {
+                            gp.FileSize = DownloadInstallService.GetDownloadSizeDisplay(gp);
                         }
 
                         if (!string.IsNullOrEmpty(gp.DirectMirrorUrl) &&
