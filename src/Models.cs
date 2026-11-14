@@ -473,49 +473,57 @@ namespace TitanGameHub
             return list;
         }
 
+        private static readonly object SaveSync = new object();
+
         public static void SaveProfiles(List<GameProfile> profiles)
         {
-            try
+            if (profiles == null) return;
+            lock (SaveSync)
             {
-                List<string> lines = new List<string>();
-                lines.Add("# TitanGameHub v8.0 STEAM EDITION Catalog Database");
-                foreach (GameProfile g in profiles)
+                try
                 {
-                    string safeId = (g.Id ?? Guid.NewGuid().ToString("N")).Replace("|", "-").Trim();
-                    string safeName = (g.Name ?? "Game").Replace("|", "-").Trim();
-                    string safeCat = (g.Category ?? "Co-Op").Replace("|", "-").Trim();
-                    string safeExe = (g.ExecutablePath ?? "").Replace("|", "-").Trim();
-                    string safeWork = (g.WorkingDirectory ?? "").Replace("|", "-").Trim();
-                    string safeVer = (g.Version ?? "v1.0").Replace("|", "-").Trim();
-                    string safeRemVer = (g.RemoteVersion ?? "v1.0").Replace("|", "-").Trim();
-                    string safeDl = (g.DownloadUrl ?? "https://steamrip.com/").Replace("|", "-").Trim();
-                    string safeFix = (g.OnlineFixUrl ?? "https://online-fix.me/").Replace("|", "-").Trim();
-                    string safeAppId = (g.SteamAppId ?? "480").Replace("|", "-").Trim();
-                    string safeDesc = (g.Description ?? "").Replace("|", "/").Replace("\r", "").Replace("\n", " ").Trim();
-                    string safeMaxP = (g.MaxPlayers ?? "4 Kişilik Co-Op").Replace("|", "-").Trim();
-                    string safeBanner = (g.BannerUrl ?? "").Replace("|", "-").Trim();
-                    string safeCapsule = (g.CapsuleUrl ?? "").Replace("|", "-").Trim();
-                    string safeSize = (g.FileSize ?? "2.5 GB").Replace("|", "-").Trim();
-                    string safeDirect = (g.DirectMirrorUrl ?? "").Replace("|", "-").Trim();
-                    string safeFav = g.IsFavorite ? "1" : "0";
-                    string safeTime = g.PlayTimeMinutes.ToString();
-                    string safeLast = (g.LastPlayedText ?? "Henüz Oynanmadı").Replace("|", "-").Trim();
-
-                    string line = string.Join("|", new string[]
+                    List<GameProfile> snapshot = new List<GameProfile>(profiles);
+                    List<string> lines = new List<string>();
+                    lines.Add("# TitanGameHub v8.0 STEAM EDITION Catalog Database");
+                    foreach (GameProfile g in snapshot)
                     {
-                        safeId, safeName, safeCat, safeExe, safeWork,
-                        safeVer, safeRemVer, safeDl, safeFix, safeAppId,
-                        safeDesc, safeMaxP, safeBanner, safeCapsule, safeSize,
-                        safeDirect, safeFav, safeTime, safeLast
-                    });
-                    lines.Add(line);
+                        if (g == null) continue;
+                        string safeId = (g.Id ?? Guid.NewGuid().ToString("N")).Replace("|", "-").Trim();
+                        string safeName = (g.Name ?? "Game").Replace("|", "-").Trim();
+                        string safeCat = (g.Category ?? "Co-Op").Replace("|", "-").Trim();
+                        string safeExe = (g.ExecutablePath ?? "").Replace("|", "-").Trim();
+                        string safeWork = (g.WorkingDirectory ?? "").Replace("|", "-").Trim();
+                        string safeVer = (g.Version ?? "v1.0").Replace("|", "-").Trim();
+                        string safeRemVer = (g.RemoteVersion ?? "v1.0").Replace("|", "-").Trim();
+                        string safeDl = (g.DownloadUrl ?? "").Replace("|", "-").Trim();
+                        string safeFix = (g.OnlineFixUrl ?? "").Replace("|", "-").Trim();
+                        string safeAppId = (g.SteamAppId ?? "480").Replace("|", "-").Trim();
+                        string safeDesc = (g.Description ?? "").Replace("|", "/").Replace("\r", "").Replace("\n", " ").Trim();
+                        string safeMaxP = (g.MaxPlayers ?? "4 Kişilik Co-Op").Replace("|", "-").Trim();
+                        string safeBanner = (g.BannerUrl ?? "").Replace("|", "-").Trim();
+                        string safeCapsule = (g.CapsuleUrl ?? "").Replace("|", "-").Trim();
+                        string safeSize = (g.FileSize ?? "Hazır Paket").Replace("|", "-").Trim();
+                        string safeDirect = (g.DirectMirrorUrl ?? "").Replace("|", "-").Trim();
+                        string safeFav = g.IsFavorite ? "1" : "0";
+                        string safeTime = g.PlayTimeMinutes.ToString();
+                        string safeLast = (g.LastPlayedText ?? "Henüz Oynanmadı").Replace("|", "-").Trim();
+
+                        string line = string.Join("|", new string[]
+                        {
+                            safeId, safeName, safeCat, safeExe, safeWork,
+                            safeVer, safeRemVer, safeDl, safeFix, safeAppId,
+                            safeDesc, safeMaxP, safeBanner, safeCapsule, safeSize,
+                            safeDirect, safeFav, safeTime, safeLast
+                        });
+                        lines.Add(line);
+                    }
+                    string tmpPath = ConfigPath + ".tmp";
+                    File.WriteAllLines(tmpPath, lines.ToArray(), Encoding.UTF8);
+                    if (File.Exists(ConfigPath)) File.Delete(ConfigPath);
+                    File.Move(tmpPath, ConfigPath);
                 }
-                string tmpPath = ConfigPath + ".tmp";
-                File.WriteAllLines(tmpPath, lines.ToArray(), Encoding.UTF8);
-                if (File.Exists(ConfigPath)) File.Delete(ConfigPath);
-                File.Move(tmpPath, ConfigPath);
+                catch { }
             }
-            catch { }
         }
 
         public static int AutoDiscoverInstalledGames(List<GameProfile> catalog)
