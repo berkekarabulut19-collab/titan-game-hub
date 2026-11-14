@@ -1046,9 +1046,11 @@ namespace TitanGameHub
                         {
                             try
                             {
+                                string fallbackSz = DownloadInstallService.GetDownloadSizeDisplay(sizeTarget);
                                 Dispatcher.BeginInvoke(new Action(delegate
                                 {
-                                    sizeBadge.Visibility = Visibility.Collapsed;
+                                    sizeBadgeText.Text = fallbackSz;
+                                    sizeBadge.Visibility = Visibility.Visible;
                                 }));
                             }
                             catch { }
