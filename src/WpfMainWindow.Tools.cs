@@ -353,6 +353,107 @@ namespace TitanGameHub
             });
         }
 
+        private void ImportGameBySteamSearchDialog()
+        {
+            string query = TextPromptDialog.Prompt(this, "Titan // Steam AppID veya İsimle Oyun Ekle",
+                "Katalogda olmayan bir oyunun Steam AppID numarasını (örn: 1245620) veya adını yazın:",
+                "");
+            if (string.IsNullOrWhiteSpace(query)) return;
+            query = query.Trim();
+
+            _txtBottomStatus.Text = "🔍 Steam Store üzerinden oyun bilgileri ve boyutu çekiliyor...";
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                try
+                {
+                    string appId = null;
+                    string gameName = query;
+                    string coverUrl = null;
+                    string desc = "";
+                    string sizeText = "Bilinmiyor";
+
+                    using (WebClient wc = new WebClient())
+                    {
+                        wc.Encoding = Encoding.UTF8;
+                        wc.Headers[HttpRequestHeader.UserAgent] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+
+                        bool isDigits = System.Text.RegularExpressions.Regex.IsMatch(query, @"^\d{2,8}$");
+                        if (isDigits)
+                        {
+                            appId = query;
+                        }
+                        else
+                        {
+                            string searchJson = wc.DownloadString("https://store.steampowered.com/api/storesearch/?term=" + Uri.EscapeDataString(query) + "&l=english&cc=US");
+                            System.Text.RegularExpressions.Match idMatch = System.Text.RegularExpressions.Regex.Match(searchJson, @"""id""\s*:\s*(\d+)");
+                            if (idMatch.Success) appId = idMatch.Groups[1].Value;
+                        }
+
+                        if (!string.IsNullOrEmpty(appId))
+                        {
+                            string detailsJson = wc.DownloadString("https://store.steampowered.com/api/appdetails?appids=" + appId + "&l=english");
+                            System.Text.RegularExpressions.Match nm = System.Text.RegularExpressions.Regex.Match(detailsJson, @"""name""\s*:\s*""([^""]+)""");
+                            if (nm.Success) gameName = System.Text.RegularExpressions.Regex.Unescape(nm.Groups[1].Value);
+
+                            System.Text.RegularExpressions.Match imgM = System.Text.RegularExpressions.Regex.Match(detailsJson, @"""header_image""\s*:\s*""([^""]+)""");
+                            if (imgM.Success) coverUrl = imgM.Groups[1].Value.Replace("\\/", "/");
+                            else coverUrl = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + appId + "/header.jpg";
+
+                            System.Text.RegularExpressions.Match descM = System.Text.RegularExpressions.Regex.Match(detailsJson, @"""short_description""\s*:\s*""([^""]{10,400})""");
+                            if (descM.Success) desc = System.Text.RegularExpressions.Regex.Unescape(descM.Groups[1].Value);
+
+                            System.Text.RegularExpressions.Match storM = System.Text.RegularExpressions.Regex.Match(detailsJson, @"(?:Storage|Hard Drive|Disk Space)[^0-9]{0,25}(\d+(?:[.,]\d+)?)\s*(GB|MB)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                            if (storM.Success) sizeText = storM.Groups[1].Value.Replace(",", ".") + " " + storM.Groups[2].Value.ToUpperInvariant();
+                        }
+                    }
+
+                    if (string.IsNullOrEmpty(appId))
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            _txtBottomStatus.Text = "Steam'de eşleşen oyun bulunamadı: " + query;
+                            MessageBox.Show("Steam'de eşleşen oyun bulunamadı.", "Titan // Steam Ekle", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }));
+                        return;
+                    }
+
+                    GameProfile gp = new GameProfile()
+                    {
+                        Id = "steam-" + appId,
+                        Name = gameName,
+                        SteamAppId = appId,
+                        Category = "Steam Katalog",
+                        MaxPlayers = "Online / Co-Op",
+                        FileSize = sizeText,
+                        BannerUrl = coverUrl,
+                        Description = desc,
+                        Version = "v1.0"
+                    };
+
+                    Dispatcher.BeginInvoke(new Action(delegate
+                    {
+                        GameProfile canonical = EnsureGameInLibraryCatalog(gp);
+                        ProfileStore.SaveProfiles(_allProfiles);
+                        GameMaintenanceService.RecordActivity("KATALOG EKLENDİ", canonical.Name, canonical.FileSize);
+                        RefreshLibrarySidebarList();
+                        RefreshLibrarySummaryMetrics();
+                        RefreshStorefrontGrid();
+                        if (canonical != null) SelectGameProfile(canonical);
+                        _txtBottomStatus.Text = string.Format("✔ {0} (AppID: {1} • {2}) kataloğa eklendi!", canonical.Name, appId, sizeText);
+                        Win32.PlayTechChirp(true);
+                    }));
+                }
+                catch (Exception ex)
+                {
+                    Dispatcher.BeginInvoke(new Action(delegate
+                    {
+                        _txtBottomStatus.Text = "Steam arama hatası: " + ex.Message;
+                    }));
+                }
+            });
+        }
+
         /// <summary>Arayüzsüz kapak tamamlama (test/otomasyon): --fill-covers</summary>
         private void RunCoverBackfillHeadless(int limit)
         {

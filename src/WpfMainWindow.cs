@@ -4065,8 +4065,9 @@ namespace TitanGameHub
 
             string safeAppId = string.IsNullOrEmpty(gp.SteamAppId) ? "480" : gp.SteamAppId;
             if (safeAppId.StartsWith("http", StringComparison.OrdinalIgnoreCase) || safeAppId.Length > 10) safeAppId = "480";
+            bool hasRealUpdate = gp.UpdateAvailable && !UpdateLedger.IsUpToDate(gp, gp.RemoteVersion);
             _txtHeroAppIdBadge.Text = "APPID: " + safeAppId + " • P2P 480";
-            _txtHeroVersionBadge.Text = "SÜRÜM: " + gp.Version + (gp.UpdateAvailable ? (" -> " + gp.RemoteVersion + " GÜNCELLEME!") : "");
+            _txtHeroVersionBadge.Text = "SÜRÜM: " + gp.Version + (hasRealUpdate ? (" -> " + gp.RemoteVersion + " GÜNCELLEME!") : "");
 
             try
             {
@@ -4085,7 +4086,7 @@ namespace TitanGameHub
 
             if (gp.IsInstalled)
             {
-                if (gp.UpdateAvailable)
+                if (hasRealUpdate)
                 {
                     _btnHeroPrimary.Content = "🔄 GÜNCELLE";
                     _btnHeroPrimary.Background = MakeGradient("#7E22CE", "#0369A1");

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace TitanGameHub
@@ -32,7 +33,43 @@ namespace TitanGameHub
         private Label _lblGameTitle;
         private Label _lblSessionTime;
         private Label _lblPerfStats;
+        private Button _btnQuickSave;
         private Button _btnResumeGame;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        private class MEMORYSTATUSEX
+        {
+            public uint dwLength;
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys;
+            public ulong ullAvailPhys;
+            public ulong ullTotalPageFile;
+            public ulong ullAvailPageFile;
+            public ulong ullTotalVirtual;
+            public ulong ullAvailVirtual;
+            public ulong ullAvailExtendedVirtual;
+            public MEMORYSTATUSEX() { this.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX)); }
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GlobalMemoryStatusEx([In, Out] MEMORYSTATUSEX lpBuffer);
+
+        private static string GetRamStatusText()
+        {
+            try
+            {
+                MEMORYSTATUSEX mem = new MEMORYSTATUSEX();
+                if (GlobalMemoryStatusEx(mem))
+                {
+                    double usedGb = (mem.ullTotalPhys - mem.ullAvailPhys) / (1024.0 * 1024.0 * 1024.0);
+                    double totalGb = mem.ullTotalPhys / (1024.0 * 1024.0 * 1024.0);
+                    return string.Format("RAM: {0:0.0}/{1:0.0}GB (%{2})", usedGb, totalGb, mem.dwMemoryLoad);
+                }
+            }
+            catch { }
+            return "RAM: --";
+        }
 
         // Left Panel (Friends, Lobby & Chat)
         private Panel _pnlLeft;
@@ -187,13 +224,48 @@ namespace TitanGameHub
 
             _lblPerfStats = new Label
             {
-        Text = "144 FPS • 0.5ms Kernel Boost • Ping: 12ms",
-                Font = new Font("Consolas", 9f, FontStyle.Bold),
+        Text = "144 FPS • RAM: -- • 0.5ms Kernel Boost",
+                Font = new Font("Consolas", 8.8f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(93, 186, 47),
-                Location = new Point(this.Width - 540, 28),
+                Location = new Point(Math.Max(340, this.Width - 760), 28),
                 AutoSize = true
             };
             _pnlHeader.Controls.Add(_lblPerfStats);
+
+            _btnQuickSave = new Button
+            {
+                Text = "💾 HIZLI SAVE",
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(14, 116, 144),
+                FlatStyle = FlatStyle.Flat,
+                Size = new Size(124, 44),
+                Location = new Point(this.Width - 404, 20),
+                Cursor = Cursors.Hand
+            };
+            _btnQuickSave.FlatAppearance.BorderSize = 0;
+            _btnQuickSave.Click += delegate
+            {
+                try
+                {
+                    GameProfile active = (_activeProfileFunc != null) ? _activeProfileFunc() : null;
+                    if (active == null)
+                    {
+                        _lblPerfStats.Text = "⚠ Aktif oyun profili bulunamadı.";
+                        return;
+                    }
+                    string sMsg;
+                    string zip = SaveSyncService.CreateSaveBackup(active, out sMsg);
+                    _lblPerfStats.Text = !string.IsNullOrEmpty(zip)
+                        ? ("✔ Hızlı Save Alındı: " + Path.GetFileName(zip))
+                        : ("⚠ Save yedeği alınamadı: " + sMsg);
+                }
+                catch (Exception ex)
+                {
+                    _lblPerfStats.Text = "Save hatası: " + ex.Message;
+                }
+            };
+            _pnlHeader.Controls.Add(_btnQuickSave);
 
             _btnResumeGame = new Button
             {
@@ -635,11 +707,11 @@ namespace TitanGameHub
                 _fpsCount = 0;
                 _lastFpsCalc = DateTime.Now;
 
-                string timerTxt = KernelLatencyOptimizer.IsTimerResolutionLocked ? "0.5ms (Kilitli)" : "1.0ms";
+                string timerTxt = KernelLatencyOptimizer.IsTimerResolutionLocked ? "0.5ms" : "1.0ms";
                 string p2pTxt = ZeroVpnTunnelService.IsTunnelActive
                     ? (ZeroVpnTunnelService.IsPeerConnected ? ("P2P: " + ZeroVpnTunnelService.LastRttMs + "ms") : "P2P: Bağlanıyor")
                     : "0 Jitter";
-                _lblPerfStats.Text = string.Format("{0} FPS • {1} • {2}", _currentFps, timerTxt, p2pTxt);
+                _lblPerfStats.Text = string.Format("{0} FPS • {1} • {2} • {3}", _currentFps, GetRamStatusText(), timerTxt, p2pTxt);
             }
         }
 
