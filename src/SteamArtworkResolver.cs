@@ -25,7 +25,7 @@ namespace TitanGameHub
         private static readonly object _lock = new object();
         private static readonly Dictionary<string, string> _cache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<string> _inFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private static readonly SemaphoreSlim _throttle = new SemaphoreSlim(8, 8);
+        private static readonly SemaphoreSlim _throttle = new SemaphoreSlim(16, 16);
         private static bool _diskLoaded = false;
 
         private sealed class TimeoutWebClient : WebClient
@@ -164,7 +164,7 @@ namespace TitanGameHub
                 bool entered = false;
                 try
                 {
-                    entered = _throttle.Wait(10000);
+                    entered = _throttle.Wait(20000);
                     if (entered)
                     {
                         result = QuerySteamStore(key);
@@ -178,7 +178,8 @@ namespace TitanGameHub
 
                 lock (_lock)
                 {
-                    _cache[key] = result ?? "";
+                    if (!string.IsNullOrEmpty(result))
+                        _cache[key] = result;
                     _inFlight.Remove(key);
                 }
                 if (!string.IsNullOrEmpty(result)) PersistEntry(key, result);

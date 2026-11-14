@@ -19,7 +19,7 @@ namespace TitanGameHub
         private static readonly List<string> CacheLruList = new List<string>();
         private const int MaxMemoryCacheItems = 120;
         private static readonly HashSet<string> InFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        private static readonly SemaphoreSlim DownloadGate = new SemaphoreSlim(12, 12);
+        private static readonly SemaphoreSlim DownloadGate = new SemaphoreSlim(24, 24);
 
         private sealed class TimeoutWebClient : WebClient
         {
@@ -158,13 +158,13 @@ namespace TitanGameHub
                         bool entered = false;
                         try
                         {
-                            entered = DownloadGate.Wait(8000);
+                            entered = DownloadGate.Wait(15000);
                             if (entered)
                             {
                                 string tmpPath = localPath + "." + Guid.NewGuid().ToString("N").Substring(0, 6) + ".tmp";
                                 try
                                 {
-                                    using (TimeoutWebClient wc = new TimeoutWebClient(8000))
+                                    using (TimeoutWebClient wc = new TimeoutWebClient(6000))
                                     {
                                         wc.Proxy = null;
                                         wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
