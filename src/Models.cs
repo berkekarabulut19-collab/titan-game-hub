@@ -330,12 +330,9 @@ namespace TitanGameHub
         {
             if (string.IsNullOrWhiteSpace(fileSize)) return true;
             string s = fileSize.Trim();
-            return s.Equals("Kurulu", StringComparison.OrdinalIgnoreCase) ||
-                   s.Equals("Bilinmiyor", StringComparison.OrdinalIgnoreCase) ||
-                   s.Equals("Hazır", StringComparison.OrdinalIgnoreCase) ||
-                   s.Equals("Hazır Paket", StringComparison.OrdinalIgnoreCase) ||
-                   s.Equals("Hazır Arşiv", StringComparison.OrdinalIgnoreCase) ||
-                   s.Equals("Bulut", StringComparison.OrdinalIgnoreCase);
+            if (Regex.IsMatch(s, @"\d+(?:[.,]\d+)?\s*(?:GB|MB|KB|TB)", RegexOptions.IgnoreCase))
+                return false;
+            return true;
         }
 
         public static string ComputeFolderSizeText(string folder)

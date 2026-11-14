@@ -653,9 +653,7 @@ namespace TitanGameHub
             if (profile == null) return "~6.5 GB";
             string s = (profile.FileSize ?? "").Trim();
             if (!string.IsNullOrEmpty(s) &&
-                !s.Equals("Bilinmiyor", StringComparison.OrdinalIgnoreCase) &&
-                !s.Equals("N/A", StringComparison.OrdinalIgnoreCase) &&
-                s != "?")
+                System.Text.RegularExpressions.Regex.IsMatch(s, @"\d+(?:[.,]\d+)?\s*(?:GB|MB|KB|TB)", System.Text.RegularExpressions.RegexOptions.IgnoreCase))
             {
                 return s;
             }
