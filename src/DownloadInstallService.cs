@@ -2065,9 +2065,19 @@ namespace TitanGameHub
                     try { UpdateLedger.MarkUpToDate(profile, profile.RemoteVersion); } catch { }
                     try { GameMaintenanceService.RecordActivity("KURULDU", profile.Name, profile.FileSize); } catch { }
 
+                    // Kurulum Sonrası Bağımlılık, Defender & Shader Önbellek Doktoru
+                    int postDoctorFixed = 0;
+                    try
+                    {
+                        PreFlightDoctorResult docRes = PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(profile);
+                        if (docRes != null) postDoctorFixed = docRes.RepairedItemsCount;
+                    }
+                    catch { }
+
                     _isBusy = false;
                     string patchNote = TryApplyAutoTurkishPatch(profile, "kurulum");
-                    string successMsg = string.Format("{0} başarıyla kuruldu [{1}] [CRC:{2}]! Steam (480) & FSR 3.1 hazır.", profile.Name, peArch, hashTag);
+                    string docNote = postDoctorFixed > 0 ? string.Format(" (+{0} bağımlılık/shader onarıldı)", postDoctorFixed) : "";
+                    string successMsg = string.Format("{0} başarıyla kuruldu [{1}] [CRC:{2}]{3}! Steam (480) & FSR 3.1 hazır.", profile.Name, peArch, hashTag, docNote);
                     if (!string.IsNullOrEmpty(patchNote)) successMsg = successMsg + " " + patchNote;
                     ReportProgress(profile.Name + " başarıyla kuruldu ve oynamaya hazır!", 100, "Hazır");
                     ReportCompleted(profile, true, successMsg);

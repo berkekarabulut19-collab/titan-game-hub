@@ -2178,6 +2178,88 @@ namespace TitanGameHub
             };
             btnRow.Children.Add(btnAddModZip);
 
+            Button btnBackupMods = new Button()
+            {
+                Content = "💾 MODLARI YEDEKLE",
+                Height = 34,
+                Padding = new Thickness(12, 0, 12, 0),
+                Margin = new Thickness(8, 0, 8, 0),
+                Background = HexBrush("#1E293B"),
+                Foreground = ThemeManager.AccentTealBrush,
+                BorderBrush = HexBrush("#0F766E"),
+                BorderThickness = new Thickness(1),
+                FontSize = 10.5,
+                FontWeight = FontWeights.Bold,
+                Cursor = Cursors.Hand
+            };
+            ApplyRoundedButtonTemplate(btnBackupMods, 3);
+            btnBackupMods.Click += delegate
+            {
+                if (_selectedProfile == null || string.IsNullOrEmpty(_selectedProfile.WorkingDirectory)) return;
+                string bepDir = System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "BepInEx");
+                if (!Directory.Exists(bepDir))
+                {
+                    _txtBottomStatus.Text = "Yedeklenecek BepInEx mod klasörü bulunamadı.";
+                    Win32.PlayTechChirp(false);
+                    return;
+                }
+                try
+                {
+                    string root = SaveSyncService.GetBackupsRoot();
+                    string safeName = System.Text.RegularExpressions.Regex.Replace(_selectedProfile.Name ?? "Game", @"[^a-zA-Z0-9_\-]", "_");
+                    string zipOut = System.IO.Path.Combine(root, string.Format("Mods_{0}_{1:yyyyMMdd_HHmmss}.zip", safeName, DateTime.Now));
+                    System.IO.Compression.ZipFile.CreateFromDirectory(bepDir, zipOut);
+                    GameMaintenanceService.RecordActivity("MOD YEDEĞİ", _selectedProfile.Name, System.IO.Path.GetFileName(zipOut));
+                    _txtBottomStatus.Text = "✔ Mod paketi yedeklendi: " + System.IO.Path.GetFileName(zipOut);
+                    Win32.PlayTechChirp(true);
+                }
+                catch (Exception ex)
+                {
+                    _txtBottomStatus.Text = "Mod yedekleme hatası: " + ex.Message;
+                    Win32.PlayTechChirp(false);
+                }
+            };
+            btnRow.Children.Add(btnBackupMods);
+
+            Button btnTrPatchModTab = new Button()
+            {
+                Content = "🇹🇷 TÜRKÇE YAMA KUR / GÜNCELLE",
+                Height = 34,
+                Padding = new Thickness(14, 0, 14, 0),
+                Background = (Brush)MakeGradient("#B91C1C", "#7F1D1D"),
+                Foreground = Brushes.White,
+                BorderBrush = HexBrush("#F87171"),
+                BorderThickness = new Thickness(1),
+                FontSize = 10.5,
+                FontWeight = FontWeights.ExtraBold,
+                Cursor = Cursors.Hand
+            };
+            ApplyRoundedButtonTemplate(btnTrPatchModTab, 3);
+            btnTrPatchModTab.Click += delegate
+            {
+                if (_selectedProfile == null) return;
+                TurkishPatchInfo trInfo;
+                bool hasKnown = TurkishPatchService.HasTurkishPatch(_selectedProfile, out trInfo);
+                _txtBottomStatus.Text = hasKnown
+                    ? ("🇹🇷 " + trInfo.PatchTitle + " indiriliyor/kuruluyor...")
+                    : ("🇹🇷 " + _selectedProfile.Name + " için Türkçe altyazı/dil yapılandırması uygulanıyor...");
+                TurkishPatchService.InstallPatchAsync(_selectedProfile,
+                    delegate(string msg, int pct)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate { _txtBottomStatus.Text = msg; }));
+                    },
+                    delegate(bool ok, string resMsg)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            _txtBottomStatus.Text = resMsg;
+                            if (ok) GameMaintenanceService.RecordActivity("TÜRKÇE YAMA", _selectedProfile.Name, "Uygulandı");
+                            Win32.PlayTechChirp(ok);
+                        }));
+                    });
+            };
+            btnRow.Children.Add(btnTrPatchModTab);
+
             _modsListContainer = new StackPanel();
             stack.Children.Add(_modsListContainer);
         }
@@ -4742,6 +4824,123 @@ namespace TitanGameHub
             restoreGrid.Children.Add(btnRefreshHist);
 
             historyStack.Children.Add(restoreGrid);
+
+            // 2C. Post-Install Dependency, FPS Doctor & Save Backup Center
+            Border doctorCard = CreateSettingsCard("🩺 BAĞIMLILIK, FPS DOKTORU & SAVE YEDEKLEME MERKEZİ");
+            mainStack.Children.Add(doctorCard);
+            StackPanel doctorStack = (StackPanel)doctorCard.Child;
+
+            TextBlock txtDoctorStatus = new TextBlock()
+            {
+                Text = "Kurulu oyunların DirectX, VC++, steam_api64.dll, shader önbelleği ve save yedekleri tek tıkla yönetilir.",
+                Foreground = ThemeManager.ForegroundMutedBrush,
+                FontSize = 11,
+                TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 10)
+            };
+            doctorStack.Children.Add(txtDoctorStatus);
+
+            WrapPanel doctorActions = new WrapPanel() { Orientation = Orientation.Horizontal };
+
+            Button btnRunAllDoctor = CreateSteamUtilityButton("🩺 BAĞIMLILIK & DLL TARA / ONAR", "Tüm kurulu oyunlarda VC++, DirectX, steam_api64 ve shader kontrolü yapar");
+            btnRunAllDoctor.Margin = new Thickness(0, 0, 8, 6);
+            btnRunAllDoctor.Click += delegate
+            {
+                btnRunAllDoctor.IsEnabled = false;
+                txtDoctorStatus.Text = "⏳ Kurulu oyunlar taranıyor (VC++ / DirectX / steam_api64 / Shader)...";
+                ThreadPool.QueueUserWorkItem(delegate
+                {
+                    int checkedCount = 0;
+                    int fixedCount = 0;
+                    List<GameProfile> snap = new List<GameProfile>(_allProfiles);
+                    foreach (GameProfile gp in snap)
+                    {
+                        if (gp == null || !gp.IsInstalled) continue;
+                        checkedCount++;
+                        try
+                        {
+                            PreFlightDoctorResult r = PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(gp);
+                            if (r != null) fixedCount += r.RepairedItemsCount;
+                        }
+                        catch { }
+                    }
+                    try { GameMaintenanceService.RecordActivity("DOKTOR TARAMA", checkedCount + " Oyun", fixedCount + " Onarım"); } catch { }
+                    Dispatcher.BeginInvoke(new Action(delegate
+                    {
+                        btnRunAllDoctor.IsEnabled = true;
+                        txtDoctorStatus.Text = string.Format("✔ {0} kurulu oyun tarandı — {1} eksik bileşen/shader otomatik onarıldı.", checkedCount, fixedCount);
+                        _txtBottomStatus.Text = txtDoctorStatus.Text;
+                        Win32.PlayTechChirp(true);
+                    }));
+                });
+            };
+            doctorActions.Children.Add(btnRunAllDoctor);
+
+            Button btnToggleFpsMode = CreateSteamUtilityButton(
+                GameModeDebloaterService.IsFrozen ? "⚡ FPS OYUN MODU: AKTİF (KAPAT)" : "⚡ FPS OYUN MODU BAŞLAT",
+                "Arka plan gereksiz servisleri dondurarak FPS ve gecikmeyi optimize eder");
+            btnToggleFpsMode.Margin = new Thickness(0, 0, 8, 6);
+            btnToggleFpsMode.Click += delegate
+            {
+                if (!GameModeDebloaterService.IsFrozen)
+                {
+                    GameModeDebloaterService.FreezeBackgroundServicesAsync(delegate(string msg)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            btnToggleFpsMode.Content = "⚡ FPS OYUN MODU: AKTİF (KAPAT)";
+                            txtDoctorStatus.Text = msg;
+                            _txtBottomStatus.Text = msg;
+                        }));
+                    });
+                }
+                else
+                {
+                    GameModeDebloaterService.RestoreBackgroundServicesAsync(delegate(string msg)
+                    {
+                        Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            btnToggleFpsMode.Content = "⚡ FPS OYUN MODU BAŞLAT";
+                            txtDoctorStatus.Text = msg;
+                            _txtBottomStatus.Text = msg;
+                        }));
+                    });
+                }
+            };
+            doctorActions.Children.Add(btnToggleFpsMode);
+
+            Button btnDoctorBackupSaves = CreateSteamUtilityButton("💾 TÜM SAVE'LERİ YEDEKLE", "Tüm kurulu oyunların kayıt dosyalarını anında yedekler");
+            btnDoctorBackupSaves.Margin = new Thickness(0, 0, 8, 6);
+            btnDoctorBackupSaves.Click += delegate
+            {
+                int backedUp = 0;
+                foreach (GameProfile gp in _allProfiles)
+                {
+                    if (gp == null || !gp.IsInstalled) continue;
+                    string sMsg;
+                    if (!string.IsNullOrEmpty(SaveSyncService.CreateSaveBackup(gp, out sMsg))) backedUp++;
+                }
+                GameMaintenanceService.RecordActivity("SAVE YEDEK", backedUp + " Oyun", "Toplu Yedek");
+                txtDoctorStatus.Text = string.Format("✔ {0} kurulu oyunun save dosyaları yedeklendi.", backedUp);
+                _txtBottomStatus.Text = txtDoctorStatus.Text;
+                Win32.PlayTechChirp(true);
+            };
+            doctorActions.Children.Add(btnDoctorBackupSaves);
+
+            Button btnOpenTimeline = CreateSteamUtilityButton("🕒 SAVE ZAMAN TÜNELİ", "Seçili oyunun eski save slotlarını görüntüle ve geri yükle");
+            btnOpenTimeline.Margin = new Thickness(0, 0, 0, 6);
+            btnOpenTimeline.Click += delegate
+            {
+                if (_selectedProfile == null)
+                {
+                    MessageBox.Show("Lütfen önce Kütüphane'den bir oyun seçin.", "Save Zaman Tüneli", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                ShowSaveTimeMachineWindow(_selectedProfile);
+            };
+            doctorActions.Children.Add(btnOpenTimeline);
+
+            doctorStack.Children.Add(doctorActions);
 
             // 3. Steam Overlay & In-Game Shortcuts Card
             Border overlayCard = CreateSettingsCard("🎮 STEAM ARAYÜZÜ, KISAYOLLAR & OYUN İÇİ HUD");
