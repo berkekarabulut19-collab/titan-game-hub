@@ -36,43 +36,62 @@ namespace TitanGameHub
             if (targets.Count == 0) return res;
 
             int max = limit > 0 ? Math.Min(limit, targets.Count) : targets.Count;
+            int doneCount = 0;
+            int filledCount = 0;
+            object sync = new object();
+            int workers = Math.Min(8, max);
+            int nextIndex = -1;
+            ManualResetEvent allDone = new ManualResetEvent(false);
 
-            for (int i = 0; i < max; i++)
+            for (int w = 0; w < workers; w++)
             {
-                GameProfile gp = targets[i];
-                if (progress != null)
-                    progress(string.Format("Kapak aranıyor: {0} ({1}/{2})", gp.Name, i + 1, max),
-                             (int)((i * 100.0) / Math.Max(1, max)));
-
-                try
+                ThreadPool.QueueUserWorkItem(delegate
                 {
-                    string art = null;
-                    ManualResetEvent ev = new ManualResetEvent(false);
-
-                    string cached = SteamArtworkResolver.GetCached(gp.Name);
-                    if (!string.IsNullOrEmpty(cached)) { art = cached; }
-                    else
+                    while (true)
                     {
-                        // force: önceki negatif sonuç önbellekte olsa bile yeniden dene
-                        SteamArtworkResolver.ResolveAsync(gp.Name, delegate(string url) { art = url; ev.Set(); }, true);
-                        ev.WaitOne(15000);
-                    }
+                        int idx = Interlocked.Increment(ref nextIndex);
+                        if (idx >= max) break;
 
-                    if (!string.IsNullOrEmpty(art))
-                    {
-                        gp.BannerUrl = art;
-                        gp.CapsuleUrl = art;
-                        res.Filled++;
-                    }
-                    else if (res.Unresolved.Count < 40)
-                    {
-                        res.Unresolved.Add(gp.Name);
-                    }
-                }
-                catch { }
+                        GameProfile gp = targets[idx];
+                        try
+                        {
+                            string art = SteamArtworkResolver.GetCached(gp.Name);
+                            if (string.IsNullOrEmpty(art))
+                            {
+                                ManualResetEvent ev = new ManualResetEvent(false);
+                                SteamArtworkResolver.ResolveAsync(gp.Name, delegate(string url) { art = url; ev.Set(); }, true);
+                                ev.WaitOne(8000);
+                            }
 
-                Thread.Sleep(120);
+                            if (!string.IsNullOrEmpty(art))
+                            {
+                                gp.BannerUrl = art;
+                                gp.CapsuleUrl = art;
+                                Interlocked.Increment(ref filledCount);
+                            }
+                            else
+                            {
+                                lock (sync)
+                                {
+                                    if (res.Unresolved.Count < 40) res.Unresolved.Add(gp.Name);
+                                }
+                            }
+                        }
+                        catch { }
+
+                        int d = Interlocked.Increment(ref doneCount);
+                        if (progress != null)
+                        {
+                            progress(string.Format("Kapak aranıyor: {0} ({1}/{2})", gp.Name, d, max),
+                                     (int)((d * 100.0) / Math.Max(1, max)));
+                        }
+                        if (d >= max) allDone.Set();
+                    }
+                });
             }
+
+            if (max > 0) allDone.WaitOne(120000);
+            res.Filled = filledCount;
 
             if (progress != null) progress("Kapak taraması bitti.", 100);
             return res;

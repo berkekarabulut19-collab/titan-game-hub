@@ -650,9 +650,25 @@ namespace TitanGameHub
 
         public static string GetDownloadSizeDisplay(GameProfile profile)
         {
-            if (profile == null) return "Bilinmiyor";
+            if (profile == null) return "~6.5 GB";
             string s = (profile.FileSize ?? "").Trim();
-            return string.IsNullOrEmpty(s) ? "Bilinmiyor" : s;
+            if (!string.IsNullOrEmpty(s) &&
+                !s.Equals("Bilinmiyor", StringComparison.OrdinalIgnoreCase) &&
+                !s.Equals("N/A", StringComparison.OrdinalIgnoreCase) &&
+                s != "?")
+            {
+                return s;
+            }
+            string c = ((profile.Category ?? "") + " " + (profile.Name ?? "")).ToLowerInvariant();
+            if (c.Contains("açık dünya") || c.Contains("open world") || c.Contains("rpg") || c.Contains("cyberpunk") || c.Contains("witcher") || c.Contains("gta") || c.Contains("red dead") || c.Contains("assassin") || c.Contains("forza") || c.Contains("call of duty"))
+                return "~35 GB";
+            if (c.Contains("aksiyon") || c.Contains("fps") || c.Contains("yarış") || c.Contains("racing") || c.Contains("spor") || c.Contains("fifa"))
+                return "~16.5 GB";
+            if (c.Contains("korku") || c.Contains("horror") || c.Contains("indie") || c.Contains("platform") || c.Contains("pixel") || c.Contains("retro"))
+                return "~2.8 GB";
+            if (c.Contains("simülasyon") || c.Contains("sim") || c.Contains("strateji") || c.Contains("co-op"))
+                return "~4.5 GB";
+            return "~6.5 GB";
         }
 
         public static bool TryParseApproxSizeBytes(string sizeText, out long bytes)

@@ -192,6 +192,7 @@ namespace TitanGameHub
                     if (gp == null || string.IsNullOrWhiteSpace(gp.Name)) continue;
                     if (!gp.IsInstalled && IsFilteredJunkGame(gp.Name, gp.Description)) continue;
                     gp.Category = SanitizeDisplayCategory(gp.Category);
+                    if (ProfileStore.NeedsRealSize(gp.FileSize)) gp.FileSize = DownloadInstallService.GetDownloadSizeDisplay(gp);
                     merged.Add(gp);
                 }
             }
