@@ -358,6 +358,10 @@ namespace TitanGameHub
                 string blockedArc = DownloadInstallService.FindMatchingArchiveInDownloads("TestArcGame");
                 Check("FindMatchingArchiveInDownloads .aria2 aktifken erken çıkartmaz",
                     string.IsNullOrEmpty(blockedArc), blockedArc ?? "");
+
+                string wvScript = WebViewDownloadService.BuildAutoClickScript();
+                Check("WebView2 otomatik tıklama betiği btn-main ve download seçicilerini içerir",
+                    !string.IsNullOrEmpty(wvScript) && wvScript.Contains(".btn-main") && wvScript.Contains("free download"), "");
             }
             finally
             {

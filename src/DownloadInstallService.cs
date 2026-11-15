@@ -180,8 +180,8 @@ namespace TitanGameHub
                     {
                         if (_cancelRequested) return true;
 
-                        // 40 sn boyunca hiç bayt gelmediyse gömülü tarayıcıyı bırak (harici tarayıcıya düşer)
-                        if (seenBytes == 0 && (DateTime.UtcNow - lastBytesAt).TotalSeconds > 40) return true;
+                        // 50 sn boyunca hiç bayt gelmediyse gömülü tarayıcıyı bırak (sonraki aynaya geçer)
+                        if (seenBytes == 0 && (DateTime.UtcNow - lastBytesAt).TotalSeconds > 50) return true;
                         return false;
                     },
                     60);

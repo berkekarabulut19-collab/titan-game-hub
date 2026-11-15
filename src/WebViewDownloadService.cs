@@ -28,6 +28,28 @@ namespace TitanGameHub
             public long Bytes;
         }
 
+        public static string BuildAutoClickScript()
+        {
+            return "(function(){" +
+                "var s='a.btn-main,button.btn-main,.btn-main,a.btn,button.btn,a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button.link-button,a[download],#downloadbtn,button[hx-get],a[href*=\"download\"],form button[type=\"submit\"]:not([disabled]),form input[type=\"submit\"]:not([disabled])';" +
+                "var a=document.querySelectorAll(s);" +
+                "for(var i=0;i<a.length;i++){" +
+                "  var el=a[i]; if(!el||el.disabled) continue;" +
+                "  var t=(el.innerText||el.value||'').toLowerCase();" +
+                "  if(t.indexOf('premium')>=0||t.indexOf('vpn')>=0||t.indexOf('upgrade')>=0) continue;" +
+                "  if(el.offsetParent!==null){el.click();return i+1;}" +
+                "}" +
+                "var all=document.querySelectorAll('a,button,input[type=\"submit\"]');" +
+                "for(var j=0;j<all.length;j++){" +
+                "  var b=all[j]; if(!b||b.disabled||b.offsetParent===null) continue;" +
+                "  var txt=(b.innerText||b.value||'').trim().toLowerCase();" +
+                "  if(txt==='download'||txt==='free download'||txt==='direct download'||txt==='start download'||txt==='create download link'||txt==='download now'){" +
+                "    b.click();return 100+j;" +
+                "  }" +
+                "}" +
+                "if(a.length>0){a[0].click();return a.length;}return 0;})()";
+        }
+
         public static bool IsRuntimeAvailable()
         {
             try
@@ -68,19 +90,18 @@ namespace TitanGameHub
                     "TitanGameHub", "WebView2");
                 try { if (!Directory.Exists(userDataDir)) Directory.CreateDirectory(userDataDir); } catch { }
 
-                // "İndir" akışında site ekranda açılmasın: tarayıcı oturumu arka planda çalışır.
+                // "İndir" akışında site ekranda açılmasın: tarayıcı oturumu ekran dışında 960x640 gerçek boyutta çalışır.
+                // NOT: AllowsTransparency=true WebView2 HwndHost'u ve WASM/layout kontrollerini bozar; asla kullanma.
                 win = new Window()
                 {
                     Title = "Titan // İndirme",
-                    Width = 1,
-                    Height = 1,
-                    WindowStyle = WindowStyle.None,
+                    Width = 960,
+                    Height = 640,
+                    WindowStyle = WindowStyle.ToolWindow,
                     ShowInTaskbar = false,
                     ShowActivated = false,
-                    AllowsTransparency = true,
-                    Opacity = 0,
-                    Left = -32000,
-                    Top = -32000,
+                    Left = -20000,
+                    Top = -20000,
                     ResizeMode = ResizeMode.NoResize
                 };
 
@@ -198,28 +219,20 @@ namespace TitanGameHub
 
                         core.Navigate(url);
 
-                        // İndirme başlamadıysa 0.6s'den başlayarak hızla sayfadaki indirme linkini/butonunu otomatik tıkla
+                        // İndirme başlamadıysa WASM doğrulama/geri sayım bitene kadar (40 sn) otomatik tıkla
                         ThreadPool.QueueUserWorkItem(delegate
                         {
-                            int[] delays = new int[] { 600, 1000, 1500, 2500, 3500 };
-                            foreach (int waitMs in delays)
+                            string clickJs = BuildAutoClickScript();
+                            for (int attempt = 0; attempt < 45; attempt++)
                             {
-                                Thread.Sleep(waitMs);
+                                Thread.Sleep(attempt == 0 ? 700 : 900);
                                 if (finished || downloadStarted) return;
                                 try
                                 {
                                     view.Dispatcher.BeginInvoke(new Action(delegate
                                     {
                                         if (finished || downloadStarted) return;
-                                        try
-                                        {
-                                            core.ExecuteScriptAsync(
-                                                "(function(){var s='a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button.link-button,a[download],#downloadbtn,button[hx-get],a[href*=\"download\"]';" +
-                                                "var a=document.querySelectorAll(s);" +
-                                                "for(var i=0;i<a.length;i++){if(a[i]&&a[i].offsetParent!==null){a[i].click();return i+1;}}" +
-                                                "if(a.length>0){a[0].click();return a.length;}return 0;})()");
-                                        }
-                                        catch { }
+                                        try { core.ExecuteScriptAsync(clickJs); } catch { }
                                     }));
                                 }
                                 catch { }
