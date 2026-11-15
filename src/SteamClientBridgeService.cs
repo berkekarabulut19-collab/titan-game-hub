@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Win32;
 
 namespace TitanGameHub
@@ -317,65 +318,94 @@ namespace TitanGameHub
                     foreach (GameProfile p in mpPosts) liveMap[NormalizeTitleKey(p.Name)] = p;
                 }
 
+                List<GameProfile> installedTargets = new List<GameProfile>();
                 foreach (GameProfile local in profiles)
                 {
-                    // Sadece KURULU oyunlarda güncelleme aranır (kurulu olmayanlar sadece indirilir).
-                    if (!local.IsInstalled) continue;
+                    if (local != null && local.IsInstalled && !local.IsSteamManaged)
+                        installedTargets.Add(local);
+                }
 
-                    // Steam kütüphanesindeki oyunlar Steam üzerinden güncellenir;
-                    // repack siteleriyle kıyaslamak yanlış "GÜNCELLE" uyarısı üretiyordu.
-                    if (local.IsSteamManaged) continue;
+                if (installedTargets.Count > 0)
+                {
+                    List<GameProfile> results = new List<GameProfile>();
+                    object listLock = new object();
+                    SemaphoreSlim gate = new SemaphoreSlim(6, 6);
+                    ManualResetEvent allDone = new ManualResetEvent(false);
+                    int remaining = installedTargets.Count;
 
-                    string key = NormalizeTitleKey(local.Name);
-                    GameProfile remote;
-                    if (liveMap.TryGetValue(key, out remote))
+                    foreach (GameProfile localItem in installedTargets)
                     {
-                        if (!string.IsNullOrEmpty(remote.Version) &&
-                            !string.Equals(remote.Version.Trim(), (local.Version ?? "").Trim(), StringComparison.OrdinalIgnoreCase))
+                        GameProfile local = localItem;
+                        ThreadPool.QueueUserWorkItem(delegate
                         {
-                            local.RemoteVersion = remote.Version.Trim();
-                            if (!string.IsNullOrEmpty(remote.DirectMirrorUrl))
-                                local.DirectMirrorUrl = remote.DirectMirrorUrl;
-                            if (!string.IsNullOrEmpty(remote.FileSize) && remote.FileSize != "Bulut")
-                                local.FileSize = remote.FileSize;
-                            if (!updatedGames.Contains(local)) updatedGames.Add(local);
-                        }
-                    }
-                    else if (local.IsInstalled)
-                    {
-                        string singleMsg;
-                        if (CheckSingleGameUpdate(local, out singleMsg))
-                        {
-                            if (!updatedGames.Contains(local)) updatedGames.Add(local);
-                        }
-                    }
-
-                    // Çoklu kaynak: SteamRIP sayfası bayat olabilir; FitGirl/OvaGames
-                    // aynı oyun için daha yeni bir sürüm yayınlamış olabilir.
-                    // Bu uzak sürüm daha önce kurulduysa tekrar uyarı verme.
-                    if (UpdateLedger.IsUpToDate(local, local.RemoteVersion))
-                    {
-                        local.RemoteVersion = local.Version;
-                        continue;
-                    }
-
-                    if (local.IsInstalled && !updatedGames.Contains(local))
-                    {
-                        try
-                        {
-                            MultiSourceVersionResolver.Result ms = MultiSourceVersionResolver.ResolveSync(local.Name, local.Version);
-                            if (ms != null && ms.IsNewerThanLocal && SameVersionFormat(local.Version, ms.Version))
+                            bool entered = false;
+                            try
                             {
-                                local.RemoteVersion = ms.Version;
-                                local.UpdateSourceHint = ms.SourceName + " v" + ms.Version;
-                                // Güncelleme, sürümü İLK/EN YENİ yayınlayan kaynağın linkinden inecek.
-                                if (!string.IsNullOrEmpty(ms.DirectUrl))
-                                    local.DirectMirrorUrl = ms.DirectUrl;
-                                updatedGames.Add(local);
+                                entered = gate.Wait(15000);
+                                if (!entered) return;
+
+                                string key = NormalizeTitleKey(local.Name);
+                                GameProfile remote;
+                                if (liveMap.TryGetValue(key, out remote))
+                                {
+                                    if (!string.IsNullOrEmpty(remote.Version) &&
+                                        !string.Equals(remote.Version.Trim(), (local.Version ?? "").Trim(), StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        local.RemoteVersion = remote.Version.Trim();
+                                        if (!string.IsNullOrEmpty(remote.DirectMirrorUrl))
+                                            local.DirectMirrorUrl = remote.DirectMirrorUrl;
+                                        if (!string.IsNullOrEmpty(remote.FileSize) && remote.FileSize != "Bulut")
+                                            local.FileSize = remote.FileSize;
+                                        lock (listLock) { if (!results.Contains(local)) results.Add(local); }
+                                    }
+                                }
+                                else
+                                {
+                                    string singleMsg;
+                                    if (CheckSingleGameUpdate(local, out singleMsg))
+                                    {
+                                        lock (listLock) { if (!results.Contains(local)) results.Add(local); }
+                                    }
+                                }
+
+                                if (UpdateLedger.IsUpToDate(local, local.RemoteVersion))
+                                {
+                                    local.RemoteVersion = local.Version;
+                                    return;
+                                }
+
+                                bool alreadyInList;
+                                lock (listLock) { alreadyInList = results.Contains(local); }
+                                if (!alreadyInList)
+                                {
+                                    try
+                                    {
+                                        MultiSourceVersionResolver.Result ms = MultiSourceVersionResolver.ResolveSync(local.Name, local.Version);
+                                        if (ms != null && ms.IsNewerThanLocal && SameVersionFormat(local.Version, ms.Version))
+                                        {
+                                            local.RemoteVersion = ms.Version;
+                                            local.UpdateSourceHint = ms.SourceName + " v" + ms.Version;
+                                            if (!string.IsNullOrEmpty(ms.DirectUrl))
+                                                local.DirectMirrorUrl = ms.DirectUrl;
+                                            lock (listLock) { if (!results.Contains(local)) results.Add(local); }
+                                        }
+                                    }
+                                    catch { }
+                                }
                             }
-                        }
-                        catch { }
+                            catch { }
+                            finally
+                            {
+                                if (entered) { try { gate.Release(); } catch { } }
+                                if (Interlocked.Decrement(ref remaining) == 0) { try { allDone.Set(); } catch { } }
+                            }
+                        });
                     }
+
+                    try { allDone.WaitOne(25000); } catch { }
+                    try { allDone.Dispose(); } catch { }
+                    try { gate.Dispose(); } catch { }
+                    updatedGames = results;
                 }
             }
             catch { }
