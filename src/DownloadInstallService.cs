@@ -167,6 +167,7 @@ namespace TitanGameHub
                 DateTime lastBytesAt = DateTime.UtcNow;
                 long seenBytes = 0;
 
+                WebViewDownloadService.ClearLastHandoff();
                 int prepPulse = 0;
                 string got = EmbeddedBrowserDownloader(url, dir,
                     delegate(int pct, long gotBytes, long total)
@@ -216,15 +217,20 @@ namespace TitanGameHub
                         ServicePointManager.UseNagleAlgorithm = false;
 
                         long fsz = handoff.ExpectedTotalBytes;
-                        int segs = (fsz >= 1000L * 1024 * 1024) ? 32 : ((fsz >= 250L * 1024 * 1024) ? 24 : 16);
+                        int segs = (fsz >= 1000L * 1024 * 1024) ? 24 : ((fsz >= 250L * 1024 * 1024) ? 16 : 12);
+                        if (url.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                            handoff.ResolvedDirectUrl.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0)
+                        {
+                            segs = Math.Min(segs, 8);
+                        }
                         ReportProgress(string.Format("[2/4] {0} — {1}x Turbo çoklu bağlantı aktarımına geçildi...", profile.Name, segs), 26, segs + "x Turbo");
 
                         _activeTurboUserAgent = handoff.ResolvedUserAgent;
                         bool turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, segs);
-                        if (!turboOk && !_cancelRequested && segs > 6)
+                        if (!turboOk && !_cancelRequested && segs > 4)
                         {
-                            ReportProgress(string.Format("[2/4] {0} — Bağlantı dostu 6x Turbo moduna geçiliyor...", profile.Name), 26, "6x Turbo");
-                            turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, 6);
+                            ReportProgress(string.Format("[2/4] {0} — Bağlantı dostu 4x Turbo moduna geçiliyor...", profile.Name), 26, "4x Turbo");
+                            turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, 4);
                         }
                         _activeTurboUserAgent = null;
 

@@ -641,7 +641,7 @@ namespace TitanGameHub
             if (_isUpdatingBinary) return;
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12;
                 string appDir = AppDomain.CurrentDomain.BaseDirectory;
                 string shaFile = Path.Combine(appDir, "data", "last_github_sha.txt");
                 string localSha = File.Exists(shaFile) ? File.ReadAllText(shaFile, Encoding.UTF8).Trim() : "";
@@ -725,7 +725,7 @@ namespace TitanGameHub
 
                 if (string.Equals(curHash, newHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (catalogSynced && !string.IsNullOrEmpty(remoteSha))
+                    if (!string.IsNullOrEmpty(remoteSha))
                     {
                         try
                         {

@@ -81,6 +81,7 @@ namespace TitanGameHub
         public static string LastError { get; private set; }
         public static Result LastHandoff { get; private set; }
         public static string LastProbeInfo { get; private set; }
+        public static void ClearLastHandoff() { LastHandoff = null; }
 
         public static Result Download(string url, string targetDirectory, string suggestedFileName,
                                       Action<int, long, long> onProgress, Func<bool> isCancelled,
