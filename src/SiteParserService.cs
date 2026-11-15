@@ -1088,7 +1088,7 @@ namespace TitanGameHub
             }
 
             // 5C. Extract raw GoFile / PixelDrain / Fileditch / Buzzheavier / VikingFile / DataNodes / FuckingFast URLs
-            MatchCollection rawLinks = Regex.Matches(html, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]+\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/|vik(?:1|i)ngfile\.com/f/|datanodes\.to/|fuckingfast\.co/|megadb\.net/|qiwi\.gg/|1fichier\.com/|drop\.download/)[^\s\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            MatchCollection rawLinks = Regex.Matches(html, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]*\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/|vik(?:1|i)ngfile\.com/f/|datanodes\.to/|fuckingfast\.co/|megadb\.net/|qiwi\.gg/|1fichier\.com/|drop\.download/)[^\s\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             foreach (Match rm in rawLinks)
             {
                 string url = rm.Groups[1].Value.Trim().Replace("\\/", "/");
@@ -1155,7 +1155,7 @@ namespace TitanGameHub
             }
 
             // 3. Raw GoFile / PixelDrain / Fileditch / Buzzheavier / VikingFile / DataNodes / FuckingFast URLs in markdown body
-            MatchCollection rawMatches = Regex.Matches(markdown, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]+\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/|vik(?:1|i)ngfile\.com/f/|datanodes\.to/|fuckingfast\.co/|megadb\.net/|qiwi\.gg/|1fichier\.com/|drop\.download/)[^\s\)\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            MatchCollection rawMatches = Regex.Matches(markdown, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]*\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/|vik(?:1|i)ngfile\.com/f/|datanodes\.to/|fuckingfast\.co/|megadb\.net/|qiwi\.gg/|1fichier\.com/|drop\.download/)[^\s\)\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             foreach (Match rm in rawMatches)
             {
                 string url = rm.Groups[1].Value.Trim();
@@ -1386,11 +1386,13 @@ namespace TitanGameHub
         {
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                ServicePointManager.SecurityProtocol = (SecurityProtocolType)(3072 | 12288);
                 HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
+                req.Proxy = null;
                 req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
                 req.Accept = "application/json, text/plain, */*";
-                req.Timeout = 9000;
+                req.Timeout = 15000;
+                req.ReadWriteTimeout = 15000;
                 req.AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate;
 
                 using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())

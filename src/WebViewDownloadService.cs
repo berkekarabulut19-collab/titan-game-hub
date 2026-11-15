@@ -31,19 +31,21 @@ namespace TitanGameHub
         public static string BuildAutoClickScript()
         {
             return "(function(){" +
-                "var s='a.btn-main,button.btn-main,.btn-main,a.btn,button.btn,a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button.link-button,a[download],#downloadbtn,button[hx-get],a[href*=\"download\"],form button[type=\"submit\"]:not([disabled]),form input[type=\"submit\"]:not([disabled])';" +
+                "var bt=(document.title+' '+(document.body?document.body.innerText.slice(0,220):'')).toLowerCase();" +
+                "if(bt.indexOf('429 too many requests')>=0||bt.indexOf('404 not found')>=0||bt.indexOf('file not found')>=0)return 'ERR:'+document.title;" +
+                "var s='a[hx-get],button[hx-get],[hx-get*=\"download\"],[hx-post*=\"download\"],a.btn-main,button.btn-main,.btn-main,a.btn,button.btn,a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button.link-button,a[download],#downloadbtn,a[href*=\"download\"],form button[type=\"submit\"]:not([disabled]),form input[type=\"submit\"]:not([disabled])';" +
                 "var a=document.querySelectorAll(s);" +
                 "for(var i=0;i<a.length;i++){" +
                 "  var el=a[i]; if(!el||el.disabled) continue;" +
                 "  var t=(el.innerText||el.value||'').toLowerCase();" +
-                "  if(t.indexOf('premium')>=0||t.indexOf('vpn')>=0||t.indexOf('upgrade')>=0) continue;" +
+                "  if(t.indexOf('premium')>=0||t.indexOf('vpn')>=0||t.indexOf('upgrade')>=0||t.indexOf('browser')>=0) continue;" +
                 "  if(el.offsetParent!==null){el.click();return i+1;}" +
                 "}" +
                 "var all=document.querySelectorAll('a,button,input[type=\"submit\"]');" +
                 "for(var j=0;j<all.length;j++){" +
                 "  var b=all[j]; if(!b||b.disabled||b.offsetParent===null) continue;" +
                 "  var txt=(b.innerText||b.value||'').trim().toLowerCase();" +
-                "  if(txt==='download'||txt==='free download'||txt==='direct download'||txt==='start download'||txt==='create download link'||txt==='download now'){" +
+                "  if(txt==='download'||txt==='download file'||txt.indexOf('download file')===0||txt==='free download'||txt==='direct download'||txt==='start download'||txt==='create download link'||txt==='download now'||txt==='indir'){" +
                 "    b.click();return 100+j;" +
                 "  }" +
                 "}" +
@@ -66,6 +68,8 @@ namespace TitanGameHub
         {
             return Download(url, targetDirectory, suggestedFileName, onProgress, isCancelled, timeoutMinutes, null);
         }
+
+        public static string LastDomSnapshot { get; private set; }
 
         public static Result Download(string url, string targetDirectory, string suggestedFileName,
                                       Action<int, long, long> onProgress, Func<bool> isCancelled,
@@ -133,27 +137,28 @@ namespace TitanGameHub
                                                         tl.Contains(".torrent") || tl.Contains("/download") || tl.Contains("/dl/") ||
                                                         tl.Contains("bzzhr") || tl.Contains("buzzheavier") || tl.Contains("fileditch") ||
                                                         tl.Contains("fuckingfast") || tl.Contains("pixeldrain") || tl.Contains("gofile") ||
-                                                        tl.Contains("datanodes") || tl.Contains("vikingfile");
+                                                        tl.Contains("datanodes") || tl.Contains("vikingfile") ||
+                                                        tl.Contains("cloudflarestorage") || tl.Contains("token=") || tl.Contains("expires=");
                                 if (isDownloadTarget && !string.IsNullOrEmpty(target))
                                     core.Navigate(target);
                             }
                             catch { }
                         };
 
+                        string initialUrl = url.StartsWith("//") ? "https:" + url : url;
                         if (!string.IsNullOrEmpty(referer))
                         {
                             try
                             {
-                                string targetHost = "";
-                                try { targetHost = new Uri(url.StartsWith("//") ? "https:" + url : url).Host; } catch { }
+                                bool sentInitialReferer = false;
                                 core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Document);
                                 core.WebResourceRequested += delegate(object sr, CoreWebView2WebResourceRequestedEventArgs er)
                                 {
                                     try
                                     {
-                                        if (!string.IsNullOrEmpty(targetHost) &&
-                                            er.Request.Uri.IndexOf(targetHost, StringComparison.OrdinalIgnoreCase) >= 0)
+                                        if (!sentInitialReferer && string.Equals(er.Request.Uri, initialUrl, StringComparison.OrdinalIgnoreCase))
                                         {
+                                            sentInitialReferer = true;
                                             er.Request.Headers.SetHeader("Referer", referer);
                                             er.Request.Headers.SetHeader("Accept-Language", "en-US,en;q=0.9");
                                         }
@@ -232,7 +237,31 @@ namespace TitanGameHub
                                     view.Dispatcher.BeginInvoke(new Action(delegate
                                     {
                                         if (finished || downloadStarted) return;
-                                        try { core.ExecuteScriptAsync(clickJs); } catch { }
+                                        try
+                                        {
+                                            core.ExecuteScriptAsync(clickJs).ContinueWith(delegate(System.Threading.Tasks.Task<string> ct)
+                                            {
+                                                try
+                                                {
+                                                    if (!ct.IsFaulted && !string.IsNullOrEmpty(ct.Result) && ct.Result.Contains("ERR:"))
+                                                    {
+                                                        if (string.IsNullOrEmpty(result.Error)) result.Error = "Sunucu hatası: " + ct.Result;
+                                                        finished = true;
+                                                        try { win.Dispatcher.BeginInvoke(new Action(delegate { win.Close(); })); } catch { }
+                                                    }
+                                                }
+                                                catch { }
+                                            });
+                                            if (attempt == 4 || attempt == 14)
+                                            {
+                                                core.ExecuteScriptAsync("location.href + ' || ' + document.title + ' || ' + (document.body ? document.body.innerText.replace(/\\s+/g,' ').slice(0,300) : '')")
+                                                    .ContinueWith(delegate(System.Threading.Tasks.Task<string> st)
+                                                    {
+                                                        try { if (!st.IsFaulted && !string.IsNullOrEmpty(st.Result)) LastDomSnapshot = st.Result; } catch { }
+                                                    });
+                                            }
+                                        }
+                                        catch { }
                                     }));
                                 }
                                 catch { }

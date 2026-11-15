@@ -2467,7 +2467,39 @@ namespace TitanGameHub
                 }
             }
 
-            // Priority 2: WinRAR engine (RAR için tar.exe'den çok daha hızlı ve güvenilir)
+            // Priority 2: UnRAR.exe CLI (RAR için WinRAR GUI'den çok daha hafif ve çok çekirdekli)
+            if (!extracted && isRar)
+            {
+                string[] unrarPaths = new string[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "UnRAR.exe"),
+                    @"C:\Program Files\WinRAR\UnRAR.exe",
+                    @"C:\Program Files (x86)\WinRAR\UnRAR.exe"
+                };
+                foreach (string unrar in unrarPaths)
+                {
+                    if (!File.Exists(unrar)) continue;
+                    try
+                    {
+                        ProcessStartInfo psiUnrar = new ProcessStartInfo
+                        {
+                            FileName = unrar,
+                            Arguments = string.Format("x -o+ -mt{0} -inul \"{1}\" \"{2}\\\"", Math.Max(2, Environment.ProcessorCount), archivePath, destinationDir),
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        };
+                        using (Process p = Process.Start(psiUnrar))
+                        {
+                            try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
+                            p.WaitForExit();
+                            if (p.ExitCode == 0) { extracted = true; break; }
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            // Priority 3: WinRAR engine (RAR için tar.exe'den çok daha hızlı ve güvenilir)
             if (!extracted)
             {
                 string winrar = @"C:\Program Files\WinRAR\WinRAR.exe";
@@ -2520,13 +2552,13 @@ namespace TitanGameHub
                 }
             }
 
-            // Priority 4: Built-in ZipFile fallback with 1MB buffered sequential I/O & dir cache
+            // Priority 4: Built-in ZipFile fallback with 4MB buffered sequential I/O & dir cache
             if (!extracted && archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
                     HashSet<string> createdDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    byte[] ioBuf = new byte[1048576];
+                    byte[] ioBuf = new byte[4194304];
                     using (ZipArchive archive = ZipFile.OpenRead(archivePath))
                     {
                         foreach (ZipArchiveEntry entry in archive.Entries)
@@ -2544,7 +2576,7 @@ namespace TitanGameHub
                                     Directory.CreateDirectory(parent);
 
                                 using (Stream src = entry.Open())
-                                using (FileStream dst = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 1048576, FileOptions.SequentialScan))
+                                using (FileStream dst = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 4194304, FileOptions.SequentialScan))
                                 {
                                     int r;
                                     while ((r = src.Read(ioBuf, 0, ioBuf.Length)) > 0)

@@ -890,9 +890,28 @@ namespace TitanGameHub
                                 existing.CapsuleUrl = !string.IsNullOrEmpty(remoteCapsule) ? remoteCapsule : remoteBanner;
                                 changed++;
                             }
-                            if (string.IsNullOrEmpty(existing.DirectMirrorUrl) && !string.IsNullOrEmpty(p[15]) && p[15].StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                            string remoteDlUrl = (p[7] ?? "").Trim();
+                            string remoteDirectUrl = (p[15] ?? "").Trim();
+                            if (!string.IsNullOrEmpty(remoteDlUrl) &&
+                                MirrorTrustPolicy.IsPageUrlMatchingGame(remoteDlUrl, existing.Name) &&
+                                (string.IsNullOrEmpty(existing.DownloadUrl) ||
+                                 !MirrorTrustPolicy.IsPageUrlMatchingGame(existing.DownloadUrl, existing.Name) ||
+                                 !string.Equals(existing.DownloadUrl, remoteDlUrl, StringComparison.OrdinalIgnoreCase)))
                             {
-                                existing.DirectMirrorUrl = p[15].Trim();
+                                existing.DownloadUrl = remoteDlUrl;
+                                changed++;
+                            }
+                            bool localDirectBad = false;
+                            if (!string.IsNullOrEmpty(existing.DirectMirrorUrl))
+                            {
+                                bool accLocal;
+                                MirrorTrustPolicy.DescribeVerdict(existing.DirectMirrorUrl, existing, out accLocal);
+                                localDirectBad = !accLocal;
+                            }
+                            if (!string.Equals(existing.DirectMirrorUrl ?? "", remoteDirectUrl, StringComparison.OrdinalIgnoreCase) &&
+                                (string.IsNullOrEmpty(existing.DirectMirrorUrl) || localDirectBad || !string.IsNullOrEmpty(remoteDirectUrl)))
+                            {
+                                existing.DirectMirrorUrl = remoteDirectUrl;
                                 changed++;
                             }
                         }

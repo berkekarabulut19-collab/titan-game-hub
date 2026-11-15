@@ -27,6 +27,30 @@ namespace TitanGameHub
                     }
                 }
 
+                // CLI: --probe-wv2 <url> [referer]
+                for (int i = 0; i < cliArgs.Length; i++)
+                {
+                    if (string.Equals(cliArgs[i], "--probe-wv2", StringComparison.OrdinalIgnoreCase) && i + 1 < cliArgs.Length)
+                    {
+                        string u = cliArgs[i + 1];
+                        string refUrl = (i + 2 < cliArgs.Length && !cliArgs[i + 2].StartsWith("-")) ? cliArgs[i + 2] : "https://steamrip.com/";
+                        string tmpDir = Path.Combine(Path.GetTempPath(), "titan_wv2_probe");
+                        DateTime t0 = DateTime.UtcNow;
+                        long gotProbeBytes = 0;
+                        WebViewDownloadService.Result wr = WebViewDownloadService.Download(
+                            u, tmpDir, null,
+                            delegate(int pct, long got, long tot) { gotProbeBytes = got; },
+                            delegate { return gotProbeBytes >= 65536 || (DateTime.UtcNow - t0).TotalSeconds > 20; },
+                            1, refUrl);
+                        string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "wv2_probe.txt");
+                        try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)); } catch { }
+                        bool startedOk = wr.Success || gotProbeBytes >= 65536;
+                        File.WriteAllText(logPath, string.Format("StartedOK={0} Success={1} GotBytes={2} Err={3}\nDOM={4}", startedOk, wr.Success, gotProbeBytes, wr.Error ?? "", WebViewDownloadService.LastDomSnapshot ?? ""), Encoding.UTF8);
+                        try { if (!string.IsNullOrEmpty(wr.FilePath) && File.Exists(wr.FilePath)) File.Delete(wr.FilePath); } catch { }
+                        Environment.Exit(startedOk ? 0 : 1);
+                    }
+                }
+
                 // CLI: --export-catalog [output.json]
                 for (int i = 0; i < cliArgs.Length; i++)
                 {
