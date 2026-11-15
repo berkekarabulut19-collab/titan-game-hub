@@ -576,12 +576,58 @@ namespace TitanGameHub
             {
                 try
                 {
+                    // Kurulu oyun koruma kalkanı: arka plan katalog eşitlemesi (AutoUpdateService vb.)
+                    // elindeki eski bellek listesini yazarken, diskte yeni kurulmuş bir oyunun ExecutablePath'ini ASLA silmesin.
+                    Dictionary<string, string[]> existingInstalledById = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                    Dictionary<string, string[]> existingInstalledByNorm = new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase);
+                    try
+                    {
+                        if (File.Exists(ConfigPath))
+                        {
+                            HashSet<string> removedNow = LoadRemovedKeys();
+                            foreach (string oldLine in File.ReadAllLines(ConfigPath, Encoding.UTF8))
+                            {
+                                if (string.IsNullOrWhiteSpace(oldLine) || oldLine.StartsWith("#")) continue;
+                                string[] op = oldLine.Split('|');
+                                if (op.Length < 6) continue;
+                                string oId = (op[0] ?? "").Trim();
+                                string oName = (op[1] ?? "").Trim();
+                                string oExe = (op[3] ?? "").Trim();
+                                if (string.IsNullOrEmpty(oExe) || !File.Exists(oExe)) continue;
+                                if (IsGameRemoved(oId, oName, removedNow)) continue;
+                                if (!string.IsNullOrEmpty(oId) && !existingInstalledById.ContainsKey(oId))
+                                    existingInstalledById[oId] = op;
+                                string oNorm = GameDeduplicationEngine.NormalizeGameTitle(oName);
+                                if (!string.IsNullOrEmpty(oNorm) && !existingInstalledByNorm.ContainsKey(oNorm))
+                                    existingInstalledByNorm[oNorm] = op;
+                            }
+                        }
+                    }
+                    catch { }
+
                     List<GameProfile> snapshot = new List<GameProfile>(profiles);
                     List<string> lines = new List<string>();
                     lines.Add("# TitanGameHub v8.0 STEAM EDITION Catalog Database");
                     foreach (GameProfile g in snapshot)
                     {
                         if (g == null) continue;
+                        if (string.IsNullOrEmpty(g.ExecutablePath) || !File.Exists(g.ExecutablePath))
+                        {
+                            string[] preserved = null;
+                            if (!string.IsNullOrEmpty(g.Id)) existingInstalledById.TryGetValue(g.Id, out preserved);
+                            if (preserved == null && !string.IsNullOrEmpty(g.Name))
+                            {
+                                string gn = GameDeduplicationEngine.NormalizeGameTitle(g.Name);
+                                if (!string.IsNullOrEmpty(gn)) existingInstalledByNorm.TryGetValue(gn, out preserved);
+                            }
+                            if (preserved != null)
+                            {
+                                g.ExecutablePath = preserved[3];
+                                if (preserved.Length > 4 && !string.IsNullOrEmpty(preserved[4])) g.WorkingDirectory = preserved[4];
+                                if (preserved.Length > 5 && !string.IsNullOrEmpty(preserved[5])) g.Version = preserved[5];
+                                if (preserved.Length > 14 && !string.IsNullOrEmpty(preserved[14]) && NeedsRealSize(g.FileSize)) g.FileSize = preserved[14];
+                            }
+                        }
                         string safeId = (g.Id ?? Guid.NewGuid().ToString("N")).Replace("|", "-").Trim();
                         string safeName = (g.Name ?? "Game").Replace("|", "-").Trim();
                         string safeCat = (g.Category ?? "Co-Op").Replace("|", "-").Trim();
@@ -787,6 +833,30 @@ namespace TitanGameHub
                     if (gp.IsSteamManaged) gp.RemoteVersion = gp.Version;
                     changed++;
                     continue;
+                }
+
+                if (hadPath && !string.IsNullOrEmpty(gp.WorkingDirectory) && Directory.Exists(gp.WorkingDirectory))
+                {
+                    string reExe = FindMainExeInFolder(gp.WorkingDirectory);
+                    if (!string.IsNullOrEmpty(reExe) && File.Exists(reExe))
+                    {
+                        gp.ExecutablePath = reExe;
+                        gp.WorkingDirectory = Path.GetDirectoryName(reExe);
+                        changed++;
+                        continue;
+                    }
+                }
+
+                // Harici disk geçici olarak çıkarılmışsa kurulu oyun kaydını silme
+                if (hadPath)
+                {
+                    try
+                    {
+                        string drvRoot = Path.GetPathRoot(gp.ExecutablePath);
+                        if (!string.IsNullOrEmpty(drvRoot) && !Directory.Exists(drvRoot))
+                            continue;
+                    }
+                    catch { }
                 }
 
                 gp.ExecutablePath = "";

@@ -217,20 +217,20 @@ namespace TitanGameHub
                         ServicePointManager.UseNagleAlgorithm = false;
 
                         long fsz = handoff.ExpectedTotalBytes;
-                        int segs = (fsz >= 1000L * 1024 * 1024) ? 24 : ((fsz >= 250L * 1024 * 1024) ? 16 : 12);
+                        int segs = (fsz >= 1000L * 1024 * 1024) ? 32 : ((fsz >= 250L * 1024 * 1024) ? 24 : 16);
                         if (url.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0 ||
                             handoff.ResolvedDirectUrl.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0)
                         {
-                            segs = Math.Min(segs, 8);
+                            segs = Math.Min(segs, 12);
                         }
                         ReportProgress(string.Format("[2/4] {0} — {1}x Turbo çoklu bağlantı aktarımına geçildi...", profile.Name, segs), 26, segs + "x Turbo");
 
                         _activeTurboUserAgent = handoff.ResolvedUserAgent;
                         bool turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, segs);
-                        if (!turboOk && !_cancelRequested && segs > 4)
+                        if (!turboOk && !_cancelRequested && segs > 6)
                         {
-                            ReportProgress(string.Format("[2/4] {0} — Bağlantı dostu 4x Turbo moduna geçiliyor...", profile.Name), 26, "4x Turbo");
-                            turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, 4);
+                            ReportProgress(string.Format("[2/4] {0} — Bağlantı dostu 6x Turbo moduna geçiliyor...", profile.Name), 26, "6x Turbo");
+                            turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, 6);
                         }
                         _activeTurboUserAgent = null;
 
@@ -1627,6 +1627,8 @@ namespace TitanGameHub
                                 sReq.Timeout = 15000;
                                 sReq.ReadWriteTimeout = 15000;
                                 sReq.AllowReadStreamBuffering = false;
+                                sReq.KeepAlive = true;
+                                sReq.AutomaticDecompression = DecompressionMethods.None;
                                 sReq.ServicePoint.UseNagleAlgorithm = false;
                                 sReq.ServicePoint.Expect100Continue = false;
                                 sReq.ServicePoint.ConnectionLimit = 512;
@@ -1640,11 +1642,11 @@ namespace TitanGameHub
                                         break;
 
                                     using (Stream rs = sResp.GetResponseStream())
-                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 2097152, FileOptions.RandomAccess))
+                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 4194304, FileOptions.RandomAccess))
                                     {
                                         try { if (rs.CanTimeout) rs.ReadTimeout = 10000; } catch { }
                                         fs.Seek(curPos, SeekOrigin.Begin);
-                                        byte[] buf = new byte[2097152]; // 2 MB ultra-throughput streaming buffer
+                                        byte[] buf = new byte[4194304]; // 4 MB ultra-throughput streaming buffer
                                         long remaining = (segEnd - curPos) + 1;
                                         while (remaining > 0)
                                         {
@@ -1956,7 +1958,7 @@ namespace TitanGameHub
                             if (ServicePointManager.DefaultConnectionLimit < 512) ServicePointManager.DefaultConnectionLimit = 512;
                             ServicePointManager.Expect100Continue = false;
                             ServicePointManager.UseNagleAlgorithm = false;
-                            int segs = (fullSize >= 1000L * 1024 * 1024) ? 32 : ((fullSize >= 250L * 1024 * 1024) ? 24 : ((fullSize >= 50L * 1024 * 1024) ? 16 : 8));
+                            int segs = (fullSize >= 1000L * 1024 * 1024) ? 32 : ((fullSize >= 250L * 1024 * 1024) ? 24 : 16);
                             if (directUrl.IndexOf("gofile.io", StringComparison.OrdinalIgnoreCase) >= 0)
                                 segs = Math.Min(segs, 10); // GoFile ücretsiz API aşırı bağlantıda 429 verebilir -> 10 dengeli paralel stream
                             if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
