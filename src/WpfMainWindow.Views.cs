@@ -706,12 +706,33 @@ namespace TitanGameHub
                                     combined.AddRange(liveGames);
                                     _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(combined);
                                 }
+                                else if (string.IsNullOrEmpty(query) && _activeSiteCategoryId == -1 && _allProfiles != null && _allProfiles.Count > 0)
+                                {
+                                    // Merge newest live games on top of the full 5,843+ catalog so no games ever disappear!
+                                    List<GameProfile> mergedAll = new List<GameProfile>(liveGames.Count + _allProfiles.Count);
+                                    mergedAll.AddRange(liveGames);
+                                    mergedAll.AddRange(_allProfiles);
+                                    _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(mergedAll);
+                                }
+                                else if (!string.IsNullOrEmpty(query) && _allProfiles != null && _allProfiles.Count > 0)
+                                {
+                                    List<GameProfile> mergedSearch = new List<GameProfile>(liveGames);
+                                    for (int ai = 0; ai < _allProfiles.Count; ai++)
+                                    {
+                                        GameProfile ap = _allProfiles[ai];
+                                        if (ap == null || string.IsNullOrEmpty(ap.Name)) continue;
+                                        if (ap.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                            (!string.IsNullOrEmpty(ap.Category) && ap.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+                                            mergedSearch.Add(ap);
+                                    }
+                                    _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(mergedSearch);
+                                }
                                 else
                                 {
                                     _storeFilteredProfiles = liveGames;
                                 }
 
-                                if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = msg;
+                                if (_txtStoreCountBadge != null) _txtStoreCountBadge.Text = string.Format("🌐 Mağaza hazır • {0} benzersiz oyun listelendi", _storeFilteredProfiles.Count);
                                 if (_txtStorePageIndicator != null)
                                     _txtStorePageIndicator.Text = string.Format("SAYFA {0} • TOPLAM {1} BENZERSİZ OYUN LİSTELENDİ", page, _storeFilteredProfiles.Count);
                                 if (_txtBottomStatus != null) _txtBottomStatus.Text = msg;
