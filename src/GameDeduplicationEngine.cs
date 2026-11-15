@@ -1,55 +1,90 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace TitanGameHub
 {
     public static class GameDeduplicationEngine
     {
+        private static string FoldAscii(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return "";
+            string normalized = input.Normalize(NormalizationForm.FormKD);
+            StringBuilder sb = new StringBuilder(normalized.Length);
+            for (int i = 0; i < normalized.Length; i++)
+            {
+                char c = normalized[i];
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                    sb.Append(c);
+            }
+            return sb.ToString();
+        }
+
         public static string NormalizeGameTitle(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return "";
-            string clean = raw.Trim().ToLowerInvariant();
+            string clean = FoldAscii(raw.Trim()).ToLowerInvariant()
+                .Replace('\u2019', '\'').Replace('\u2018', '\'').Replace('\u201C', '"').Replace('\u201D', '"');
 
-            // Strip download and repack suffixes
+            // Strip download, repack, bracketed tags, and edition/DLC/version suffixes
             clean = Regex.Replace(clean, @"\s*(?:free|torrent)\s+download.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\+?\s*bonus\s+osts?\b", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\(v[0-9\.\s_ab-]+\)", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\[v[0-9\.\s_ab-]+\]", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*v[0-9]+(\.[0-9]+)*([a-z])?", "", RegexOptions.IgnoreCase);
-                clean = Regex.Replace(clean, @"[\s,:;+\-–—]*(?:\d+\.\d[\w\.]*|v\d[\w\.]*|build\s+\d+|update\s+\d+)\s*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*(repack|fitgirl|dodi|online-fix|all\s+dlcs?|steamrip)\b", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*(early\s+access|definitive\s+edition|deluxe\s+edition|remastered|goty\s+edition)\b", "", RegexOptions.IgnoreCase);
-
-            // Sürüm / DLC / paket etiketleri (site başlıkları çok süslü geliyor)
-            clean = Regex.Replace(clean, @"[\s,\+]*\d+\s*dlcs?\s*/?\s*bonuses?.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*&\s*soundtrack\s*bundle.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"(digital\s+deluxe|deluxe|ultimate|premium|gold|complete|collector'?s|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary)(\s+edition)?", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"(bundle|collection|pack).*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"multi?\d+", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"(elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|dodi|fitgirl|online-?fix|empress|goldberg|xatab|kaos|razor1911|p2p)", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"(?:\s*-\s*|\b)gog\b", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\([^\)]*\)", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"[–—-]\s*v?\d+\.\d+.*$", "", RegexOptions.IgnoreCase);
-            // Kuyruk temizliği: ", v142058 (v1.5.3) + v66884 + 6 DLCs/Bonuses" gibi artıklar
-            for (int guard = 0; guard < 6; guard++)
-            {
-                string before = clean;
-                clean = Regex.Replace(clean, @"[\s,:;\+\-–—]*\d+\s*dlcs?\s*/?\s*bonuses?.*$", "", RegexOptions.IgnoreCase);
-                clean = Regex.Replace(clean, @"[\s,:;\+[\-]*(\d+\\.\d[\w\\.]*|v\d[\w\\.]*|build\s+\d+|update\s+\d+)\s*$", "", RegexOptions.IgnoreCase);
-                clean = Regex.Replace(clean, @"[\s,:;\+\-–—]+$", "");
-                clean = Regex.Replace(clean, @"\s{2,}", " ");
-                if (clean == before) break;
-            }
-
-            // Kalan süs kelimeleri (digital edition / bonus / dlc) at
-            clean = Regex.Replace(clean, @"(?i)(?:^|\s)(digital|edition|deluxe|ultimate|premium|gold|complete|bonus|bonuses|dlc|dlcs|bundle)(?:$|\s)", " ");
-            clean = Regex.Replace(clean, @"\s{2,}", " ");
-
-
-            // Strip non-alphanumeric characters
+            clean = Regex.Replace(clean, @"\[[^\]]*\]", " ");
+            clean = Regex.Replace(clean, @"\s*\+\s*\d*\s*dlcs?.*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s*\+\s*all\s+dlcs?.*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s*\+\s*(?:multiplayer|online|co-?op|lan|bonuses?|soundtrack|ost).*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s*[–—-]\s*(?:v\d|build\s+\d|cl#\d|hotfix).*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s*\((?:v\d|build\s+\d|repack|fitgirl|dodi|gog|steamrip|early\s+access|multi\d*)[^\)]*\)", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"[:\s,-]*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary|infernal|gold|premium|special|remastered|legacy|royal|master|standard|director'?s\s+cut)(\s+edition)?\b", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\b(?:repack|fitgirl|dodi|online-?fix|steamrip|elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|empress|goldberg|xatab|kaos|razor1911|p2p|gog|multi\d+|all\s+dlcs?|early\s+access)\b", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\bv\d+(?:\.\d+)*[a-z]?\b", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\b(?:build|update|hotfix)\s*\d+\b", " ", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\bcl#\d+\b", " ", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"[^a-z0-9]", "");
             return clean.Trim();
+        }
+
+        private static void MergeEditionAndDlcMetadata(GameProfile target, GameProfile source)
+        {
+            if (target == null || source == null) return;
+            string combined = (source.Name ?? "") + " | " + (source.Version ?? "") + " | " + (target.Version ?? "");
+            List<string> tags = new List<string>();
+            if (!string.IsNullOrWhiteSpace(target.Version) &&
+                !target.Version.Equals("Full Version", StringComparison.OrdinalIgnoreCase) &&
+                !target.Version.Equals("Son Sürüm", StringComparison.OrdinalIgnoreCase))
+            {
+                string[] existingParts = target.Version.Split(new string[] { " • " }, StringSplitOptions.RemoveEmptyEntries);
+                for (int i = 0; i < existingParts.Length; i++)
+                    tags.Add(existingParts[i].Trim());
+            }
+
+            Match verM = Regex.Match(combined, @"\b(v\d+\.\d+(?:\.\d+)*[a-z]?)\b", RegexOptions.IgnoreCase);
+            if (verM.Success && tags.Count == 0)
+                tags.Add(verM.Groups[1].Value);
+
+            Match dlcM = Regex.Match(combined, @"(\+?\s*\d+\s*DLCs?|All\s+DLCs?)", RegexOptions.IgnoreCase);
+            if (dlcM.Success)
+            {
+                string dlcTag = Regex.Replace(dlcM.Groups[1].Value.Trim(), @"\s+", " ").Replace("DLCs", "DLC");
+                if (dlcTag.StartsWith("+ ")) dlcTag = "+" + dlcTag.Substring(2);
+                if (!dlcTag.StartsWith("+") && char.IsDigit(dlcTag[0])) dlcTag = "+" + dlcTag;
+                bool hasDlc = false;
+                for (int i = 0; i < tags.Count; i++)
+                    if (tags[i].IndexOf("DLC", StringComparison.OrdinalIgnoreCase) >= 0) hasDlc = true;
+                if (!hasDlc) tags.Add(dlcTag);
+            }
+
+            if (Regex.IsMatch(combined, @"\b(Full\s+Version|Full\s+Paket|Complete|All\s+DLCs?|Repack|Deluxe|Ultimate|GOTY)\b", RegexOptions.IgnoreCase))
+            {
+                bool hasFull = false;
+                for (int i = 0; i < tags.Count; i++)
+                    if (tags[i].IndexOf("Full Paket", StringComparison.OrdinalIgnoreCase) >= 0) hasFull = true;
+                if (!hasFull) tags.Add("Full Paket");
+            }
+
+            if (tags.Count > 0)
+                target.Version = string.Join(" • ", tags.ToArray());
         }
 
         public static List<GameProfile> Deduplicate(IEnumerable<GameProfile> profiles)
@@ -80,6 +115,7 @@ namespace TitanGameHub
                             p.BannerUrl = existing.BannerUrl;
                         if (string.IsNullOrEmpty(p.DirectMirrorUrl) && !string.IsNullOrEmpty(existing.DirectMirrorUrl))
                             p.DirectMirrorUrl = existing.DirectMirrorUrl;
+                        MergeEditionAndDlcMetadata(p, existing);
                         map[key] = p;
                         continue;
                     }
@@ -91,8 +127,11 @@ namespace TitanGameHub
                             existing.DirectMirrorUrl = p.DirectMirrorUrl;
                         if (!string.IsNullOrEmpty(p.RemoteVersion))
                             existing.RemoteVersion = p.RemoteVersion;
+                        MergeEditionAndDlcMetadata(existing, p);
                         continue;
                     }
+
+                    MergeEditionAndDlcMetadata(existing, p);
 
                     // Rule 3: Prefer profile with clean, working direct mirror / magnet URL (ignore ad shorteners)
                     bool existingWeak = string.IsNullOrEmpty(existing.DirectMirrorUrl) || DownloadHostPolicy.IsAdShortener(existing.DirectMirrorUrl);
