@@ -70,6 +70,7 @@ namespace TitanGameHub
         }
 
         public static string LastDomSnapshot { get; private set; }
+        public static string LastError { get; private set; }
 
         public static Result Download(string url, string targetDirectory, string suggestedFileName,
                                       Action<int, long, long> onProgress, Func<bool> isCancelled,
@@ -88,10 +89,11 @@ namespace TitanGameHub
             {
                 if (!Directory.Exists(targetDirectory)) Directory.CreateDirectory(targetDirectory);
 
-                // Kullanıcı verisi uygulama klasörünü şişirmesin
-                string userDataDir = Path.Combine(
+                // Kullanıcı verisi uygulama klasörünü şişirmesin; aynı anda birden fazla oturum çakışmasın diye benzersiz alt klasör kullan
+                string baseW2 = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "TitanGameHub", "WebView2");
+                string userDataDir = Path.Combine(baseW2, "s_" + Guid.NewGuid().ToString("N").Substring(0, 8));
                 try { if (!Directory.Exists(userDataDir)) Directory.CreateDirectory(userDataDir); } catch { }
 
                 // "İndir" akışında site ekranda açılmasın: tarayıcı oturumu ekran dışında 960x640 gerçek boyutta çalışır.
@@ -343,17 +345,22 @@ namespace TitanGameHub
 
                 win.ShowDialog();
 
+                try { view.Dispose(); } catch { }
+                try { if (Directory.Exists(userDataDir)) Directory.Delete(userDataDir, true); } catch { }
+
                 // Yalnızca CoreWebView2DownloadState.Completed olduğunda başarılı say; yarım/bozuk dosyayı sil.
                 if (!result.Success && !string.IsNullOrEmpty(result.FilePath) && File.Exists(result.FilePath))
                 {
                     try { File.Delete(result.FilePath); } catch { }
                 }
 
+                LastError = result.Error;
                 return result;
             }
             catch (Exception ex)
             {
                 result.Error = "Gömülü tarayıcı hatası: " + ex.Message;
+                LastError = result.Error;
                 try { if (win != null) win.Close(); } catch { }
                 return result;
             }

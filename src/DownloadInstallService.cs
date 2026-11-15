@@ -191,6 +191,11 @@ namespace TitanGameHub
                     downloadedPath = got;
                     return true;
                 }
+                if (!string.IsNullOrEmpty(WebViewDownloadService.LastError))
+                {
+                    ReportProgress(string.Format("{0} — {1} atlandı ({2}), sonraki sunucu deneniyor...",
+                        profile.Name, DownloadHostPolicy.HostLabel(url), WebViewDownloadService.LastError), 22, "Sonraki Ayna");
+                }
             }
             catch { }
 
