@@ -92,18 +92,34 @@ namespace TitanGameHub
                 }
                 else
                 {
-                    message = "Katalog kaydı kaldırıldı (dosyalar korundu).";
+                    message = "Oyun kurulumu temizlendi (katalogda indirmeye hazır).";
                 }
 
                 CleanupGameArtifacts(gp);
-                ProfileStore.MarkGameRemoved(gp);
                 RecordActivity("KALDIRILDI", gp.Name, gp.FileSize);
 
+                string normTarget = GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
                 List<GameProfile> list = ProfileStore.LoadProfiles();
-                list.RemoveAll(delegate(GameProfile p)
+                bool isPureLocalOnly = !string.IsNullOrEmpty(gp.Id) &&
+                                       gp.Id.StartsWith("local_", StringComparison.OrdinalIgnoreCase) &&
+                                       string.IsNullOrEmpty(gp.DownloadUrl) &&
+                                       string.IsNullOrEmpty(gp.DirectMirrorUrl);
+                if (isPureLocalOnly)
                 {
-                    return p.Id == gp.Id || GameDeduplicationEngine.NormalizeGameTitle(p.Name) == GameDeduplicationEngine.NormalizeGameTitle(gp.Name);
-                });
+                    list.RemoveAll(delegate(GameProfile p) { return p != null && p.Id == gp.Id; });
+                }
+                else
+                {
+                    foreach (GameProfile p in list)
+                    {
+                        if (p == null) continue;
+                        if (p.Id == gp.Id || (!string.IsNullOrEmpty(normTarget) && GameDeduplicationEngine.NormalizeGameTitle(p.Name) == normTarget))
+                        {
+                            p.ExecutablePath = "";
+                            p.WorkingDirectory = "";
+                        }
+                    }
+                }
                 ProfileStore.SaveProfiles(list);
 
                 return true;

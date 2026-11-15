@@ -1127,20 +1127,20 @@ namespace TitanGameHub
 
             Border statusBadge = new Border()
             {
-                Background = gp.IsInstalled ? HexBrush("#E616301B") : HexBrush("#D90E141B"),
-                BorderBrush = gp.IsInstalled ? ThemeManager.AccentGreenBrush : HexBrush("#3D4B61"),
-                BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(3),
-                Padding = new Thickness(6, 2, 6, 2),
+                Background = gp.IsInstalled ? HexBrush("#E614532D") : HexBrush("#D90E141B"),
+                BorderBrush = gp.IsInstalled ? HexBrush("#4ADE80") : HexBrush("#3D4B61"),
+                BorderThickness = new Thickness(gp.IsInstalled ? 1.5 : 1),
+                CornerRadius = new CornerRadius(4),
+                Padding = new Thickness(7, 3, 7, 3),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 VerticalAlignment = VerticalAlignment.Bottom
             };
             statusBadge.Child = new TextBlock()
             {
-                Text = gp.IsInstalled ? "✔ KÜTÜPHANEDE YÜKLÜ" : SiteParserService.SanitizeDisplayCategory(gp.Category),
-                Foreground = gp.IsInstalled ? ThemeManager.AccentGreenBrush : ThemeManager.ForegroundMainBrush,
-                FontSize = 9,
-                FontWeight = FontWeights.Bold
+                Text = gp.IsInstalled ? "✔ İNİK / YÜKLÜ" : SiteParserService.SanitizeDisplayCategory(gp.Category),
+                Foreground = gp.IsInstalled ? HexBrush("#4ADE80") : ThemeManager.ForegroundMainBrush,
+                FontSize = gp.IsInstalled ? 10 : 9,
+                FontWeight = FontWeights.ExtraBold
             };
             overlayBadges.Children.Add(statusBadge);
             imgLayer.Children.Add(overlayBadges);
