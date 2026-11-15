@@ -851,9 +851,32 @@ namespace TitanGameHub
                                 existing.SteamAppId = remoteAppId;
                                 changed++;
                             }
+                            string remoteVer = (p[5] ?? "").Trim();
+                            if (!string.IsNullOrEmpty(remoteVer) &&
+                                (string.IsNullOrEmpty(existing.Version) ||
+                                 existing.Version.Equals("Full Version", StringComparison.OrdinalIgnoreCase) ||
+                                 existing.Version.Equals("Son Sürüm", StringComparison.OrdinalIgnoreCase) ||
+                                 (remoteVer.IndexOf("DLC", StringComparison.OrdinalIgnoreCase) >= 0 && (existing.Version ?? "").IndexOf("DLC", StringComparison.OrdinalIgnoreCase) < 0)))
+                            {
+                                existing.Version = remoteVer;
+                                existing.RemoteVersion = !string.IsNullOrEmpty(p[6]) ? p[6].Trim() : remoteVer;
+                                changed++;
+                            }
+                            string remoteMp = (p[11] ?? "").Trim();
+                            if (!string.IsNullOrEmpty(remoteMp) &&
+                                remoteMp.IndexOf("Multiplayer", StringComparison.OrdinalIgnoreCase) >= 0 &&
+                                (string.IsNullOrEmpty(existing.MaxPlayers) || existing.MaxPlayers.IndexOf("Tek", StringComparison.OrdinalIgnoreCase) >= 0))
+                            {
+                                existing.MaxPlayers = remoteMp;
+                                changed++;
+                            }
                             bool localBannerBad = string.IsNullOrEmpty(existing.BannerUrl) || existing.BannerUrl == "480" ||
                                                   !existing.BannerUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase) ||
-                                                  existing.BannerUrl.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) >= 0;
+                                                  existing.BannerUrl.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                  existing.BannerUrl.IndexOf("crotorrents.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                  existing.BannerUrl.IndexOf("steamrip.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                  existing.BannerUrl.IndexOf("imageban.ru", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                  existing.BannerUrl.IndexOf("capsule_231x87", StringComparison.OrdinalIgnoreCase) >= 0;
                             bool remoteBannerGood = !string.IsNullOrEmpty(remoteBanner) && remoteBanner.StartsWith("http", StringComparison.OrdinalIgnoreCase) &&
                                                     remoteBanner.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) < 0;
                             if (remoteBannerGood && (localBannerBad || !string.Equals(existing.BannerUrl, remoteBanner, StringComparison.OrdinalIgnoreCase)))

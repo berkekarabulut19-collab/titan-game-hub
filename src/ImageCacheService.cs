@@ -21,6 +21,46 @@ namespace TitanGameHub
         private static readonly HashSet<string> InFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private static readonly SemaphoreSlim DownloadGate = new SemaphoreSlim(24, 24);
 
+        private static readonly Dictionary<string, string> SteamSearchCoverCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        private static string ResolveSteamHeaderFallback(string gameName)
+        {
+            if (string.IsNullOrWhiteSpace(gameName)) return null;
+            string clean = Regex.Replace(gameName, @"\[[^\]]*\]|\([^\)]*\)", " ");
+            clean = Regex.Replace(clean, @"[–—-]\s*(?:v\d|Build|CL#|HotFix|MULTi|ElAmigos|CODEX|PLAZA|SKIDROW|RUNE|FLT|TENOKE|DODI|FitGirl).*$", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"\s+", " ").Trim();
+            if (clean.Length < 2) return null;
+
+            lock (SteamSearchCoverCache)
+            {
+                string cached;
+                if (SteamSearchCoverCache.TryGetValue(clean, out cached))
+                    return cached;
+            }
+
+            string foundUrl = null;
+            try
+            {
+                using (TimeoutWebClient swc = new TimeoutWebClient(4500))
+                {
+                    swc.Proxy = null;
+                    swc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    string api = "https://store.steampowered.com/api/storesearch/?term=" + Uri.EscapeDataString(clean) + "&l=english&cc=US";
+                    string json = swc.DownloadString(api);
+                    Match m = Regex.Match(json, @"""id""\s*:\s*(\d{2,8})\b");
+                    if (m.Success && m.Groups[1].Value != "480")
+                        foundUrl = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + m.Groups[1].Value + "/header.jpg";
+                }
+            }
+            catch { }
+
+            lock (SteamSearchCoverCache)
+            {
+                SteamSearchCoverCache[clean] = foundUrl;
+            }
+            return foundUrl;
+        }
+
         private sealed class TimeoutWebClient : WebClient
         {
             private readonly int _timeoutMs;
@@ -125,12 +165,17 @@ namespace TitanGameHub
             string fallbackUrl = cUrl ?? bUrl;
             string steamAppId = (gp.SteamAppId ?? "").Trim();
             bool hasSteamId = !string.IsNullOrEmpty(steamAppId) && steamAppId != "480" && Regex.IsMatch(steamAppId, @"^\d{2,8}$");
-            if (string.IsNullOrEmpty(primaryUrl) && hasSteamId)
+            bool isWeakOrHotlinkUrl = !string.IsNullOrEmpty(primaryUrl) &&
+                (primaryUrl.IndexOf("crotorrents.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 primaryUrl.IndexOf("steamrip.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 primaryUrl.IndexOf("imageban.ru", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                 primaryUrl.IndexOf("capsule_231x87", StringComparison.OrdinalIgnoreCase) >= 0);
+            if ((string.IsNullOrEmpty(primaryUrl) || isWeakOrHotlinkUrl) && hasSteamId)
             {
+                fallbackUrl = primaryUrl;
                 primaryUrl = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/header.jpg";
-                fallbackUrl = "https://cdn.cloudflare.steamstatic.com/steam/apps/" + steamAppId + "/header.jpg";
             }
-            if (string.IsNullOrEmpty(primaryUrl))
+            if (string.IsNullOrEmpty(primaryUrl) && string.IsNullOrWhiteSpace(gp.Name))
             {
                 if (onDone != null) onDone(false);
                 return;
@@ -185,7 +230,8 @@ namespace TitanGameHub
                                         wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
                                         bool ok = false;
                                         List<string> candidates = new List<string>();
-                                        candidates.Add(primaryUrl);
+                                        if (!string.IsNullOrEmpty(primaryUrl))
+                                            candidates.Add(primaryUrl);
                                         if (!string.IsNullOrEmpty(fallbackUrl) && fallbackUrl != primaryUrl)
                                             candidates.Add(fallbackUrl);
                                         if (hasSteamId)
@@ -201,6 +247,11 @@ namespace TitanGameHub
                                             try
                                             {
                                                 if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                                                Uri u;
+                                                if (Uri.TryCreate(urlCand, UriKind.Absolute, out u) && urlCand.IndexOf("steamstatic.com", StringComparison.OrdinalIgnoreCase) < 0)
+                                                    wc.Headers["Referer"] = u.Scheme + "://" + u.Host + "/";
+                                                else
+                                                    wc.Headers.Remove("Referer");
                                                 wc.DownloadFile(urlCand, tmpPath);
                                                 if (IsValidRasterFile(tmpPath))
                                                 {
@@ -209,6 +260,26 @@ namespace TitanGameHub
                                                 }
                                             }
                                             catch { ok = false; }
+                                        }
+
+                                        if (!ok && !string.IsNullOrWhiteSpace(gp.Name))
+                                        {
+                                            string steamFallback = ResolveSteamHeaderFallback(gp.Name);
+                                            if (!string.IsNullOrEmpty(steamFallback))
+                                            {
+                                                try
+                                                {
+                                                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                                                    wc.Headers.Remove("Referer");
+                                                    wc.DownloadFile(steamFallback, tmpPath);
+                                                    if (IsValidRasterFile(tmpPath))
+                                                    {
+                                                        ok = true;
+                                                        gp.BannerUrl = steamFallback;
+                                                    }
+                                                }
+                                                catch { ok = false; }
+                                            }
                                         }
 
                                         if (ok)
