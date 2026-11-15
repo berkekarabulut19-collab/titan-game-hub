@@ -1404,10 +1404,12 @@ namespace TitanGameHub
                         }
 
                         bool segOk = false;
-                        for (int attempt = 0; attempt < 3 && !segOk && !_cancelRequested; attempt++)
+                        for (int attempt = 0; attempt < 5 && !segOk && !_cancelRequested; attempt++)
                         {
                             try
                             {
+                                curPos = Interlocked.Read(ref segCur[segIdx]);
+                                if (curPos > segEnd) { segOk = true; break; }
                                 HttpWebRequest sReq = (HttpWebRequest)WebRequest.Create(directUrl);
                                 sReq.Proxy = null;
                                 sReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
@@ -1427,11 +1429,11 @@ namespace TitanGameHub
                                         break;
 
                                     using (Stream rs = sResp.GetResponseStream())
-                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 1048576, FileOptions.RandomAccess))
+                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 262144, FileOptions.RandomAccess))
                                     {
-                                        try { if (rs.CanTimeout) rs.ReadTimeout = 12000; } catch { }
+                                        try { if (rs.CanTimeout) rs.ReadTimeout = 15000; } catch { }
                                         fs.Seek(curPos, SeekOrigin.Begin);
-                                        byte[] buf = new byte[1048576]; // 1 MB per segment
+                                        byte[] buf = new byte[262144]; // 256 KB smooth streaming buffer
                                         long remaining = (segEnd - curPos) + 1;
                                         while (remaining > 0)
                                         {
@@ -1454,7 +1456,7 @@ namespace TitanGameHub
                             }
                             catch
                             {
-                                if (attempt < 2 && !_cancelRequested) Thread.Sleep(400);
+                                if (attempt < 4 && !_cancelRequested) Thread.Sleep(300 * (attempt + 1));
                             }
                         }
 
@@ -1469,13 +1471,13 @@ namespace TitanGameHub
                 }
 
                 Stopwatch sw = Stopwatch.StartNew();
-                long lastBytes = totalWritten;
-                long lastMs = 0;
                 long lastMapSaveMs = 0;
                 double smoothSpeed = 0.0;
                 double mbTot = fullSize / (1024.0 * 1024.0);
+                Queue<KeyValuePair<long, long>> speedWindow = new Queue<KeyValuePair<long, long>>();
+                speedWindow.Enqueue(new KeyValuePair<long, long>(0, totalWritten));
 
-                while (!allDone.WaitOne(150))
+                while (!allDone.WaitOne(250))
                 {
                     if (_cancelRequested)
                     {
@@ -1489,13 +1491,14 @@ namespace TitanGameHub
                         saveSegMap();
                     }
                     long cur = Interlocked.Read(ref totalWritten);
-                    double secDelta = (nowMs - lastMs) / 1000.0;
-                    long bytesDelta = cur - lastBytes;
-                    lastMs = nowMs;
-                    lastBytes = cur;
+                    speedWindow.Enqueue(new KeyValuePair<long, long>(nowMs, cur));
+                    while (speedWindow.Count > 2 && nowMs - speedWindow.Peek().Key > 2500)
+                        speedWindow.Dequeue();
 
-                    double inst = (secDelta > 0.001) ? ((bytesDelta / (1024.0 * 1024.0)) / secDelta) : 0.0;
-                    smoothSpeed = (smoothSpeed <= 0.01) ? inst : (0.30 * inst + 0.70 * smoothSpeed);
+                    KeyValuePair<long, long> oldest = speedWindow.Peek();
+                    double winSec = (nowMs - oldest.Key) / 1000.0;
+                    double inst = (winSec > 0.15) ? (((cur - oldest.Value) / 1048576.0) / winSec) : 0.0;
+                    smoothSpeed = (smoothSpeed <= 0.01) ? inst : (0.25 * inst + 0.75 * smoothSpeed);
 
                     double mbRec = cur / (1024.0 * 1024.0);
                     int pct = (int)Math.Min(85, (cur * 85) / fullSize);
@@ -1770,15 +1773,16 @@ namespace TitanGameHub
                                 using (FileStream fs = new FileStream(partialFile, mode, FileAccess.Write, FileShare.Read))
                         {
                             try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
-                            byte[] buf = new byte[1048576]; // 1MB ultra-throughput socket buffer
+                            byte[] buf = new byte[262144]; // 256KB smooth streaming buffer
                             long received = existingLength;
                             int read;
                             Stopwatch sw = Stopwatch.StartNew();
                             Stopwatch rateWatch = Stopwatch.StartNew();
                             long bytesSinceRateCheck = 0;
                             long lastReportMs = 0;
-                            long lastReportBytes = existingLength;
                             double smoothSpeed = 0.0;
+                            Queue<KeyValuePair<long, long>> speedWindow = new Queue<KeyValuePair<long, long>>();
+                            speedWindow.Enqueue(new KeyValuePair<long, long>(0, existingLength));
 
                             long lastUpdateCheckMs = 0;
                             while ((read = rs.Read(buf, 0, buf.Length)) > 0)
@@ -1831,16 +1835,19 @@ namespace TitanGameHub
                                     }
                                 }
 
-                                if (sw.ElapsedMilliseconds - lastReportMs >= 150) // Smooth real-time delta UI progress
+                                if (sw.ElapsedMilliseconds - lastReportMs >= 250) // 2.5s sliding window for steady throughput readout
                                 {
-                                    long bytesDelta = received - lastReportBytes;
-                                    double secDelta = (sw.ElapsedMilliseconds - lastReportMs) / 1000.0;
-                                    lastReportMs = sw.ElapsedMilliseconds;
-                                    lastReportBytes = received;
+                                    long nowMs = sw.ElapsedMilliseconds;
+                                    lastReportMs = nowMs;
+                                    speedWindow.Enqueue(new KeyValuePair<long, long>(nowMs, received));
+                                    while (speedWindow.Count > 2 && nowMs - speedWindow.Peek().Key > 2500)
+                                        speedWindow.Dequeue();
 
-                                    double instantSpeed = (secDelta > 0.001) ? ((bytesDelta / (1024.0 * 1024.0)) / secDelta) : 0.0;
+                                    KeyValuePair<long, long> oldest = speedWindow.Peek();
+                                    double winSec = (nowMs - oldest.Key) / 1000.0;
+                                    double instantSpeed = (winSec > 0.15) ? (((received - oldest.Value) / 1048576.0) / winSec) : 0.0;
                                     if (smoothSpeed <= 0.01) smoothSpeed = instantSpeed;
-                                    else smoothSpeed = (0.30 * instantSpeed) + (0.70 * smoothSpeed);
+                                    else smoothSpeed = (0.25 * instantSpeed) + (0.75 * smoothSpeed);
 
                                     double mbRec = received / (1024.0 * 1024.0);
                                     double mbTot = fullSize > 0 ? fullSize / (1024.0 * 1024.0) : 0;
