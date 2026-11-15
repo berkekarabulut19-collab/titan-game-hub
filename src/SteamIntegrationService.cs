@@ -128,7 +128,7 @@ namespace TitanGameHub
                     coopNote = " | Online-Fix & Spacewar 480 hazır";
                 }
                 string steamNote = steamOpen
-                    ? " (Steam kapatılmadan eklendi — Online-Fix doğrudan aktif; kütüphane kartı Steam yeniden açılınca görünür)"
+                    ? " — Steam KAPANMADAN Online-Fix (480) aktif edildi! (Not: Steam istemci kütüphane kartı ancak Steam yeniden başlatılınca güncellenir)"
                     : " (Steam'i açınca kütüphanede görünür)";
                 message = string.Format("✔ '{0}' Steam'e yollandı ({1} hesap{2}).{3}",
                     gp.Name, accounts, coopNote, steamNote);

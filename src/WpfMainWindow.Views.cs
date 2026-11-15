@@ -4006,14 +4006,41 @@ namespace TitanGameHub
                     (!string.IsNullOrEmpty(_selectedProfile.ExecutablePath) &&
                      _selectedProfile.ExecutablePath.EndsWith("AppMarket.exe", StringComparison.OrdinalIgnoreCase));
 
-                ProcessStartInfo psi = new ProcessStartInfo
+                Process proc = null;
+                if (!isGameLoopPubg)
                 {
-                    FileName = _selectedProfile.ExecutablePath,
-                    WorkingDirectory = _selectedProfile.WorkingDirectory,
-                    Arguments = isGameLoopPubg ? "-startpkg com.tencent.ig" : "",
-                    UseShellExecute = true
-                };
-                Process proc = Process.Start(psi);
+                    try
+                    {
+                        ProcessStartInfo psiDirect = new ProcessStartInfo
+                        {
+                            FileName = _selectedProfile.ExecutablePath,
+                            WorkingDirectory = _selectedProfile.WorkingDirectory,
+                            Arguments = "",
+                            UseShellExecute = false
+                        };
+                        string bridgeAppId = (!string.IsNullOrEmpty(_selectedProfile.WorkingDirectory) &&
+                            System.IO.File.Exists(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "steam_appid.txt")))
+                            ? (System.IO.File.ReadAllText(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "steam_appid.txt")).Trim())
+                            : "480";
+                        if (string.IsNullOrEmpty(bridgeAppId)) bridgeAppId = "480";
+                        psiDirect.EnvironmentVariables["SteamAppId"] = bridgeAppId;
+                        psiDirect.EnvironmentVariables["SteamGameId"] = bridgeAppId;
+                        psiDirect.EnvironmentVariables["SteamOverlayGameId"] = bridgeAppId;
+                        proc = Process.Start(psiDirect);
+                    }
+                    catch { proc = null; }
+                }
+                if (proc == null)
+                {
+                    ProcessStartInfo psi = new ProcessStartInfo
+                    {
+                        FileName = _selectedProfile.ExecutablePath,
+                        WorkingDirectory = _selectedProfile.WorkingDirectory,
+                        Arguments = isGameLoopPubg ? "-startpkg com.tencent.ig" : "",
+                        UseShellExecute = true
+                    };
+                    proc = Process.Start(psi);
+                }
                 _gameLaunchTime = DateTime.Now;
 
                 _cloudLobby.CurrentGame = _selectedProfile.Name;
