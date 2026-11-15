@@ -658,6 +658,65 @@ namespace TitanGameHub
                         }
                     }
 
+                    List<GameProfile> bgMerged = null;
+                    if (liveGames != null && liveGames.Count > 0)
+                    {
+                        List<GameProfile> snapAll = _allProfiles != null ? new List<GameProfile>(_allProfiles) : null;
+                        if (snapAll != null && snapAll.Count > 0)
+                        {
+                            Dictionary<string, GameProfile> catMap = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
+                            foreach (GameProfile cp in snapAll)
+                            {
+                                if (cp == null || string.IsNullOrEmpty(cp.Name)) continue;
+                                string nKey = GameDeduplicationEngine.NormalizeGameTitle(cp.Name);
+                                if (!string.IsNullOrEmpty(nKey) && !catMap.ContainsKey(nKey)) catMap[nKey] = cp;
+                            }
+                            foreach (GameProfile lg in liveGames)
+                            {
+                                if (lg == null || string.IsNullOrEmpty(lg.Name)) continue;
+                                string nKey = GameDeduplicationEngine.NormalizeGameTitle(lg.Name);
+                                GameProfile catMatch;
+                                if (!string.IsNullOrEmpty(nKey) && catMap.TryGetValue(nKey, out catMatch))
+                                {
+                                    if (ProfileStore.NeedsRealSize(lg.FileSize) && !ProfileStore.NeedsRealSize(catMatch.FileSize))
+                                        lg.FileSize = catMatch.FileSize;
+                                    if (!string.IsNullOrEmpty(catMatch.SteamAppId) && catMatch.SteamAppId != "480" &&
+                                        (string.IsNullOrEmpty(lg.SteamAppId) || lg.SteamAppId == "480"))
+                                        lg.SteamAppId = catMatch.SteamAppId;
+                                    bool lgBadImg = string.IsNullOrEmpty(lg.BannerUrl) || lg.BannerUrl == "480" ||
+                                                    lg.BannerUrl.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) >= 0;
+                                    if ((lgBadImg || (!string.IsNullOrEmpty(catMatch.BannerUrl) && catMatch.BannerUrl.IndexOf("steamstatic", StringComparison.OrdinalIgnoreCase) >= 0)) &&
+                                        !string.IsNullOrEmpty(catMatch.BannerUrl) && catMatch.BannerUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        lg.BannerUrl = catMatch.BannerUrl;
+                                        lg.CapsuleUrl = !string.IsNullOrEmpty(catMatch.CapsuleUrl) ? catMatch.CapsuleUrl : catMatch.BannerUrl;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (!appendMode && string.IsNullOrEmpty(query) && _activeSiteCategoryId == -1 && snapAll != null && snapAll.Count > 0)
+                        {
+                            List<GameProfile> mergedAll = new List<GameProfile>(liveGames.Count + snapAll.Count);
+                            mergedAll.AddRange(liveGames);
+                            mergedAll.AddRange(snapAll);
+                            bgMerged = GameDeduplicationEngine.Deduplicate(mergedAll);
+                        }
+                        else if (!appendMode && !string.IsNullOrEmpty(query) && snapAll != null && snapAll.Count > 0)
+                        {
+                            List<GameProfile> mergedSearch = new List<GameProfile>(liveGames);
+                            for (int ai = 0; ai < snapAll.Count; ai++)
+                            {
+                                GameProfile ap = snapAll[ai];
+                                if (ap == null || string.IsNullOrEmpty(ap.Name)) continue;
+                                if (ap.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                    (!string.IsNullOrEmpty(ap.Category) && ap.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
+                                    mergedSearch.Add(ap);
+                            }
+                            bgMerged = GameDeduplicationEngine.Deduplicate(mergedSearch);
+                        }
+                    }
+
                     Dispatcher.BeginInvoke(new Action(delegate
                     {
                         try
@@ -666,66 +725,15 @@ namespace TitanGameHub
                             _isFetchingLiveSite = false;
                             if (liveGames != null && liveGames.Count > 0)
                             {
-                                // Enrich live-scraped games with verified covers, SteamAppId, and real GB sizes from _allProfiles
-                                if (_allProfiles != null && _allProfiles.Count > 0)
-                                {
-                                    Dictionary<string, GameProfile> catMap = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
-                                    foreach (GameProfile cp in _allProfiles)
-                                    {
-                                        if (cp == null || string.IsNullOrEmpty(cp.Name)) continue;
-                                        string nKey = GameDeduplicationEngine.NormalizeGameTitle(cp.Name);
-                                        if (!string.IsNullOrEmpty(nKey) && !catMap.ContainsKey(nKey)) catMap[nKey] = cp;
-                                    }
-                                    foreach (GameProfile lg in liveGames)
-                                    {
-                                        if (lg == null || string.IsNullOrEmpty(lg.Name)) continue;
-                                        string nKey = GameDeduplicationEngine.NormalizeGameTitle(lg.Name);
-                                        GameProfile catMatch;
-                                        if (!string.IsNullOrEmpty(nKey) && catMap.TryGetValue(nKey, out catMatch))
-                                        {
-                                            if (ProfileStore.NeedsRealSize(lg.FileSize) && !ProfileStore.NeedsRealSize(catMatch.FileSize))
-                                                lg.FileSize = catMatch.FileSize;
-                                            if (!string.IsNullOrEmpty(catMatch.SteamAppId) && catMatch.SteamAppId != "480" &&
-                                                (string.IsNullOrEmpty(lg.SteamAppId) || lg.SteamAppId == "480"))
-                                                lg.SteamAppId = catMatch.SteamAppId;
-                                            bool lgBadImg = string.IsNullOrEmpty(lg.BannerUrl) || lg.BannerUrl == "480" ||
-                                                            lg.BannerUrl.IndexOf(".webp", StringComparison.OrdinalIgnoreCase) >= 0;
-                                            if ((lgBadImg || (!string.IsNullOrEmpty(catMatch.BannerUrl) && catMatch.BannerUrl.IndexOf("steamstatic", StringComparison.OrdinalIgnoreCase) >= 0)) &&
-                                                !string.IsNullOrEmpty(catMatch.BannerUrl) && catMatch.BannerUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
-                                            {
-                                                lg.BannerUrl = catMatch.BannerUrl;
-                                                lg.CapsuleUrl = !string.IsNullOrEmpty(catMatch.CapsuleUrl) ? catMatch.CapsuleUrl : catMatch.BannerUrl;
-                                            }
-                                        }
-                                    }
-                                }
-
                                 if (appendMode && _storeFilteredProfiles != null && _storeFilteredProfiles.Count > 0)
                                 {
                                     List<GameProfile> combined = new List<GameProfile>(_storeFilteredProfiles);
                                     combined.AddRange(liveGames);
                                     _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(combined);
                                 }
-                                else if (string.IsNullOrEmpty(query) && _activeSiteCategoryId == -1 && _allProfiles != null && _allProfiles.Count > 0)
+                                else if (bgMerged != null)
                                 {
-                                    // Merge newest live games on top of the full 5,843+ catalog so no games ever disappear!
-                                    List<GameProfile> mergedAll = new List<GameProfile>(liveGames.Count + _allProfiles.Count);
-                                    mergedAll.AddRange(liveGames);
-                                    mergedAll.AddRange(_allProfiles);
-                                    _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(mergedAll);
-                                }
-                                else if (!string.IsNullOrEmpty(query) && _allProfiles != null && _allProfiles.Count > 0)
-                                {
-                                    List<GameProfile> mergedSearch = new List<GameProfile>(liveGames);
-                                    for (int ai = 0; ai < _allProfiles.Count; ai++)
-                                    {
-                                        GameProfile ap = _allProfiles[ai];
-                                        if (ap == null || string.IsNullOrEmpty(ap.Name)) continue;
-                                        if (ap.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                            (!string.IsNullOrEmpty(ap.Category) && ap.Category.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0))
-                                            mergedSearch.Add(ap);
-                                    }
-                                    _storeFilteredProfiles = GameDeduplicationEngine.Deduplicate(mergedSearch);
+                                    _storeFilteredProfiles = bgMerged;
                                 }
                                 else
                                 {
@@ -932,13 +940,25 @@ namespace TitanGameHub
 
         private Border CreateSteamStoreGameCard(GameProfile gp)
         {
+            Brush baseBorder = gp.IsInstalled ? HexBrush("#4ADE80") : HexBrush("#2E2348");
+            Brush baseBg = HexBrush("#120E24");
             Border card = new Border()
             {
-                Background = ThemeManager.SidebarNavy,
-                BorderBrush = gp.IsInstalled ? ThemeManager.AccentGreenBrush : HexBrush("#2D2345"),
-                BorderThickness = new Thickness(1),
+                Background = baseBg,
+                BorderBrush = baseBorder,
+                BorderThickness = new Thickness(gp.IsInstalled ? 1.6 : 1),
                 CornerRadius = new CornerRadius(10),
                 Margin = new Thickness(0, 0, 10, 0)
+            };
+            card.MouseEnter += delegate
+            {
+                card.Background = HexBrush("#191334");
+                card.BorderBrush = gp.IsInstalled ? HexBrush("#86EFAC") : HexBrush("#8B5CF6");
+            };
+            card.MouseLeave += delegate
+            {
+                card.Background = baseBg;
+                card.BorderBrush = baseBorder;
             };
 
             StackPanel cardStack = new StackPanel();
@@ -947,8 +967,8 @@ namespace TitanGameHub
             // 16:9 Steam Store Header Image
             Border imgHeader = new Border()
             {
-                Height = 128,
-                CornerRadius = new CornerRadius(4, 4, 0, 0),
+                Height = 132,
+                CornerRadius = new CornerRadius(9, 9, 0, 0),
                 Background = ThemeManager.BorderSubtleBrush,
                 Cursor = Cursors.Hand
             };
