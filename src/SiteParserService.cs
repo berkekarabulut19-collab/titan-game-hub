@@ -110,7 +110,8 @@ namespace TitanGameHub
         static SiteParserService()
         {
             ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | (SecurityProtocolType)768;
-            ServicePointManager.DefaultConnectionLimit = 64;
+            if (ServicePointManager.DefaultConnectionLimit < 512)
+                ServicePointManager.DefaultConnectionLimit = 512;
             ServicePointManager.Expect100Continue = false;
         }
 

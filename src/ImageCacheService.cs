@@ -143,7 +143,8 @@ namespace TitanGameHub
             try
             {
                 ServicePointManager.SecurityProtocol |= (SecurityProtocolType)12288 | SecurityProtocolType.Tls12;
-                ServicePointManager.DefaultConnectionLimit = 64;
+                if (ServicePointManager.DefaultConnectionLimit < 512)
+                    ServicePointManager.DefaultConnectionLimit = 512;
                 ServicePointManager.Expect100Continue = false;
             }
             catch { }

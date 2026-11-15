@@ -73,9 +73,10 @@ namespace TitanGameHub
             {
                 ServicePointManager.UseNagleAlgorithm = false;
                 ServicePointManager.Expect100Continue = false;
-                ServicePointManager.DefaultConnectionLimit = 64;
+                if (ServicePointManager.DefaultConnectionLimit < 512)
+                    ServicePointManager.DefaultConnectionLimit = 512;
                 ServicePointManager.MaxServicePointIdleTime = 15000;
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // TLS 1.2
+                ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; // TLS 1.2 + 1.3
 
                 try
                 {

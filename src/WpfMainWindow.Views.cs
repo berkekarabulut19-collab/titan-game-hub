@@ -4341,8 +4341,8 @@ namespace TitanGameHub
                     {
                         try
                         {
-                            WebViewDownloadService.Result r = WebViewDownloadService.Download(url, dir, null, prog, cancel, minutes, referer);
-                            if (r != null && r.Success) path = r.FilePath;
+                            WebViewDownloadService.Result r = WebViewDownloadService.Download(url, dir, null, prog, cancel, minutes, referer, true);
+                            if (r != null && (r.Success || r.HandoffReady)) path = r.FilePath;
                             else if (r != null) error = r.Error;
                         }
                         catch (Exception ex) { error = ex.Message; }

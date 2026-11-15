@@ -18,6 +18,17 @@ namespace TitanGameHub
             {
                 if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return true;
 
+                // 256 MB üzeri büyük arşivlerde bloklayıcı ön-tarama yerine çıkartma sonrası gerçek zamanlı koruma + PE kontrolü kullanılır
+                try
+                {
+                    if (new FileInfo(filePath).Length > 256L * 1024 * 1024)
+                    {
+                        message = "Büyük arşiv: çıkartma hızı için gerçek zamanlı korumaya devredildi.";
+                        return true;
+                    }
+                }
+                catch { }
+
                 string mp = FindMpCmdRun();
                 if (string.IsNullOrEmpty(mp))
                 {
@@ -43,7 +54,7 @@ namespace TitanGameHub
                     p.BeginOutputReadLine();
                     p.BeginErrorReadLine();
 
-                    if (!p.WaitForExit(20000))
+                    if (!p.WaitForExit(8000))
                     {
                         try { p.Kill(); } catch { }
                         message = "Tarama zaman aşımına uğradı, gerçek zamanlı koruma devrede.";

@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Net;
+using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
@@ -26,6 +29,11 @@ namespace TitanGameHub
             public string FilePath;
             public string Error;
             public long Bytes;
+            public bool HandoffReady;
+            public string ResolvedDirectUrl;
+            public string ResolvedCookies;
+            public string ResolvedUserAgent;
+            public long ExpectedTotalBytes;
         }
 
         public static string BuildAutoClickScript()
@@ -71,12 +79,21 @@ namespace TitanGameHub
 
         public static string LastDomSnapshot { get; private set; }
         public static string LastError { get; private set; }
+        public static Result LastHandoff { get; private set; }
 
         public static Result Download(string url, string targetDirectory, string suggestedFileName,
                                       Action<int, long, long> onProgress, Func<bool> isCancelled,
                                       int timeoutMinutes, string referer)
         {
+            return Download(url, targetDirectory, suggestedFileName, onProgress, isCancelled, timeoutMinutes, referer, false);
+        }
+
+        public static Result Download(string url, string targetDirectory, string suggestedFileName,
+                                      Action<int, long, long> onProgress, Func<bool> isCancelled,
+                                      int timeoutMinutes, string referer, bool allowTurboHandoff)
+        {
             Result result = new Result();
+            LastHandoff = null;
 
             if (!IsRuntimeAvailable())
             {
@@ -187,6 +204,81 @@ namespace TitanGameHub
                             if (op == null) return;
                             downloadStarted = true;
                             activeOp = op;
+
+                            if (allowTurboHandoff && !string.IsNullOrEmpty(op.Uri) &&
+                                op.Uri.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                            {
+                                try
+                                {
+                                    string dlUri = op.Uri;
+                                    string ua = "";
+                                    try { ua = core.Settings.UserAgent; } catch { }
+                                    string destFile = e2.ResultFilePath;
+                                    core.CookieManager.GetCookiesAsync(dlUri).ContinueWith(delegate(System.Threading.Tasks.Task<List<CoreWebView2Cookie>> ckTask)
+                                    {
+                                        try
+                                        {
+                                            if (finished || result.Success) return;
+                                            StringBuilder ckb = new StringBuilder();
+                                            if (!ckTask.IsFaulted && ckTask.Result != null)
+                                            {
+                                                foreach (CoreWebView2Cookie ck in ckTask.Result)
+                                                {
+                                                    if (ckb.Length > 0) ckb.Append("; ");
+                                                    ckb.Append(ck.Name).Append("=").Append(ck.Value);
+                                                }
+                                            }
+                                            string cookieHdr = ckb.ToString();
+                                            ThreadPool.QueueUserWorkItem(delegate
+                                            {
+                                                try
+                                                {
+                                                    HttpWebRequest pReq = (HttpWebRequest)WebRequest.Create(dlUri);
+                                                    pReq.Proxy = null;
+                                                    pReq.Method = "GET";
+                                                    if (!string.IsNullOrEmpty(ua)) pReq.UserAgent = ua;
+                                                    if (!string.IsNullOrEmpty(referer)) pReq.Referer = referer;
+                                                    if (!string.IsNullOrEmpty(cookieHdr)) pReq.Headers["Cookie"] = cookieHdr;
+                                                    pReq.Timeout = 4500;
+                                                    pReq.ReadWriteTimeout = 4500;
+                                                    pReq.AddRange(0, 0);
+                                                    using (HttpWebResponse pResp = (HttpWebResponse)pReq.GetResponse())
+                                                    {
+                                                        if (pResp.StatusCode == HttpStatusCode.PartialContent)
+                                                        {
+                                                            long totalLen = 0;
+                                                            string cr = pResp.Headers["Content-Range"];
+                                                            if (!string.IsNullOrEmpty(cr))
+                                                            {
+                                                                int slash = cr.LastIndexOf('/');
+                                                                if (slash > 0) long.TryParse(cr.Substring(slash + 1).Trim(), out totalLen);
+                                                            }
+                                                            if (totalLen >= 8L * 1024 * 1024)
+                                                            {
+                                                                result.HandoffReady = true;
+                                                                result.ResolvedDirectUrl = dlUri;
+                                                                result.ResolvedCookies = cookieHdr;
+                                                                result.ResolvedUserAgent = ua;
+                                                                result.ExpectedTotalBytes = totalLen;
+                                                                result.FilePath = destFile;
+                                                                finished = true;
+                                                                win.Dispatcher.BeginInvoke(new Action(delegate
+                                                                {
+                                                                    try { if (activeOp != null) activeOp.Cancel(); } catch { }
+                                                                    try { win.Close(); } catch { }
+                                                                }));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                catch { }
+                                            });
+                                        }
+                                        catch { }
+                                    });
+                                }
+                                catch { }
+                            }
 
                             op.BytesReceivedChanged += delegate
                             {
@@ -348,13 +440,14 @@ namespace TitanGameHub
                 try { view.Dispose(); } catch { }
                 try { if (Directory.Exists(userDataDir)) Directory.Delete(userDataDir, true); } catch { }
 
-                // Yalnızca CoreWebView2DownloadState.Completed olduğunda başarılı say; yarım/bozuk dosyayı sil.
-                if (!result.Success && !string.IsNullOrEmpty(result.FilePath) && File.Exists(result.FilePath))
+                // Yalnızca CoreWebView2DownloadState.Completed veya HandoffReady olduğunda başarılı say; yarım/bozuk dosyayı sil.
+                if (!result.Success && !result.HandoffReady && !string.IsNullOrEmpty(result.FilePath) && File.Exists(result.FilePath))
                 {
                     try { File.Delete(result.FilePath); } catch { }
                 }
 
                 LastError = result.Error;
+                if (result.HandoffReady) LastHandoff = result;
                 return result;
             }
             catch (Exception ex)

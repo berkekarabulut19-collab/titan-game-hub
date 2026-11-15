@@ -139,6 +139,7 @@ namespace TitanGameHub
         /// Arayüz tarafından doldurulur; null ise harici tarayıcıya düşülür.
         /// </summary>
         public static Func<string, string, Action<int, long, long>, Func<bool>, int, string> EmbeddedBrowserDownloader { get; set; }
+        private static string _activeTurboUserAgent = null;
         private static readonly Dictionary<string, string> _preferredMirrorCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>Gömülü tarayıcı ile indirmeyi dener; başarılıysa dosya yolunu döndürür.</summary>
@@ -185,6 +186,67 @@ namespace TitanGameHub
                         return false;
                     },
                     60);
+
+                WebViewDownloadService.Result handoff = WebViewDownloadService.LastHandoff;
+                if (handoff != null && handoff.HandoffReady && !string.IsNullOrEmpty(handoff.ResolvedDirectUrl))
+                {
+                    try
+                    {
+                        string destFile = !string.IsNullOrEmpty(handoff.FilePath) ? handoff.FilePath : Path.Combine(dir, "titan_download.rar");
+                        string destParent = Path.GetDirectoryName(destFile);
+                        if (!string.IsNullOrEmpty(destParent) && !Directory.Exists(destParent)) Directory.CreateDirectory(destParent);
+                        string partialFile = destFile + ".resume";
+
+                        if (ServicePointManager.DefaultConnectionLimit < 512) ServicePointManager.DefaultConnectionLimit = 512;
+                        ServicePointManager.Expect100Continue = false;
+                        ServicePointManager.UseNagleAlgorithm = false;
+
+                        long fsz = handoff.ExpectedTotalBytes;
+                        int segs = (fsz >= 1000L * 1024 * 1024) ? 32 : ((fsz >= 250L * 1024 * 1024) ? 24 : 16);
+                        ReportProgress(string.Format("[2/4] {0} — {1}x Turbo çoklu bağlantı aktarımına geçildi...", profile.Name, segs), 26, segs + "x Turbo");
+
+                        _activeTurboUserAgent = handoff.ResolvedUserAgent;
+                        bool turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, segs);
+                        _activeTurboUserAgent = null;
+
+                        if (turboOk && File.Exists(partialFile))
+                        {
+                            if (File.Exists(destFile)) { try { File.Delete(destFile); } catch { } }
+                            File.Move(partialFile, destFile);
+                            downloadedPath = destFile;
+                            return true;
+                        }
+                        if (_cancelRequested) return false;
+                    }
+                    catch { _activeTurboUserAgent = null; }
+
+                    // Turbo handoff reddedildiyse STA thread'de normal WebView2 indirmesine düş
+                    WebViewDownloadService.Result fb = null;
+                    Thread fbThread = new Thread(delegate()
+                    {
+                        fb = WebViewDownloadService.Download(url, dir, suggested,
+                            delegate(int pct, long gotBytes, long total)
+                            {
+                                if (gotBytes > 0) { seenBytes = gotBytes; lastBytesAt = DateTime.UtcNow; }
+                                ReportProgress(
+                                    string.Format("[2/4] {0} İndiriliyor: {1:0.00} GB / {2:0.00} GB", profile.Name,
+                                        gotBytes / 1073741824.0, total > 0 ? total / 1073741824.0 : 0),
+                                    Math.Min(86, 24 + (pct * 60) / 100),
+                                    string.Format("%{0}", pct));
+                            },
+                            delegate { return _cancelRequested; },
+                            60, null, false);
+                    });
+                    fbThread.SetApartmentState(ApartmentState.STA);
+                    fbThread.IsBackground = true;
+                    fbThread.Start();
+                    fbThread.Join();
+                    if (fb != null && fb.Success && !string.IsNullOrEmpty(fb.FilePath) && File.Exists(fb.FilePath))
+                    {
+                        downloadedPath = fb.FilePath;
+                        return true;
+                    }
+                }
 
                 if (!string.IsNullOrEmpty(got) && File.Exists(got))
                 {
@@ -1535,14 +1597,14 @@ namespace TitanGameHub
                                 if (curPos > segEnd) { segOk = true; break; }
                                 HttpWebRequest sReq = (HttpWebRequest)WebRequest.Create(directUrl);
                                 sReq.Proxy = null;
-                                sReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+                                sReq.UserAgent = !string.IsNullOrEmpty(_activeTurboUserAgent) ? _activeTurboUserAgent : "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
                                 sReq.Referer = customReferer;
                                 sReq.Timeout = 15000;
                                 sReq.ReadWriteTimeout = 15000;
                                 sReq.AllowReadStreamBuffering = false;
                                 sReq.ServicePoint.UseNagleAlgorithm = false;
                                 sReq.ServicePoint.Expect100Continue = false;
-                                sReq.ServicePoint.ConnectionLimit = 256;
+                                sReq.ServicePoint.ConnectionLimit = 512;
                                 sReq.ServicePoint.ReceiveBufferSize = 8388608; // 8 MB TCP window
                                 if (!string.IsNullOrEmpty(authCookie)) sReq.Headers["Cookie"] = authCookie;
                                 sReq.AddRange(curPos, segEnd);
@@ -2480,47 +2542,7 @@ namespace TitanGameHub
                 catch { }
             }
 
-            // Priority 1: Multi-threaded high-priority extraction via 7-Zip (-mmt=on)
-            string[] possible7z = isRar
-                ? new string[]
-                {
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
-                    @"C:\Program Files\7-Zip\7z.exe",
-                    @"C:\Program Files (x86)\7-Zip\7z.exe"
-                }
-                : new string[]
-                {
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "7za.exe"),
-                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
-                    @"C:\Program Files\7-Zip\7z.exe",
-                    @"C:\Program Files (x86)\7-Zip\7z.exe"
-                };
-
-            foreach (string p7z in possible7z)
-            {
-                if (File.Exists(p7z))
-                {
-                    try
-                    {
-                        ProcessStartInfo psi7 = new ProcessStartInfo
-                        {
-                            FileName = p7z,
-                            Arguments = string.Format("x \"{0}\" -o\"{1}\" -mmt=on -y -bso0 -bsp0", archivePath, destinationDir),
-                            CreateNoWindow = true,
-                            UseShellExecute = false
-                        };
-                        using (Process p = Process.Start(psi7))
-                        {
-                            try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
-                            p.WaitForExit();
-                            if (p.ExitCode == 0) { extracted = true; break; }
-                        }
-                    }
-                    catch { }
-                }
-            }
-
-            // Priority 2: UnRAR.exe CLI (RAR için WinRAR GUI'den çok daha hafif ve çok çekirdekli)
+            // Priority 1 (RAR): Çok çekirdekli UnRAR.exe (-mt<cores>) — 7z.exe RAR5'te tek çekirdek çalıştığı için UnRAR çok daha hızlıdır
             if (!extracted && isRar)
             {
                 string[] unrarPaths = new string[]
@@ -2549,6 +2571,49 @@ namespace TitanGameHub
                         }
                     }
                     catch { }
+                }
+            }
+
+            // Priority 2 (7z/Zip veya UnRAR yoksa RAR): Multi-threaded 7-Zip (-mmt=on)
+            if (!extracted)
+            {
+                string[] possible7z = isRar
+                    ? new string[]
+                    {
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
+                        @"C:\Program Files\7-Zip\7z.exe",
+                        @"C:\Program Files (x86)\7-Zip\7z.exe"
+                    }
+                    : new string[]
+                    {
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "7za.exe"),
+                        Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
+                        @"C:\Program Files\7-Zip\7z.exe",
+                        @"C:\Program Files (x86)\7-Zip\7z.exe"
+                    };
+
+                foreach (string p7z in possible7z)
+                {
+                    if (File.Exists(p7z))
+                    {
+                        try
+                        {
+                            ProcessStartInfo psi7 = new ProcessStartInfo
+                            {
+                                FileName = p7z,
+                                Arguments = string.Format("x \"{0}\" -o\"{1}\" -mmt=on -y -bso0 -bsp0", archivePath, destinationDir),
+                                CreateNoWindow = true,
+                                UseShellExecute = false
+                            };
+                            using (Process p = Process.Start(psi7))
+                            {
+                                try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
+                                p.WaitForExit();
+                                if (p.ExitCode == 0) { extracted = true; break; }
+                            }
+                        }
+                        catch { }
+                    }
                 }
             }
 
@@ -2611,7 +2676,7 @@ namespace TitanGameHub
                 try
                 {
                     HashSet<string> createdDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    byte[] ioBuf = new byte[4194304];
+                    byte[] ioBuf = new byte[8388608];
                     using (ZipArchive archive = ZipFile.OpenRead(archivePath))
                     {
                         foreach (ZipArchiveEntry entry in archive.Entries)
@@ -2629,7 +2694,7 @@ namespace TitanGameHub
                                     Directory.CreateDirectory(parent);
 
                                 using (Stream src = entry.Open())
-                                using (FileStream dst = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 4194304, FileOptions.SequentialScan))
+                                using (FileStream dst = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 8388608, FileOptions.SequentialScan))
                                 {
                                     int r;
                                     while ((r = src.Read(ioBuf, 0, ioBuf.Length)) > 0)
