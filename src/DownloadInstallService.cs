@@ -1652,9 +1652,11 @@ namespace TitanGameHub
                     req.Referer = customReferer;
                     req.Timeout = 20000;
                     req.ReadWriteTimeout = 35000;
+                    req.AllowReadStreamBuffering = false;
                     req.ServicePoint.UseNagleAlgorithm = false;
-                    req.ServicePoint.ConnectionLimit = 64;
-                    req.ServicePoint.ReceiveBufferSize = 2097152; // 2MB TCP window buffer
+                    req.ServicePoint.Expect100Continue = false;
+                    req.ServicePoint.ConnectionLimit = 256;
+                    req.ServicePoint.ReceiveBufferSize = 8388608; // 8MB TCP window buffer
 
                     if (!string.IsNullOrEmpty(authCookie))
                     {

@@ -737,12 +737,14 @@ namespace TitanGameHub
                 int currentPid = Process.GetCurrentProcess().Id;
                 StringBuilder bat = new StringBuilder();
                 bat.AppendLine("@echo off");
+                bat.AppendLine("chcp 65001 >nul");
                 bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
                 bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
                 bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
                 bat.AppendLine("copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1");
-                bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 2 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
-                if (!string.IsNullOrEmpty(remoteSha))
+                bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 3 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
+                bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 3 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
+                if (catalogSynced && !string.IsNullOrEmpty(remoteSha))
                 {
                     bat.AppendLine("if not exist \"" + Path.GetDirectoryName(shaFile) + "\" mkdir \"" + Path.GetDirectoryName(shaFile) + "\"");
                     bat.AppendLine("(echo " + remoteSha + ")> \"" + shaFile + "\"");
@@ -750,7 +752,7 @@ namespace TitanGameHub
                 bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
                 bat.AppendLine("start \"\" \"" + currentExe + "\"");
                 bat.AppendLine("del \"%~f0\"");
-                File.WriteAllText(batPath, bat.ToString(), Encoding.Default);
+                File.WriteAllText(batPath, bat.ToString(), new UTF8Encoding(false));
 
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
