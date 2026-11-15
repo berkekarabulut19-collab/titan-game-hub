@@ -2017,10 +2017,13 @@ namespace TitanGameHub
                     {
                         string tmpName = Path.GetFileName(tempArchive) ?? "";
                         if ((tmpName.EndsWith("_pkg.rar", StringComparison.OrdinalIgnoreCase) ||
-                             tmpName.EndsWith("_pkg.zip", StringComparison.OrdinalIgnoreCase)) && File.Exists(tempArchive))
+                             tmpName.EndsWith("_pkg.zip", StringComparison.OrdinalIgnoreCase) ||
+                             tmpName.EndsWith("_pkg.7z", StringComparison.OrdinalIgnoreCase)) && File.Exists(tempArchive))
                         {
                             File.Delete(tempArchive);
                         }
+                        if (File.Exists(tempArchive + ".resume")) File.Delete(tempArchive + ".resume");
+                        if (File.Exists(tempArchive + ".segmap")) File.Delete(tempArchive + ".segmap");
                     }
                     catch { }
 

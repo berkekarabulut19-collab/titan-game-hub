@@ -192,11 +192,25 @@ namespace TitanGameHub
                         foreach (string d in Directory.GetDirectories(root, pattern, SearchOption.TopDirectoryOnly))
                         {
                             freed += GetDirSize(d);
-                            Directory.Delete(d, true);
+                            ForceDeleteDirectoryCompletely(d);
                         }
                     }
                     catch { }
                 }
+
+                // _incoming altındaki geçici indirilen arşivleri de temizle
+                try
+                {
+                    string incDir = Path.Combine(root, "_incoming");
+                    if (Directory.Exists(incDir) && !string.IsNullOrEmpty(safe) && safe.Length >= 3)
+                    {
+                        foreach (string f in Directory.EnumerateFiles(incDir, "*" + safe + "*", SearchOption.TopDirectoryOnly))
+                        {
+                            try { freed += new FileInfo(f).Length; File.Delete(f); } catch { }
+                        }
+                    }
+                }
+                catch { }
 
                 // Masaüstü ve Başlat Menüsü kısayollarını (.url / .lnk) da kaldır
                 try
