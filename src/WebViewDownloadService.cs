@@ -301,8 +301,11 @@ namespace TitanGameHub
 
                 win.ShowDialog();
 
+                // Yalnızca CoreWebView2DownloadState.Completed olduğunda başarılı say; yarım/bozuk dosyayı sil.
                 if (!result.Success && !string.IsNullOrEmpty(result.FilePath) && File.Exists(result.FilePath))
-                    result.Success = true;
+                {
+                    try { File.Delete(result.FilePath); } catch { }
+                }
 
                 return result;
             }

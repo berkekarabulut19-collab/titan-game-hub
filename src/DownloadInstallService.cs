@@ -1283,9 +1283,9 @@ namespace TitanGameHub
                                 if (ct.Contains("text/html") || ct.Contains("application/json")) return;
                                 using (Stream s = resp.GetResponseStream())
                                 {
-                                    byte[] buf = new byte[65536];
+                                    byte[] buf = new byte[131072];
                                     long got = 0;
-                                    while (got < 262144 && sw.ElapsedMilliseconds < 1800)
+                                    while (got < 1048576 && sw.ElapsedMilliseconds < 2200)
                                     {
                                         int r = s.Read(buf, 0, buf.Length);
                                         if (r <= 0) break;
@@ -1305,7 +1305,7 @@ namespace TitanGameHub
                     });
                 }
 
-                try { WaitHandle.WaitAll(doneEvents, 2200); } catch { }
+                try { WaitHandle.WaitAll(doneEvents, 2600); } catch { }
                 for (int k = 0; k < doneEvents.Length; k++) { try { doneEvents[k].Dispose(); } catch { } }
 
                 List<KeyValuePair<double, SiteMirror>> ranked = new List<KeyValuePair<double, SiteMirror>>();

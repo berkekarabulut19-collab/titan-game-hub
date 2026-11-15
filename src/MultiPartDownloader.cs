@@ -84,7 +84,9 @@ namespace TitanGameHub
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create(url);
                     req.Method = "HEAD";
                     req.Proxy = null;
-                    req.Timeout = 12000;
+                    req.Timeout = 4000;
+                    req.ServicePoint.UseNagleAlgorithm = false;
+                    req.ServicePoint.Expect100Continue = false;
                     req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
                     using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
                     {
@@ -136,30 +138,84 @@ namespace TitanGameHub
                     confirmed.Add(urls[i]);
                 }
 
-                result.Message = string.Format("{0} parça bulundu", confirmed.Count);
+                if (ServicePointManager.DefaultConnectionLimit < 512) ServicePointManager.DefaultConnectionLimit = 512;
+                ServicePointManager.Expect100Continue = false;
+                ServicePointManager.UseNagleAlgorithm = false;
 
+                result.Message = string.Format("{0} parça bulundu (4x paralel indirme)", confirmed.Count);
+
+                int workerCount = Math.Min(4, confirmed.Count);
+                string[] partPaths = new string[confirmed.Count];
+                long[] partSizes = new long[confirmed.Count];
+                int nextIdx = -1;
+                int completedCount = 0;
+                int failedIdx = -1;
                 long totalWritten = 0;
+                ManualResetEvent allDone = new ManualResetEvent(false);
+                int activeWorkers = workerCount;
+
+                for (int w = 0; w < workerCount; w++)
+                {
+                    Thread wt = new Thread(delegate()
+                    {
+                        try
+                        {
+                            while (true)
+                            {
+                                if (isCancelled != null && isCancelled()) break;
+                                int idx = Interlocked.Increment(ref nextIdx);
+                                if (idx >= confirmed.Count) break;
+                                if (Volatile.Read(ref failedIdx) >= 0) break;
+
+                                string partPath = Path.Combine(destinationFolder,
+                                    string.Format("{0}.part{1:000}{2}", fileBaseName, idx + 1, extension));
+                                partPaths[idx] = partPath;
+
+                                bool ok = DownloadSingle(confirmed[idx], partPath, idx, confirmed.Count, isCancelled, progress, Interlocked.Read(ref totalWritten));
+                                if (!ok)
+                                {
+                                    Interlocked.CompareExchange(ref failedIdx, idx, -1);
+                                    break;
+                                }
+
+                                long size = new FileInfo(partPath).Length;
+                                partSizes[idx] = size;
+                                Interlocked.Add(ref totalWritten, size);
+                                Interlocked.Increment(ref completedCount);
+                            }
+                        }
+                        finally
+                        {
+                            if (Interlocked.Decrement(ref activeWorkers) == 0)
+                            {
+                                try { allDone.Set(); } catch { }
+                            }
+                        }
+                    });
+                    wt.IsBackground = true;
+                    wt.Start();
+                }
+
+                allDone.WaitOne();
+                allDone.Dispose();
+
+                if (isCancelled != null && isCancelled())
+                {
+                    result.Message = "İptal edildi (indirilen parçalar korundu)";
+                    return result;
+                }
+
+                int fIdx = Volatile.Read(ref failedIdx);
+                if (fIdx >= 0)
+                {
+                    result.Message = string.Format("Parça {0}/{1} indirilemedi", fIdx + 1, confirmed.Count);
+                    return result;
+                }
+
                 for (int i = 0; i < confirmed.Count; i++)
                 {
-                    if (isCancelled != null && isCancelled())
-                    {
-                        result.Message = "İptal edildi (indirilen parçalar korundu)";
-                        return result;
-                    }
-
-                    string partPath = Path.Combine(destinationFolder,
-                        string.Format("{0}.part{1:000}{2}", fileBaseName, i + 1, extension));
-
-                    bool ok = DownloadSingle(confirmed[i], partPath, i, confirmed.Count, isCancelled, progress, totalWritten);
-                    if (!ok)
-                    {
-                        result.Message = string.Format("Parça {0}/{1} indirilemedi", i + 1, confirmed.Count);
-                        return result;
-                    }
-
-                    long size = new FileInfo(partPath).Length;
-                    totalWritten += size;
-                    result.PartFiles.Add(partPath);
+                    if (!string.IsNullOrEmpty(partPaths[i]) && File.Exists(partPaths[i]))
+                        result.PartFiles.Add(partPaths[i]);
                 }
 
                 result.FirstPartPath = result.PartFiles.Count > 0 ? result.PartFiles[0] : null;
