@@ -539,28 +539,104 @@ namespace TitanGameHub
         {
             try
             {
+                if (string.IsNullOrWhiteSpace(gameName)) return null;
+                string cleanKey = Regex.Replace(gameName, @"[^a-zA-Z0-9]", "").ToLowerInvariant();
+                if (cleanKey.Length > 8) cleanKey = cleanKey.Substring(0, 8);
+                if (cleanKey.Length < 3) return null;
+
+                List<string> scanDirs = new List<string>();
+                HashSet<string> seenDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                Action<string> addDir = delegate(string d)
+                {
+                    if (string.IsNullOrEmpty(d)) return;
+                    try
+                    {
+                        if (Directory.Exists(d) && seenDirs.Add(Path.GetFullPath(d).TrimEnd('\\')))
+                            scanDirs.Add(d);
+                    }
+                    catch { }
+                };
+
                 string downloadsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-                if (!Directory.Exists(downloadsDir)) return null;
+                addDir(downloadsDir);
 
-                string cleanKey = Regex.Replace(gameName ?? "", @"[^a-zA-Z0-9]", "").ToLowerInvariant();
-                if (cleanKey.Length > 6) cleanKey = cleanKey.Substring(0, 6);
+                string effRoot = GetEffectiveGamesRoot();
+                addDir(effRoot);
+                addDir(Path.Combine(effRoot, "_incoming"));
+                string safeFolder = Regex.Replace(gameName, @"[^\w\s-]", "").Trim();
+                if (!string.IsNullOrEmpty(safeFolder))
+                    addDir(Path.Combine(effRoot, safeFolder + "_parts"));
 
-                string[] files = Directory.GetFiles(downloadsDir);
+                foreach (string root in GamePathResolver.GetLibraryRoots(false))
+                {
+                    addDir(Path.Combine(root, "_incoming"));
+                    if (!string.IsNullOrEmpty(safeFolder))
+                        addDir(Path.Combine(root, safeFolder + "_parts"));
+                }
+
+                // İndirilenler / _incoming altındaki oyun isimli alt klasörleri de tara (1 seviye)
+                List<string> subDirsToAdd = new List<string>();
+                foreach (string d in scanDirs)
+                {
+                    if (!d.EndsWith("_incoming", StringComparison.OrdinalIgnoreCase) &&
+                        !d.Equals(downloadsDir, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    try
+                    {
+                        foreach (string sub in Directory.GetDirectories(d))
+                        {
+                            string subKey = Regex.Replace(Path.GetFileName(sub) ?? "", @"[^a-zA-Z0-9]", "").ToLowerInvariant();
+                            if (subKey.Contains(cleanKey))
+                            {
+                                // Aktif .aria2 kontrol dosyası varsa torrent henüz bitmemiştir; erken çıkarma yapma
+                                if (File.Exists(sub + ".aria2")) continue;
+                                subDirsToAdd.Add(sub);
+                            }
+                        }
+                    }
+                    catch { }
+                }
+                foreach (string sd in subDirsToAdd) addDir(sd);
+
                 string bestFile = null;
+                int bestPriority = -1;
                 DateTime newestTime = DateTime.MinValue;
 
-                foreach (string f in files)
+                foreach (string dir in scanDirs)
                 {
-                    string ext = Path.GetExtension(f).ToLowerInvariant();
-                    if (ext != ".zip" && ext != ".rar" && ext != ".7z") continue;
+                    string[] files;
+                    try { files = Directory.GetFiles(dir); }
+                    catch { continue; }
 
-                    string fn = Regex.Replace(Path.GetFileNameWithoutExtension(f), @"[^a-zA-Z0-9]", "").ToLowerInvariant();
-                    FileInfo fi = new FileInfo(f);
-
-                    if (!string.IsNullOrEmpty(cleanKey) && fn.Contains(cleanKey))
+                    foreach (string f in files)
                     {
-                        if (fi.LastWriteTime > newestTime)
+                        string ext = Path.GetExtension(f).ToLowerInvariant();
+                        if (ext != ".zip" && ext != ".rar" && ext != ".7z" && ext != ".001") continue;
+                        if (File.Exists(f + ".aria2")) continue;
+
+                        string fileNameOnly = Path.GetFileName(f) ?? "";
+                        string lowerName = fileNameOnly.ToLowerInvariant();
+                        if (lowerName.Contains("fix_repair") || lowerName.Contains("fix-repair")) continue;
+
+                        // Çok parçalı arşivde .part2+ dosyalarını atla; sadece ilk parçayı (.part1 / .part01) seç
+                        Match mp = Regex.Match(lowerName, @"\.part0*([0-9]+)\.(?:rar|zip|7z)$");
+                        if (mp.Success)
                         {
+                            int partNum;
+                            if (int.TryParse(mp.Groups[1].Value, out partNum) && partNum > 1) continue;
+                        }
+
+                        string fn = Regex.Replace(Path.GetFileNameWithoutExtension(f), @"[^a-zA-Z0-9]", "").ToLowerInvariant();
+                        string parentKey = Regex.Replace(Path.GetFileName(dir) ?? "", @"[^a-zA-Z0-9]", "").ToLowerInvariant();
+                        if (!fn.Contains(cleanKey) && !parentKey.Contains(cleanKey)) continue;
+
+                        FileInfo fi = new FileInfo(f);
+                        if (fi.Length < 1024 * 1024) continue;
+
+                        int prio = mp.Success ? 2 : 1;
+                        if (prio > bestPriority || (prio == bestPriority && fi.LastWriteTime > newestTime))
+                        {
+                            bestPriority = prio;
                             newestTime = fi.LastWriteTime;
                             bestFile = f;
                         }
@@ -762,6 +838,23 @@ namespace TitanGameHub
             ActiveTargetProfile = profile;
             LastFatalError = null;
 
+            // Zaten diskte kuruluysa (katalog senkronizasyonu veya çift kayıt yüzünden IsInstalled=false görünse bile) yeniden indirme!
+            if (!profile.IsInstalled && GamePathResolver.TryRelocate(profile) && profile.IsInstalled)
+            {
+                try
+                {
+                    List<GameProfile> all = ProfileStore.LoadProfiles();
+                    GameProfile match = all.Find(delegate(GameProfile g) { return g != null && string.Equals(g.Id, profile.Id, StringComparison.OrdinalIgnoreCase); });
+                    if (match != null)
+                    {
+                        match.ExecutablePath = profile.ExecutablePath;
+                        match.WorkingDirectory = profile.WorkingDirectory;
+                        ProfileStore.SaveProfiles(all);
+                    }
+                }
+                catch { }
+            }
+
             // Yeni kurulumlarda hedef disk/klasör seçimi (kullanıcı isteği)
             try
             {
@@ -804,27 +897,16 @@ namespace TitanGameHub
                 // Güncel kurulumlarda indirme başlatmayalım (yanlış "güncelleniyor" akışını engelle)
                 if (profile.IsInstalled && !profile.UpdateAvailable)
                 {
-                    string _lv = GameProfile.NormalizeVersionToken(profile.Version);
-                    string _rv = GameProfile.NormalizeVersionToken(profile.RemoteVersion);
-                    bool _bothKnown = !string.IsNullOrEmpty(_lv) && !string.IsNullOrEmpty(_rv);
-                    bool _same = _bothKnown && (string.Equals(_lv, _rv, StringComparison.OrdinalIgnoreCase) ||
-                        string.Equals(System.Text.RegularExpressions.Regex.Replace(_lv.ToLowerInvariant(), @"[^a-z0-9]+", ""),
-                                      System.Text.RegularExpressions.Regex.Replace(_rv.ToLowerInvariant(), @"[^a-z0-9]+", ""),
-                                      StringComparison.OrdinalIgnoreCase));
-                    if (_same)
+                    string _v = string.IsNullOrEmpty(profile.Version) ? profile.RemoteVersion : profile.Version;
+                    _v = string.IsNullOrEmpty(_v) ? "Kurulu" : _v;
+                    lock (_queueList)
                     {
-                        string _v = string.IsNullOrEmpty(profile.Version) ? profile.RemoteVersion : profile.Version;
-                        _v = string.IsNullOrEmpty(_v) ? "Güncel" : _v;
-                        lock (_queueList)
-                        {
-                            _queueList.RemoveAll(delegate(GameProfile g) { return g.Id == profile.Id; });
-                        }
-                        try { if (OnQueueChanged != null) OnQueueChanged(); } catch { }
-                        ReportProgress(profile.Name + " zaten güncel sürümde (" + _v + "). İndirme/güncelleme atlandı.", 100, "Güncel");
-                        ReportCompleted(profile, true, profile.Name + " güncel: " + _v);
-                        return;
+                        _queueList.RemoveAll(delegate(GameProfile g) { return g.Id == profile.Id; });
                     }
-                    // Sürüm bilgisi eksikse güncelmiş gibi kesin konuşma; güncelleme rozeti de UpdateAvailable=false olacağı için akış devam edebilir.
+                    try { if (OnQueueChanged != null) OnQueueChanged(); } catch { }
+                    ReportProgress(profile.Name + " zaten kurulu ve güncel (" + _v + "). İndirme atlandı.", 100, "Güncel");
+                    ReportCompleted(profile, true, profile.Name + " zaten kurulu: " + _v);
+                    return;
                 }
 
                 long _needBytes;

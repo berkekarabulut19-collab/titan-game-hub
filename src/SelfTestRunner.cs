@@ -335,6 +335,35 @@ namespace TitanGameHub
             Check("CleanGameTitleForSearch ElAmigos/Deluxe eklerini temizler",
                 string.Equals(SiteParserService.CleanGameTitleForSearch(gp007.Name), "007 First Light", StringComparison.OrdinalIgnoreCase),
                 SiteParserService.CleanGameTitleForSearch(gp007.Name));
+
+            string arcTestRoot = Path.Combine(Path.GetTempPath(), "titan_arctest_" + Guid.NewGuid().ToString("N").Substring(0, 6));
+            string prevCustomRoot = DownloadInstallService.CustomGamesRootDirectory;
+            try
+            {
+                string incSub = Path.Combine(arcTestRoot, "_incoming", "TestArcGame");
+                Directory.CreateDirectory(incSub);
+                byte[] dummy1M = new byte[1024 * 1024 + 64];
+                string p1 = Path.Combine(incSub, "TestArcGame.part1.rar");
+                string p2 = Path.Combine(incSub, "TestArcGame.part2.rar");
+                string fx = Path.Combine(incSub, "TestArcGame_Fix_Repair.rar");
+                File.WriteAllBytes(p2, dummy1M);
+                File.WriteAllBytes(fx, dummy1M);
+                File.WriteAllBytes(p1, dummy1M);
+                DownloadInstallService.CustomGamesRootDirectory = arcTestRoot;
+                string foundArc = DownloadInstallService.FindMatchingArchiveInDownloads("TestArcGame");
+                Check("FindMatchingArchiveInDownloads _incoming içindeki part1.rar'ı bulur",
+                    string.Equals(foundArc, p1, StringComparison.OrdinalIgnoreCase), foundArc ?? "<null>");
+
+                File.WriteAllText(incSub + ".aria2", "active");
+                string blockedArc = DownloadInstallService.FindMatchingArchiveInDownloads("TestArcGame");
+                Check("FindMatchingArchiveInDownloads .aria2 aktifken erken çıkartmaz",
+                    string.IsNullOrEmpty(blockedArc), blockedArc ?? "");
+            }
+            finally
+            {
+                DownloadInstallService.CustomGamesRootDirectory = prevCustomRoot;
+                try { if (Directory.Exists(arcTestRoot)) Directory.Delete(arcTestRoot, true); } catch { }
+            }
         }
     }
 }
