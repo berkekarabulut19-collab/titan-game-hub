@@ -80,6 +80,7 @@ namespace TitanGameHub
         public static string LastDomSnapshot { get; private set; }
         public static string LastError { get; private set; }
         public static Result LastHandoff { get; private set; }
+        public static string LastProbeInfo { get; private set; }
 
         public static Result Download(string url, string targetDirectory, string suggestedFileName,
                                       Action<int, long, long> onProgress, Func<bool> isCancelled,
@@ -204,6 +205,7 @@ namespace TitanGameHub
                             if (op == null) return;
                             downloadStarted = true;
                             activeOp = op;
+                            LastProbeInfo = "START:" + (op.Uri ?? "");
 
                             if (allowTurboHandoff && !string.IsNullOrEmpty(op.Uri) &&
                                 op.Uri.StartsWith("http", StringComparison.OrdinalIgnoreCase))
@@ -214,7 +216,10 @@ namespace TitanGameHub
                                     string ua = "";
                                     try { ua = core.Settings.UserAgent; } catch { }
                                     string destFile = e2.ResultFilePath;
-                                    core.CookieManager.GetCookiesAsync(dlUri).ContinueWith(delegate(System.Threading.Tasks.Task<List<CoreWebView2Cookie>> ckTask)
+                                    System.Threading.Tasks.TaskScheduler uiSched = null;
+                                    try { uiSched = System.Threading.Tasks.TaskScheduler.FromCurrentSynchronizationContext(); } catch { }
+                                    System.Threading.Tasks.Task<List<CoreWebView2Cookie>> ckCall = core.CookieManager.GetCookiesAsync(dlUri);
+                                    Action<System.Threading.Tasks.Task<List<CoreWebView2Cookie>>> onCookies = delegate(System.Threading.Tasks.Task<List<CoreWebView2Cookie>> ckTask)
                                     {
                                         try
                                         {
@@ -237,13 +242,15 @@ namespace TitanGameHub
                                                     pReq.Proxy = null;
                                                     pReq.Method = "GET";
                                                     if (!string.IsNullOrEmpty(ua)) pReq.UserAgent = ua;
-                                                    if (!string.IsNullOrEmpty(referer)) pReq.Referer = referer;
+                                                    pReq.Referer = !string.IsNullOrEmpty(initialUrl) ? initialUrl : referer;
                                                     if (!string.IsNullOrEmpty(cookieHdr)) pReq.Headers["Cookie"] = cookieHdr;
                                                     pReq.Timeout = 4500;
                                                     pReq.ReadWriteTimeout = 4500;
                                                     pReq.AddRange(0, 0);
                                                     using (HttpWebResponse pResp = (HttpWebResponse)pReq.GetResponse())
                                                     {
+                                                        LastProbeInfo = string.Format("HTTP {0} CR={1} AR={2} CL={3} URL={4}",
+                                                            (int)pResp.StatusCode, pResp.Headers["Content-Range"] ?? "", pResp.Headers["Accept-Ranges"] ?? "", pResp.ContentLength, dlUri);
                                                         if (pResp.StatusCode == HttpStatusCode.PartialContent)
                                                         {
                                                             long totalLen = 0;
@@ -271,11 +278,16 @@ namespace TitanGameHub
                                                         }
                                                     }
                                                 }
-                                                catch { }
+                                                catch (Exception pex)
+                                                {
+                                                    LastProbeInfo = "PROBE_ERR=" + pex.Message + " URL=" + dlUri;
+                                                }
                                             });
                                         }
                                         catch { }
-                                    });
+                                    };
+                                    if (uiSched != null) ckCall.ContinueWith(onCookies, uiSched);
+                                    else ckCall.ContinueWith(onCookies);
                                 }
                                 catch { }
                             }
@@ -326,6 +338,10 @@ namespace TitanGameHub
                             {
                                 Thread.Sleep(attempt == 0 ? 700 : 900);
                                 if (finished || downloadStarted) return;
+                                if (onProgress != null && attempt % 2 == 0)
+                                {
+                                    try { onProgress(0, 0, 0); } catch { }
+                                }
                                 try
                                 {
                                     view.Dispatcher.BeginInvoke(new Action(delegate

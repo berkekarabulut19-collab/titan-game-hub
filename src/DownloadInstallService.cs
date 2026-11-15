@@ -167,15 +167,29 @@ namespace TitanGameHub
                 DateTime lastBytesAt = DateTime.UtcNow;
                 long seenBytes = 0;
 
+                int prepPulse = 0;
                 string got = EmbeddedBrowserDownloader(url, dir,
                     delegate(int pct, long gotBytes, long total)
                     {
-                        if (gotBytes > 0) { seenBytes = gotBytes; lastBytesAt = DateTime.UtcNow; }
-                        ReportProgress(
-                            string.Format("[2/4] {0} İndiriliyor: {1:0.00} GB / {2:0.00} GB", profile.Name,
-                                gotBytes / 1073741824.0, total > 0 ? total / 1073741824.0 : 0),
-                            Math.Min(86, 24 + (pct * 60) / 100),
-                            string.Format("%{0}", pct));
+                        if (gotBytes > 0)
+                        {
+                            seenBytes = gotBytes;
+                            lastBytesAt = DateTime.UtcNow;
+                            ReportProgress(
+                                string.Format("[2/4] {0} İndiriliyor: {1:0.00} GB / {2:0.00} GB", profile.Name,
+                                    gotBytes / 1073741824.0, total > 0 ? total / 1073741824.0 : 0),
+                                Math.Min(86, 24 + (pct * 60) / 100),
+                                string.Format("%{0}", pct));
+                        }
+                        else
+                        {
+                            prepPulse = (prepPulse + 1) % 4;
+                            ReportProgress(
+                                string.Format("[2/4] {0} — {1} CDN bağlantısı çözülüyor{2}",
+                                    profile.Name, DownloadHostPolicy.HostLabel(url), new string('.', prepPulse + 1)),
+                                24 + prepPulse,
+                                "Çözümleniyor");
+                        }
                     },
                     delegate
                     {

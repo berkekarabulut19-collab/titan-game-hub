@@ -40,12 +40,13 @@ namespace TitanGameHub
                         WebViewDownloadService.Result wr = WebViewDownloadService.Download(
                             u, tmpDir, null,
                             delegate(int pct, long got, long tot) { gotProbeBytes = got; },
-                            delegate { return gotProbeBytes >= 65536 || (DateTime.UtcNow - t0).TotalSeconds > 20; },
-                            1, refUrl);
+                            delegate { return gotProbeBytes >= 2097152 || (DateTime.UtcNow - t0).TotalSeconds > 22; },
+                            1, refUrl, true);
                         string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "wv2_probe.txt");
                         try { Directory.CreateDirectory(Path.GetDirectoryName(logPath)); } catch { }
-                        bool startedOk = wr.Success || gotProbeBytes >= 65536;
-                        File.WriteAllText(logPath, string.Format("StartedOK={0} Success={1} GotBytes={2} Err={3}\nDOM={4}", startedOk, wr.Success, gotProbeBytes, wr.Error ?? "", WebViewDownloadService.LastDomSnapshot ?? ""), Encoding.UTF8);
+                        bool startedOk = wr.Success || wr.HandoffReady || gotProbeBytes >= 65536;
+                        File.WriteAllText(logPath, string.Format("StartedOK={0} Success={1} Handoff={2} ExpectedBytes={3} GotBytes={4} ElapsedMs={5:0} Direct={6} Err={7}\nProbe={8}\nDOM={9}",
+                            startedOk, wr.Success, wr.HandoffReady, wr.ExpectedTotalBytes, gotProbeBytes, (DateTime.UtcNow - t0).TotalMilliseconds, wr.ResolvedDirectUrl ?? "", wr.Error ?? "", WebViewDownloadService.LastProbeInfo ?? "", WebViewDownloadService.LastDomSnapshot ?? ""), Encoding.UTF8);
                         try { if (!string.IsNullOrEmpty(wr.FilePath) && File.Exists(wr.FilePath)) File.Delete(wr.FilePath); } catch { }
                         Environment.Exit(startedOk ? 0 : 1);
                     }
