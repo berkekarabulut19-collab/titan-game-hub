@@ -145,7 +145,7 @@ namespace TitanGameHub
             inputHostGrid.Children.Add(_txtStoreSearch);
 
             DispatcherTimer searchDebounceTimer = new DispatcherTimer();
-            searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(450);
+            searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(180);
             searchDebounceTimer.Tick += delegate
             {
                 searchDebounceTimer.Stop();
@@ -155,19 +155,25 @@ namespace TitanGameHub
                 try
                 {
                     List<GameProfile> sourceList = _allProfiles ?? new List<GameProfile>();
-                    List<GameProfile> matched = new List<GameProfile>();
-                    string ql = q.ToLowerInvariant();
+                    List<GameProfile> prefixHits = new List<GameProfile>();
+                    List<GameProfile> subHits = new List<GameProfile>();
                     for (int i = 0; i < sourceList.Count; i++)
                     {
                         GameProfile gp = sourceList[i];
                         if (gp == null) continue;
                         string name = gp.Name ?? "";
                         string cat = gp.Category ?? "";
-                        if (name.ToLowerInvariant().Contains(ql) || cat.ToLowerInvariant().Contains(ql))
-                            matched.Add(gp);
+                        if (name.StartsWith(q, StringComparison.OrdinalIgnoreCase))
+                            prefixHits.Add(gp);
+                        else if (name.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                 cat.IndexOf(q, StringComparison.OrdinalIgnoreCase) >= 0)
+                            subHits.Add(gp);
                     }
-                    if (matched.Count > 0)
+                    if (prefixHits.Count > 0 || subHits.Count > 0)
                     {
+                        List<GameProfile> matched = new List<GameProfile>(prefixHits.Count + subHits.Count);
+                        matched.AddRange(prefixHits);
+                        matched.AddRange(subHits);
                         _storeFilteredProfiles = matched;
                         _txtStoreCountBadge.Text = string.Format("'{0}' için {1} yerel eşleşme (canlı taranıyor...)", q, matched.Count);
                         RefreshStorefrontGrid();

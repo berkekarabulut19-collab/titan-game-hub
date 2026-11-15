@@ -994,6 +994,11 @@ namespace TitanGameHub
                         }
                     }
 
+                    if (string.IsNullOrEmpty(cachedMirrorUrl) && candidates.Count >= 2)
+                    {
+                        RankDirectMirrorsByLiveSpeed(profile, candidates);
+                    }
+
                     // Multi-Source Pass: Doğrudan akış (PixelDrain, GoFile API, MediaFire, Direct .RAR/.ZIP)
                     // ve 403 korumalı hostlar için arka plan WebView2 indirmesi (başarısız olursa sonraki aynaya geçer)
                     foreach (SiteMirror mirror in candidates)
@@ -1185,6 +1190,112 @@ namespace TitanGameHub
                     ReportCompleted(profile, false, "İndirme başlatma hatası: " + ex.Message);
                 }
             });
+        }
+
+        /// <summary>
+        /// Probes up to 4 direct mirrors in parallel (256 KB Range test, 1.8s cap) and places the fastest live mirror first.
+        /// </summary>
+        private void RankDirectMirrorsByLiveSpeed(GameProfile profile, List<SiteMirror> candidates)
+        {
+            if (candidates == null || candidates.Count < 2) return;
+            try
+            {
+                List<int> probeIndices = new List<int>();
+                for (int i = 0; i < candidates.Count && probeIndices.Count < 4; i++)
+                {
+                    SiteMirror m = candidates[i];
+                    if (m == null || string.IsNullOrEmpty(m.Url)) continue;
+                    if (!m.Url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (m.Url.EndsWith(".torrent", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (DownloadHostPolicy.NeedsBrowserSession(m.Url)) continue;
+                    probeIndices.Add(i);
+                }
+                if (probeIndices.Count < 2) return;
+
+                double[] speeds = new double[probeIndices.Count];
+                ManualResetEvent[] doneEvents = new ManualResetEvent[probeIndices.Count];
+
+                for (int k = 0; k < probeIndices.Count; k++)
+                {
+                    int slot = k;
+                    SiteMirror mir = candidates[probeIndices[slot]];
+                    doneEvents[slot] = new ManualResetEvent(false);
+
+                    ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try
+                        {
+                            string u = mir.Url;
+                            string ck, refU;
+                            string resolved = ResolveDirectStreamWithAuth(u, out ck, out refU);
+                            if (string.IsNullOrEmpty(resolved) || !resolved.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                                return;
+
+                            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(resolved);
+                            req.Proxy = null;
+                            req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+                            req.Referer = refU;
+                            req.Timeout = 1800;
+                            req.ReadWriteTimeout = 1800;
+                            if (!string.IsNullOrEmpty(ck)) req.Headers["Cookie"] = ck;
+                            req.AddRange(0, 262143);
+
+                            Stopwatch sw = Stopwatch.StartNew();
+                            using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
+                            {
+                                string ct = (resp.ContentType ?? "").ToLowerInvariant();
+                                if (ct.Contains("text/html") || ct.Contains("application/json")) return;
+                                using (Stream s = resp.GetResponseStream())
+                                {
+                                    byte[] buf = new byte[65536];
+                                    long got = 0;
+                                    while (got < 262144 && sw.ElapsedMilliseconds < 1800)
+                                    {
+                                        int r = s.Read(buf, 0, buf.Length);
+                                        if (r <= 0) break;
+                                        got += r;
+                                    }
+                                    sw.Stop();
+                                    if (got > 8192)
+                                    {
+                                        double secs = Math.Max(0.05, sw.Elapsed.TotalSeconds);
+                                        speeds[slot] = got / secs;
+                                    }
+                                }
+                            }
+                        }
+                        catch { }
+                        finally { try { doneEvents[slot].Set(); } catch { } }
+                    });
+                }
+
+                try { WaitHandle.WaitAll(doneEvents, 2200); } catch { }
+                for (int k = 0; k < doneEvents.Length; k++) { try { doneEvents[k].Dispose(); } catch { } }
+
+                List<KeyValuePair<double, SiteMirror>> ranked = new List<KeyValuePair<double, SiteMirror>>();
+                for (int k = 0; k < probeIndices.Count; k++)
+                {
+                    ranked.Add(new KeyValuePair<double, SiteMirror>(speeds[k], candidates[probeIndices[k]]));
+                }
+                ranked.Sort(delegate(KeyValuePair<double, SiteMirror> a, KeyValuePair<double, SiteMirror> b)
+                {
+                    return b.Key.CompareTo(a.Key);
+                });
+
+                if (ranked[0].Key > 0)
+                {
+                    for (int k = 0; k < probeIndices.Count; k++)
+                    {
+                        candidates[probeIndices[k]] = ranked[k].Value;
+                    }
+                    ReportProgress(
+                        string.Format("[2/4] {0} — En hızlı canlı ayna seçildi: {1} ({2:0.0} MB/sn)",
+                            profile.Name, ranked[0].Value.HostName, ranked[0].Key / 1048576.0),
+                        16,
+                        ranked[0].Value.HostName);
+                }
+            }
+            catch { }
         }
 
         /// <summary>
