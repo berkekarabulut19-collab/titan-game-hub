@@ -11,7 +11,8 @@ namespace TitanGameHub
         private static string FoldAscii(string input)
         {
             if (string.IsNullOrEmpty(input)) return "";
-            string normalized = input.Normalize(NormalizationForm.FormKD);
+            string pre = input.Replace('Ø', 'O').Replace('ø', 'o').Replace('Æ', 'A').Replace('æ', 'a').Replace('Ł', 'L').Replace('ł', 'l');
+            string normalized = pre.Normalize(NormalizationForm.FormKD);
             StringBuilder sb = new StringBuilder(normalized.Length);
             for (int i = 0; i < normalized.Length; i++)
             {
@@ -31,12 +32,15 @@ namespace TitanGameHub
             // Strip download, repack, bracketed tags, and edition/DLC/version suffixes
             clean = Regex.Replace(clean, @"\s*(?:free|torrent)\s+download.*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\[[^\]]*\]", " ");
+            clean = Regex.Replace(clean, @"\s*&\s*(?:all\s+dlcs?|soundtrack|bonus(?:\s+ost)?)\s*(?:bundle)?.*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*\+\s*\d*\s*dlcs?.*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*\+\s*all\s+dlcs?.*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*\+\s*(?:multiplayer|online|co-?op|lan|bonuses?|soundtrack|ost).*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*[–—-]\s*(?:v\d|build\s+\d|cl#\d|hotfix).*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\s*\((?:v\d|build\s+\d|repack|fitgirl|dodi|gog|steamrip|early\s+access|multi\d*)[^\)]*\)", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"[:\s,-]*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary|infernal|gold|premium|special|remastered|legacy|royal|master|standard|director'?s\s+cut)(\s+edition)?\b", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"[:\s,-]*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary|infernal|gold|premium|special|remastered|legacy|royal|master|standard)\s+edition\b", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"[:\s,-]+director'?s\s+cut\b", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"[:\s]*[–—-]\s*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|definitive|goty|infernal|remastered)\b", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\b(?:repack|fitgirl|dodi|online-?fix|steamrip|elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|empress|goldberg|xatab|kaos|razor1911|p2p|gog|multi\d+|all\s+dlcs?|early\s+access)\b", " ", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\bv\d+(?:\.\d+)*[a-z]?\b", " ", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\b(?:build|update|hotfix)\s*\d+\b", " ", RegexOptions.IgnoreCase);
