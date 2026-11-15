@@ -23,6 +23,25 @@ namespace TitanGameHub
 
         private static readonly Dictionary<string, string> SteamSearchCoverCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
+        private static string FetchSteamAppDetailsHeader(string steamAppId)
+        {
+            if (string.IsNullOrWhiteSpace(steamAppId) || steamAppId == "480") return null;
+            try
+            {
+                using (TimeoutWebClient swc = new TimeoutWebClient(4500))
+                {
+                    swc.Proxy = null;
+                    swc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    string json = swc.DownloadString("https://store.steampowered.com/api/appdetails?appids=" + Uri.EscapeDataString(steamAppId.Trim()) + "&filters=basic");
+                    Match hm = Regex.Match(json, @"""header_image""\s*:\s*""(https?:[^""]+)""", RegexOptions.IgnoreCase);
+                    if (hm.Success)
+                        return hm.Groups[1].Value.Replace("\\/", "/");
+                }
+            }
+            catch { }
+            return null;
+        }
+
         private static string ResolveSteamHeaderFallback(string gameName)
         {
             if (string.IsNullOrWhiteSpace(gameName)) return null;
@@ -49,7 +68,17 @@ namespace TitanGameHub
                     string json = swc.DownloadString(api);
                     Match m = Regex.Match(json, @"""id""\s*:\s*(\d{2,8})\b");
                     if (m.Success && m.Groups[1].Value != "480")
-                        foundUrl = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + m.Groups[1].Value + "/header.jpg";
+                    {
+                        foundUrl = FetchSteamAppDetailsHeader(m.Groups[1].Value);
+                        if (string.IsNullOrEmpty(foundUrl))
+                        {
+                            Match tm = Regex.Match(json, @"""tiny_image""\s*:\s*""(https?:[^""]+)""", RegexOptions.IgnoreCase);
+                            if (tm.Success)
+                                foundUrl = tm.Groups[1].Value.Replace("\\/", "/").Replace("capsule_231x87.jpg", "header.jpg");
+                            else
+                                foundUrl = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + m.Groups[1].Value + "/header.jpg";
+                        }
+                    }
 
                     if (string.IsNullOrEmpty(foundUrl))
                     {
@@ -297,6 +326,26 @@ namespace TitanGameHub
                                                 }
                                             }
                                             catch { ok = false; }
+                                        }
+
+                                        if (!ok && hasSteamId)
+                                        {
+                                            string hashedHeader = FetchSteamAppDetailsHeader(steamAppId);
+                                            if (!string.IsNullOrEmpty(hashedHeader))
+                                            {
+                                                try
+                                                {
+                                                    if (File.Exists(tmpPath)) File.Delete(tmpPath);
+                                                    wc.Headers.Remove("Referer");
+                                                    wc.DownloadFile(hashedHeader, tmpPath);
+                                                    if (IsValidRasterFile(tmpPath))
+                                                    {
+                                                        ok = true;
+                                                        gp.BannerUrl = hashedHeader;
+                                                    }
+                                                }
+                                                catch { ok = false; }
+                                            }
                                         }
 
                                         if (!ok && !string.IsNullOrWhiteSpace(gp.Name))
