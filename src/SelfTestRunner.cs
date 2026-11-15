@@ -328,6 +328,11 @@ namespace TitanGameHub
             Check("fg-optional paketi ana oyun olarak reddedilir", !acc, "");
             MirrorTrustPolicy.DescribeVerdict("https://itsfileditchfiles.st/balpha39/fa64b221881aa4d09a7c/007-First-Light-SteamRIP.com.rar", gp007, out acc);
             Check("007 First Light geçerli SteamRIP arşivi kabul edilir", acc, "");
+            MirrorTrustPolicy.DescribeVerdict("https://megadb.net/68e46cd63392aaae", gp007, out acc);
+            Check("16 haneli hex host ID (megadb 007) kabul edilir", acc, "");
+            GameProfile gpMoon = new GameProfile { Id = "moonsweepers", Name = "Moon Sweepers" };
+            MirrorTrustPolicy.DescribeVerdict("https://megadb.net/adebe2240b5e677e", gpMoon, out acc);
+            Check("16 haneli hex host ID (megadb Moon Sweepers) kabul edilir", acc, "");
             Check("Çapraz karışmış DownloadUrl (aviassembly != 007) reddedilir",
                 !MirrorTrustPolicy.IsPageUrlMatchingGame("https://steamrip.com/aviassembly-free-download/", gp007.Name), "");
             Check("Eşleşen DownloadUrl (007-first-light) kabul edilir",

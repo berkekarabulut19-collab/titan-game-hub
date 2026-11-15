@@ -115,9 +115,11 @@ namespace TitanGameHub
         {
             if (string.IsNullOrEmpty(fileName)) return false;
             if (fileName.Length < 6) return false;
+            // Hostların ürettiği 8-64 haneli hex ID'ler (ör. megadb.net/adebe2240b5e677e) dosya adı değildir
+            if (Regex.IsMatch(fileName, @"^[0-9a-f]{8,}$", RegexOptions.IgnoreCase)) return false;
             bool hasExtension = fileName.IndexOf('.') > 0;
             bool hasSeparator = fileName.IndexOf('-') >= 0 || fileName.IndexOf('_') >= 0 || fileName.IndexOf(' ') >= 0;
-            if (!hasExtension && !hasSeparator && fileName.Length < 16) return false; // "jMI5xb", "smYFH38EBZ"
+            if (!hasExtension && !hasSeparator && fileName.Length < 36) return false; // "jMI5xb", "smYFH38EBZ", "adebe2240b5e677e"
             return true;
         }
 
@@ -164,7 +166,8 @@ namespace TitanGameHub
 
             // "R.E.P.O." gibi noktalı kısaltmalar tek harfe bölünür; bitişik hali de token sayılır.
             string compact = Regex.Replace(lower, @"[^a-z0-9]+", "");
-            if (compact.Length >= 4 && compact.Length <= 24 && !GenericTokens.Contains(compact))
+            if (compact.Length >= 4 && compact.Length <= 24 && !GenericTokens.Contains(compact) &&
+                !Regex.IsMatch(compact, @"^[0-9a-f]{8,}$"))
                 set.Add(compact);
 
             return set;

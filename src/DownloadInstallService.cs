@@ -2273,6 +2273,15 @@ namespace TitanGameHub
         public void DownloadAndInstallAsync(GameProfile profile, string rawUrl)
         {
             if (_isBusy || profile == null) return;
+
+            if (string.IsNullOrEmpty(rawUrl) || IsLikelyPageUrl(rawUrl))
+            {
+                if (!string.IsNullOrEmpty(rawUrl) && rawUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    profile.DownloadUrl = rawUrl;
+                StartInAppAutomatedPipeline(profile);
+                return;
+            }
+
             _isBusy = true;
             _cancelRequested = false;
             _isPaused = false;
@@ -2280,19 +2289,34 @@ namespace TitanGameHub
 
             ThreadPool.QueueUserWorkItem(delegate
             {
-                ReportProgress("[1/4] " + profile.Name + " - Doğrudan uygulama içi ikili akış (Direct Stream) başlatılıyor...", 12, "Bağlanıyor...");
+                string targetUrl = DownloadHostPolicy.NormalizeDirectUrl(rawUrl);
+                if (targetUrl.StartsWith("//")) targetUrl = "https:" + targetUrl;
+
+                ReportProgress("[1/4] " + profile.Name + " - Uygulama içi doğrudan akış başlatılıyor...", 12, "Bağlanıyor...");
                 bool ok = false;
-                if (!string.IsNullOrEmpty(rawUrl) &&
-                    !rawUrl.Contains("vikingfile.com") &&
-                    !rawUrl.Contains("akirabox.to") &&
-                    !rawUrl.Contains("datanodes.to"))
+
+                if (!string.IsNullOrEmpty(targetUrl) && DownloadHostPolicy.NeedsBrowserSession(targetUrl))
                 {
-                    ok = TryDirectStreamDownload(profile, rawUrl);
+                    string embPath;
+                    if (TryEmbeddedBrowserDownload(profile, targetUrl, out embPath))
+                    {
+                        string scanMsg;
+                        if (ArchiveSecurityScanner.IsSafe(embPath, out scanMsg))
+                        {
+                            ExtractArchiveAndConfigure(profile, embPath, GetTargetInstallDirectoryForGame(profile));
+                            return;
+                        }
+                        try { File.Delete(embPath); } catch { }
+                    }
+                }
+                else if (!string.IsNullOrEmpty(targetUrl))
+                {
+                    ok = TryDirectStreamDownload(profile, targetUrl);
                 }
 
                 if (!ok)
                 {
-                    // Automatic Multi-Source Fallback: Try all direct mirrors discovered for this game!
+                    // Automatic Multi-Source Fallback: Try all direct/browser mirrors discovered for this game!
                     ReportProgress("[2/4] " + profile.Name + " - Alternatif canlı akış sunucuları taranıyor...", 16, "Ayna Taranıyor");
                     SiteParserService.InvalidateAnalysisCacheFor(profile.Id ?? profile.Name);
                     SitePageAnalysis analysis = SiteParserService.AnalyzeGameOnSteamRip(profile);
@@ -2300,14 +2324,38 @@ namespace TitanGameHub
                     {
                         foreach (SiteMirror m in analysis.Mirrors)
                         {
-                            if (m.IsDirectArchive && !string.Equals(m.Url, rawUrl, StringComparison.OrdinalIgnoreCase))
+                            if (m == null || string.IsNullOrEmpty(m.Url) || !m.IsDirectArchive) continue;
+                            if (DownloadHostPolicy.IsAdShortener(m.Url)) continue;
+                            string altUrl = DownloadHostPolicy.NormalizeDirectUrl(m.Url);
+                            if (altUrl.StartsWith("//")) altUrl = "https:" + altUrl;
+                            if (string.Equals(altUrl, targetUrl, StringComparison.OrdinalIgnoreCase)) continue;
+
+                            bool acceptAlt;
+                            MirrorTrustPolicy.DescribeVerdict(altUrl, profile, out acceptAlt);
+                            if (!acceptAlt) continue;
+
+                            if (DownloadHostPolicy.NeedsBrowserSession(altUrl))
                             {
-                                ReportProgress(string.Format("[2/4] {0} - Canlı sunucu deneniyor: {1}...", profile.Name, m.HostName), 20, m.HostName);
-                                if (TryDirectStreamDownload(profile, m.Url))
+                                string embAlt;
+                                if (TryEmbeddedBrowserDownload(profile, altUrl, out embAlt))
                                 {
-                                    profile.DirectMirrorUrl = m.Url;
-                                    return; // Success!
+                                    string scanMsg;
+                                    if (ArchiveSecurityScanner.IsSafe(embAlt, out scanMsg))
+                                    {
+                                        profile.DirectMirrorUrl = altUrl;
+                                        ExtractArchiveAndConfigure(profile, embAlt, GetTargetInstallDirectoryForGame(profile));
+                                        return;
+                                    }
+                                    try { File.Delete(embAlt); } catch { }
                                 }
+                                continue;
+                            }
+
+                            ReportProgress(string.Format("[2/4] {0} - Canlı sunucu deneniyor: {1}...", profile.Name, m.HostName), 20, m.HostName);
+                            if (TryDirectStreamDownload(profile, altUrl))
+                            {
+                                profile.DirectMirrorUrl = altUrl;
+                                return; // Success!
                             }
                         }
                     }
