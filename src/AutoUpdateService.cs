@@ -400,6 +400,7 @@ namespace TitanGameHub
 
                 using (WebClient wc = new WebClient())
                 {
+                    wc.Proxy = null;
                     wc.Headers.Add("User-Agent", "TitanGameHub/7.0");
                     wc.DownloadFile(zipUrl, stageZip);
                 }

@@ -207,6 +207,11 @@ namespace TitanGameHub
 
                         _activeTurboUserAgent = handoff.ResolvedUserAgent;
                         bool turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, segs);
+                        if (!turboOk && !_cancelRequested && segs > 6)
+                        {
+                            ReportProgress(string.Format("[2/4] {0} — Bağlantı dostu 6x Turbo moduna geçiliyor...", profile.Name), 26, "6x Turbo");
+                            turboOk = TryParallelSegmentedDownload(profile, handoff.ResolvedDirectUrl, partialFile, fsz, url, handoff.ResolvedCookies, 6);
+                        }
                         _activeTurboUserAgent = null;
 
                         if (turboOk && File.Exists(partialFile))

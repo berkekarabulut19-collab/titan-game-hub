@@ -401,6 +401,96 @@ namespace TitanGameHub
 
         #region 3. 1-Click Rollback Snapshot Engine
 
+        private static bool CreateSmartDeltaRollbackSnapshot(GameProfile profile, string stagingDir, out string rollbackDir, out string error)
+        {
+            rollbackDir = "";
+            error = "";
+            if (profile == null || string.IsNullOrEmpty(profile.WorkingDirectory) || !Directory.Exists(profile.WorkingDirectory))
+            {
+                error = "Oyun çalışma dizini bulunamadı.";
+                return false;
+            }
+            try
+            {
+                string workDir = profile.WorkingDirectory;
+                long totalWorkBytes = 0;
+                string[] allFiles = Directory.GetFiles(workDir, "*.*", SearchOption.AllDirectories);
+                foreach (string f in allFiles)
+                {
+                    try { totalWorkBytes += new FileInfo(f).Length; } catch { }
+                    if (totalWorkBytes > 2L * 1024 * 1024 * 1024) break;
+                }
+
+                // 2 GB altındaki oyunlarda tam kopya, 2 GB+ oyunlarda yalnızca değişecek/kritik dosyalar
+                if (totalWorkBytes <= 2L * 1024 * 1024 * 1024)
+                    return CreateRollbackSnapshot(profile, out rollbackDir, out error);
+
+                HashSet<string> stagedRel = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (!string.IsNullOrEmpty(stagingDir) && Directory.Exists(stagingDir))
+                {
+                    foreach (string sf in Directory.EnumerateFiles(stagingDir, "*.*", SearchOption.AllDirectories))
+                        stagedRel.Add(sf.Substring(stagingDir.Length).TrimStart('\\', '/'));
+                }
+
+                string timeTag = DateTime.Now.ToString("yyyyMMdd_HHmmss");
+                string verTag = string.IsNullOrEmpty(profile.Version) ? "v1.0" : Regex.Replace(profile.Version, @"[^\w\.-]", "");
+                rollbackDir = Path.Combine(GetRollbackRoot(profile.Id), "Snapshot_" + timeTag + "_" + verTag);
+                if (!Directory.Exists(rollbackDir)) Directory.CreateDirectory(rollbackDir);
+
+                HashSet<string> createdDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                long backedUpBytes = 0;
+                int count = 0;
+                foreach (string f in allFiles)
+                {
+                    try
+                    {
+                        string rel = f.Substring(workDir.Length).TrimStart('\\', '/');
+                        string ext = Path.GetExtension(f);
+                        bool isCritical = string.Equals(ext, ".exe", StringComparison.OrdinalIgnoreCase) ||
+                                          string.Equals(ext, ".dll", StringComparison.OrdinalIgnoreCase) ||
+                                          string.Equals(ext, ".ini", StringComparison.OrdinalIgnoreCase) ||
+                                          string.Equals(ext, ".cfg", StringComparison.OrdinalIgnoreCase);
+                        if (!stagedRel.Contains(rel) && !isCritical) continue;
+
+                        FileInfo fi = new FileInfo(f);
+                        if (!stagedRel.Contains(rel) && fi.Length > 64L * 1024 * 1024) continue;
+
+                        string dest = Path.Combine(rollbackDir, rel);
+                        string destFolder = Path.GetDirectoryName(dest);
+                        if (!string.IsNullOrEmpty(destFolder) && createdDirs.Add(destFolder) && !Directory.Exists(destFolder))
+                            Directory.CreateDirectory(destFolder);
+
+                        File.Copy(f, dest, true);
+                        backedUpBytes += fi.Length;
+                        count++;
+                    }
+                    catch { }
+                }
+
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine("{");
+                sb.AppendLine(string.Format("  \"GameId\": \"{0}\",", EscapeJson(profile.Id)));
+                sb.AppendLine(string.Format("  \"GameName\": \"{0}\",", EscapeJson(profile.Name)));
+                sb.AppendLine(string.Format("  \"PreviousVersion\": \"{0}\",", EscapeJson(profile.Version)));
+                sb.AppendLine(string.Format("  \"TargetVersion\": \"{0}\",", EscapeJson(profile.RemoteVersion)));
+                sb.AppendLine(string.Format("  \"Timestamp\": \"{0}\",", DateTime.Now.ToString("O")));
+                sb.AppendLine(string.Format("  \"ExecutablePath\": \"{0}\",", EscapeJson(profile.ExecutablePath)));
+                sb.AppendLine(string.Format("  \"WorkingDirectory\": \"{0}\",", EscapeJson(profile.WorkingDirectory)));
+                sb.AppendLine("  \"IsAtomicSwap\": true,");
+                sb.AppendLine(string.Format("  \"FileCount\": {0},", count));
+                sb.AppendLine(string.Format("  \"TotalSizeBytes\": {0}", backedUpBytes));
+                sb.AppendLine("}");
+                File.WriteAllText(Path.Combine(rollbackDir, "rollback_meta.json"), sb.ToString(), Encoding.UTF8);
+                PurgeOldRollbacks(profile.Id, 2);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
         public static bool CreateRollbackSnapshot(GameProfile profile, out string rollbackDir, out string error)
         {
             rollbackDir = "";
@@ -858,14 +948,16 @@ namespace TitanGameHub
                 result.PreservedCommunityAssetsCount = modSummary.TotalAssetsPreserved;
 
                 // [ADIM 3 / 7] 1-Click Rollback Snapshot Engine
+                // Büyük oyunlarda (2 GB+) tüm 50-100 GB oyunu başka diske kopyalamak yerine
+                // yalnızca güncellemede değişecek dosyaları + kritik .exe/.dll/.ini/.cfg dosyalarını yedekle (100x hızlı).
                 if (profile.IsInstalled && Directory.Exists(profile.WorkingDirectory))
                 {
                     if (progressCallback != null)
-                        progressCallback("Önceki sürüm için 1-Tık Geri Alma (Rollback) anlık görüntüsü oluşturuluyor...", 40);
+                        progressCallback("Önceki sürüm için hızlı akıllı Geri Alma (Rollback) noktası oluşturuluyor...", 40);
 
                     string rollbackDir;
                     string rbError;
-                    if (CreateRollbackSnapshot(profile, out rollbackDir, out rbError))
+                    if (CreateSmartDeltaRollbackSnapshot(profile, extractedStagingDir, out rollbackDir, out rbError))
                     {
                         result.RollbackPointCreated = true;
                         result.RollbackDirectory = rollbackDir;
