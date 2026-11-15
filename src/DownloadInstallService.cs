@@ -1418,8 +1418,9 @@ namespace TitanGameHub
                                 sReq.ReadWriteTimeout = 15000;
                                 sReq.AllowReadStreamBuffering = false;
                                 sReq.ServicePoint.UseNagleAlgorithm = false;
-                                sReq.ServicePoint.ConnectionLimit = 128;
-                                sReq.ServicePoint.ReceiveBufferSize = 4194304;
+                                sReq.ServicePoint.Expect100Continue = false;
+                                sReq.ServicePoint.ConnectionLimit = 256;
+                                sReq.ServicePoint.ReceiveBufferSize = 8388608; // 8 MB TCP window
                                 if (!string.IsNullOrEmpty(authCookie)) sReq.Headers["Cookie"] = authCookie;
                                 sReq.AddRange(curPos, segEnd);
 
@@ -1729,13 +1730,14 @@ namespace TitanGameHub
 
                         bool multiDone = false;
                         string acceptRangesHdr = (resp.Headers["Accept-Ranges"] ?? "").Trim();
-                        bool tryMulti = (existingLength == 0 && fullSize >= 8L * 1024 * 1024 &&
+                        bool hasSegMap = File.Exists(partialFile + ".segmap");
+                        bool tryMulti = ((existingLength == 0 || hasSegMap) && fullSize >= 8L * 1024 * 1024 &&
                                          SpeedLimitBytesPerSec <= 0 && !AutoThrottleWhenGameRunning &&
                                          !string.Equals(acceptRangesHdr, "none", StringComparison.OrdinalIgnoreCase));
                         if (tryMulti)
                         {
                             try { resp.Close(); } catch { }
-                            int segs = (fullSize >= 500L * 1024 * 1024) ? 16 : ((fullSize >= 50L * 1024 * 1024) ? 12 : 8);
+                            int segs = (fullSize >= 2000L * 1024 * 1024) ? 24 : ((fullSize >= 500L * 1024 * 1024) ? 16 : ((fullSize >= 50L * 1024 * 1024) ? 12 : 8));
                             if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
                             {
                                 receivedTotal = fullSize;
