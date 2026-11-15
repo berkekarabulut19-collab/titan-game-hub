@@ -1949,6 +1949,7 @@ namespace TitanGameHub
 
                     ReportProgress(string.Format("[3/4] {0} — Arşiv çıkartılıyor ve kuruluyor...", profile.Name), 90, "Kuruluyor");
                     ExtractArchiveAndConfigure(profile, tempArchive, targetDir);
+                    VerifyInstalledGameHealth(profile, targetDir);
 
                     // Kurulum sonrası kendi indirdiğimiz geçici arşivi temizle (disk şişmesin).
                     // Yalnızca "<oyun>_pkg.rar/.zip" dosyaları silinir; kullanıcı arşivlerine dokunulmaz.
@@ -1978,6 +1979,34 @@ namespace TitanGameHub
                 }
             }
             return false;
+        }
+
+        private void VerifyInstalledGameHealth(GameProfile profile, string targetDir)
+        {
+            try
+            {
+                if (profile == null || string.IsNullOrEmpty(targetDir) || !Directory.Exists(targetDir)) return;
+                string workDir = (!string.IsNullOrEmpty(profile.WorkingDirectory) && Directory.Exists(profile.WorkingDirectory))
+                    ? profile.WorkingDirectory : targetDir;
+
+                bool hasOnlineFixIni = File.Exists(Path.Combine(workDir, "OnlineFix.ini")) ||
+                                       Directory.GetFiles(targetDir, "OnlineFix.ini", SearchOption.AllDirectories).Length > 0;
+                if (hasOnlineFixIni)
+                {
+                    bool hasFixDll = Directory.GetFiles(targetDir, "OnlineFix*.dll", SearchOption.AllDirectories).Length > 0;
+                    if (!hasFixDll)
+                    {
+                        ReportProgress(string.Format("⚠️ {0} — OnlineFix64.dll eksik (Defender karantinası olabilir); klasörü istisnaya ekleyin.", profile.Name), 98, "DLL Uyarısı");
+                        return;
+                    }
+                }
+
+                if (!string.IsNullOrEmpty(profile.ExecutablePath) && File.Exists(profile.ExecutablePath))
+                {
+                    ReportProgress(string.Format("[4/4] {0} — Kurulum ve dosya sağlık kontrolü tamamlandı.", profile.Name), 99, "Hazır");
+                }
+            }
+            catch { }
         }
 
         private void StartDirectBrowserStreamAndMonitor(GameProfile profile, string directMirrorUrl, string hostLabel)
