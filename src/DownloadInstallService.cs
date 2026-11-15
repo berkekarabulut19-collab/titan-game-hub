@@ -30,8 +30,10 @@ namespace TitanGameHub
         {
             try
             {
-                ServicePointManager.DefaultConnectionLimit = 64;
+                ServicePointManager.DefaultConnectionLimit = 128;
                 ServicePointManager.Expect100Continue = false;
+                ServicePointManager.UseNagleAlgorithm = false;
+                ServicePointManager.MaxServicePointIdleTime = 120000;
             }
             catch { }
             try
@@ -1410,11 +1412,12 @@ namespace TitanGameHub
                                 sReq.Proxy = null;
                                 sReq.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
                                 sReq.Referer = customReferer;
-                                sReq.Timeout = 20000;
-                                sReq.ReadWriteTimeout = 35000;
+                                sReq.Timeout = 15000;
+                                sReq.ReadWriteTimeout = 15000;
+                                sReq.AllowReadStreamBuffering = false;
                                 sReq.ServicePoint.UseNagleAlgorithm = false;
-                                sReq.ServicePoint.ConnectionLimit = 64;
-                                sReq.ServicePoint.ReceiveBufferSize = 2097152;
+                                sReq.ServicePoint.ConnectionLimit = 128;
+                                sReq.ServicePoint.ReceiveBufferSize = 4194304;
                                 if (!string.IsNullOrEmpty(authCookie)) sReq.Headers["Cookie"] = authCookie;
                                 sReq.AddRange(curPos, segEnd);
 
@@ -1424,11 +1427,11 @@ namespace TitanGameHub
                                         break;
 
                                     using (Stream rs = sResp.GetResponseStream())
-                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite))
+                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 1048576, FileOptions.RandomAccess))
                                     {
-                                        try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
+                                        try { if (rs.CanTimeout) rs.ReadTimeout = 12000; } catch { }
                                         fs.Seek(curPos, SeekOrigin.Begin);
-                                        byte[] buf = new byte[524288]; // 512 KB per segment
+                                        byte[] buf = new byte[1048576]; // 1 MB per segment
                                         long remaining = (segEnd - curPos) + 1;
                                         while (remaining > 0)
                                         {
@@ -1729,7 +1732,7 @@ namespace TitanGameHub
                         if (tryMulti)
                         {
                             try { resp.Close(); } catch { }
-                            int segs = (fullSize >= 50L * 1024 * 1024) ? 12 : 8;
+                            int segs = (fullSize >= 500L * 1024 * 1024) ? 16 : ((fullSize >= 50L * 1024 * 1024) ? 12 : 8);
                             if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
                             {
                                 receivedTotal = fullSize;
