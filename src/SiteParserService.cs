@@ -713,13 +713,23 @@ namespace TitanGameHub
             {
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
 
+                // Katalogdaki DownloadUrl başka bir oyunun sayfasına işaret ediyorsa (çapraz karışma), yoksay ve canlı aramaya düş
+                string effectiveDownloadUrl = gp.DownloadUrl;
+                if (!string.IsNullOrWhiteSpace(effectiveDownloadUrl) &&
+                    !MirrorTrustPolicy.IsPageUrlMatchingGame(effectiveDownloadUrl, gp.Name))
+                {
+                    effectiveDownloadUrl = FindSteamRipPostUrl(gp.Name);
+                    if (!string.IsNullOrEmpty(effectiveDownloadUrl))
+                        gp.DownloadUrl = effectiveDownloadUrl;
+                }
+
                 // Source 1: Query the game's own WP-JSON host first (FitGirl, FreeGOG, OvaGames, CroTorrents, SteamRIP)
                 string wpHost = "https://steamrip.com";
-                if (!string.IsNullOrWhiteSpace(gp.DownloadUrl) && gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                if (!string.IsNullOrWhiteSpace(effectiveDownloadUrl) && effectiveDownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
                     try
                     {
-                        Uri du = new Uri(gp.DownloadUrl);
+                        Uri du = new Uri(effectiveDownloadUrl);
                         string h = du.Host.ToLowerInvariant();
                         if (h.Contains("fitgirl-repacks.site") || h.Contains("freegogpcgames.com") ||
                             h.Contains("ovagames.com") || h.Contains("crotorrents.com") || h.Contains("steamrip.com"))
@@ -730,16 +740,17 @@ namespace TitanGameHub
                     catch { }
                 }
 
-                string slug = ExtractSlugFromUrl(gp.DownloadUrl);
+                string slug = ExtractSlugFromUrl(effectiveDownloadUrl);
+                string searchTitle = CleanGameTitleForSearch(gp.Name);
                 string wpJsonUrl = !string.IsNullOrEmpty(slug)
                     ? (wpHost + "/wp-json/wp/v2/posts?slug=" + Uri.EscapeDataString(slug) + "&_fields=id,slug,link,title,content,yoast_head_json")
-                    : (wpHost + "/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(gp.Name) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json");
+                    : (wpHost + "/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(searchTitle) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json");
 
                 string json = DownloadStringWithHeaders(wpJsonUrl);
                 if ((string.IsNullOrWhiteSpace(json) || !json.TrimStart().StartsWith("[") || json.Trim() == "[]") &&
                     !wpHost.Equals("https://steamrip.com", StringComparison.OrdinalIgnoreCase))
                 {
-                    wpJsonUrl = "https://steamrip.com/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(gp.Name) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json";
+                    wpJsonUrl = "https://steamrip.com/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(searchTitle) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json";
                     json = DownloadStringWithHeaders(wpJsonUrl);
                 }
                 if (!string.IsNullOrWhiteSpace(json) && json.TrimStart().StartsWith("["))
@@ -762,7 +773,7 @@ namespace TitanGameHub
                 }
 
                 // Source 2: Jina Reader on SteamRIP (Bypasses Cloudflare 100% of the time!)
-                string targetPostUrl = gp.DownloadUrl;
+                string targetPostUrl = effectiveDownloadUrl;
                 if (string.IsNullOrWhiteSpace(targetPostUrl) || !targetPostUrl.StartsWith("http"))
                 {
                     targetPostUrl = FindSteamRipPostUrl(gp.Name);
@@ -1302,29 +1313,57 @@ namespace TitanGameHub
             });
         }
 
+        /// <summary>Repack/sürüm/grup eklerini temizleyerek arama motorları için saf oyun adını döndürür.</summary>
+        public static string CleanGameTitleForSearch(string gameName)
+        {
+            if (string.IsNullOrWhiteSpace(gameName)) return "";
+            string s = gameName.Trim();
+            s = Regex.Replace(s, @"[\[\(][^\[\]\(\)]*[\]\)]", " ");
+            s = Regex.Replace(s, @"(?i)\b(?:deluxe|ultimate|complete|definitive|goty|gold|digital|anniversary|collector'?s|premium|standard|supporter)\s+edition\b", " ");
+            s = Regex.Replace(s, @"(?i)\b(?:multi\d+|elamigos|fitgirl|dodi|xatab|kaos|skidrow|codex|plaza|empress|rune|flt|tenoke|razor1911|p2p|gog|repack|pre-?installed|free\s+download)\b", " ");
+            s = Regex.Replace(s, @"(?i)\s*(?:\+|,|–|-)\s*(?:all\s+dlcs?|\d+\s+dlcs?(?:/bonuses)?|bonus(?:es)?|ost|soundtrack|build\s*\d+|v\d+(?:[._]\d+)*).*$", " ");
+            s = Regex.Replace(s, @"(?i)\bv\d+(?:\.\d+){1,4}\b", " ");
+            s = Regex.Replace(s, @"\s{2,}", " ").Trim(' ', '-', '–', '—', ':');
+            return s.Length >= 2 ? s : gameName.Trim();
+        }
+
         public static string FindSteamRipPostUrl(string gameName)
         {
             if (string.IsNullOrWhiteSpace(gameName)) return null;
             try
             {
-                string searchUrl = "https://steamrip.com/?s=" + Uri.EscapeDataString(gameName.Trim());
+                string query = CleanGameTitleForSearch(gameName);
+                string searchUrl = "https://steamrip.com/?s=" + Uri.EscapeDataString(query);
                 string md = FetchViaJinaReader(searchUrl);
+                if (string.IsNullOrEmpty(md) && !string.Equals(query, gameName.Trim(), StringComparison.OrdinalIgnoreCase))
+                    md = FetchViaJinaReader("https://steamrip.com/?s=" + Uri.EscapeDataString(gameName.Trim()));
                 if (string.IsNullOrEmpty(md)) return null;
 
-                string cleanKey = Regex.Replace(gameName.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+                string cleanKey = Regex.Replace(query.ToLowerInvariant(), @"[^a-z0-9]+", "-").Trim('-');
+                string[] qWords = Regex.Split(query.ToLowerInvariant(), @"[^a-z0-9]+");
                 MatchCollection postLinks = Regex.Matches(md, @"https://steamrip\.com/([a-z0-9-]+-free-download[a-z0-9-]*/?)", RegexOptions.IgnoreCase);
 
-                string firstCandidate = null;
+                string bestUrl = null;
+                int bestScore = -1;
                 foreach (Match m in postLinks)
                 {
                     string fullUrl = m.Value;
                     string slug = m.Groups[1].Value.ToLowerInvariant();
-                    if (firstCandidate == null) firstCandidate = fullUrl;
-
                     if (!string.IsNullOrEmpty(cleanKey) && slug.Contains(cleanKey))
                         return fullUrl;
+
+                    int score = 0;
+                    foreach (string w in qWords)
+                    {
+                        if (w.Length >= 2 && slug.Contains(w)) score += w.Length;
+                    }
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestUrl = fullUrl;
+                    }
                 }
-                return firstCandidate;
+                return bestUrl;
             }
             catch
             {
@@ -1336,7 +1375,9 @@ namespace TitanGameHub
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
             if (url.IndexOf("?s=", StringComparison.OrdinalIgnoreCase) >= 0) return null;
-            Match m = Regex.Match(url, @"(?:steamrip\.com|fitgirl-repacks\.site|freegogpcgames\.com|crotorrents\.com|ovagames\.com)/([a-zA-Z0-9_-]+)/?(?:$|\?|#)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            Match fg = Regex.Match(url, @"freegogpcgames\.com/\d+/([a-zA-Z0-9_-]+)/?(?:$|\?|#)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (fg.Success) return fg.Groups[1].Value;
+            Match m = Regex.Match(url, @"(?:steamrip\.com|fitgirl-repacks\.site|freegogpcgames\.com|crotorrents\.com|ovagames\.com)/([a-zA-Z0-9_-]+)(?:\.html)?/?(?:$|\?|#)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (m.Success) return m.Groups[1].Value;
             return null;
         }

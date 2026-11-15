@@ -318,6 +318,23 @@ namespace TitanGameHub
             string vdfDetail;
             Check("Steam shortcuts.vdf yazma/okuma/kaldırma sağlam",
                 SteamIntegrationService.SelfTestShortcutsVdfRoundTrip(out vdfDetail), vdfDetail);
+
+            Report.AppendLine("\n-- Ayna & Katalog Doğrulama (007 / Çoklu Parça) --");
+            GameProfile gp007 = new GameProfile { Id = "007-first-light-deluxe-edition-multi14-elamigos", Name = "007 First Light Deluxe Edition MULTi14-ElAmigos" };
+            bool acc;
+            MirrorTrustPolicy.DescribeVerdict("https://fuckingfast.co/abc#Game.part05.rar", gp007, out acc);
+            Check("Part2+ linki tekil ayna olarak reddedilir", !acc, "");
+            MirrorTrustPolicy.DescribeVerdict("https://fuckingfast.co/abc#fg-optional-bonus-content.bin", gp007, out acc);
+            Check("fg-optional paketi ana oyun olarak reddedilir", !acc, "");
+            MirrorTrustPolicy.DescribeVerdict("https://itsfileditchfiles.st/balpha39/fa64b221881aa4d09a7c/007-First-Light-SteamRIP.com.rar", gp007, out acc);
+            Check("007 First Light geçerli SteamRIP arşivi kabul edilir", acc, "");
+            Check("Çapraz karışmış DownloadUrl (aviassembly != 007) reddedilir",
+                !MirrorTrustPolicy.IsPageUrlMatchingGame("https://steamrip.com/aviassembly-free-download/", gp007.Name), "");
+            Check("Eşleşen DownloadUrl (007-first-light) kabul edilir",
+                MirrorTrustPolicy.IsPageUrlMatchingGame("https://steamrip.com/007-first-light-free-download/", gp007.Name), "");
+            Check("CleanGameTitleForSearch ElAmigos/Deluxe eklerini temizler",
+                string.Equals(SiteParserService.CleanGameTitleForSearch(gp007.Name), "007 First Light", StringComparison.OrdinalIgnoreCase),
+                SiteParserService.CleanGameTitleForSearch(gp007.Name));
         }
     }
 }

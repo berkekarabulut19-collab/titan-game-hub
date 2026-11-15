@@ -221,12 +221,77 @@ namespace TitanGameHub
             return score;
         }
 
+        /// <summary>Kırık çok-parçalı (part2+) veya opsiyonel/seçmeli FitGirl alt paketlerini eler.</summary>
+        public static bool IsNonFirstPartOrOptional(string url, out string reason)
+        {
+            reason = null;
+            if (string.IsNullOrEmpty(url)) return false;
+
+            if (Regex.IsMatch(url, @"(?:^|[#/_\-])fg-(?:optional|selective)-", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            {
+                reason = "opsiyonel/ek paket (ana oyun değil)";
+                return true;
+            }
+
+            Match partMatch = Regex.Match(url, @"\.part0*([0-9]+)\.(?:rar|zip|7z)(?:$|\?|#)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (partMatch.Success)
+            {
+                int partNum;
+                if (int.TryParse(partMatch.Groups[1].Value, out partNum) && partNum > 1)
+                {
+                    reason = "çok parçalı arşivin ilk parçası değil (part" + partNum + ")";
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Katalogdaki oyun sayfası URL'sinin (DownloadUrl) gerçekten bu oyuna ait olup olmadığını doğrular.</summary>
+        public static bool IsPageUrlMatchingGame(string pageUrl, string gameName)
+        {
+            if (string.IsNullOrWhiteSpace(pageUrl) || string.IsNullOrWhiteSpace(gameName)) return true;
+            if (!pageUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return true;
+
+            Match m = Regex.Match(pageUrl, @"(?:freegogpcgames\.com/\d+/|(?:steamrip\.com|fitgirl-repacks\.site|ovagames\.com|crotorrents\.com)/)([^/?#]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (!m.Success) return true;
+
+            string slug = m.Groups[1].Value.ToLowerInvariant();
+            slug = Regex.Replace(slug, @"\.html$", "");
+            slug = Regex.Replace(slug, @"^\d+-", "");
+            slug = Regex.Replace(slug, @"-(?:free-download|repack|multi\d+|elamigos|fitgirl)(?:-[a-z0-9]+)?$", "");
+
+            HashSet<string> slugTokens = Tokenize(slug);
+            HashSet<string> gameTokens = Tokenize(gameName);
+            if (slugTokens.Count == 0 || gameTokens.Count == 0) return true;
+
+            foreach (string st in slugTokens)
+            {
+                foreach (string gt in gameTokens)
+                {
+                    if (st == gt) return true;
+                    if (st.Length >= 5 && gt.Length >= 5 && Levenshtein(st, gt) <= 2) return true;
+                    if (st.Length >= 4 && gt.Length >= 4 &&
+                        (st.StartsWith(gt, StringComparison.Ordinal) || gt.StartsWith(st, StringComparison.Ordinal)))
+                        return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>Neden elendiğini insan dilinde döndürür (log/UI için).</summary>
         public static string DescribeVerdict(string url, GameProfile gp, out bool accept)
         {
             accept = true;
             if (string.IsNullOrEmpty(url)) { accept = false; return "boş link"; }
 
+            string partReason;
+            if (IsNonFirstPartOrOptional(url, out partReason))
+            {
+                accept = false;
+                return partReason;
+            }
             if (gp != null && LooksLikeWrongGame(url, gp.Name))
             {
                 accept = false;
