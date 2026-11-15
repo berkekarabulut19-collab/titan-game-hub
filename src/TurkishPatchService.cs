@@ -405,36 +405,18 @@ namespace TitanGameHub
                 }
             }
 
-            // Bilinen hikaye/altyazı odaklı anahtar kelimeler ve türler (tüm hikayeli oyunları kapsar)
-            string lower = name.ToLowerInvariant();
-            string genre = gp.Category != null ? gp.Category.ToLowerInvariant() : "";
-            string tags = gp.Tags != null ? gp.Tags.ToLowerInvariant() : "";
-            string desc = gp.Description != null ? gp.Description.ToLowerInvariant() : "";
-            string combined = lower + " " + genre + " " + tags + " " + desc;
-
-            if (combined.Contains("assassin") || combined.Contains("subtitle") || combined.Contains("story") ||
-                combined.Contains("hikaye") || combined.Contains("campaign") || combined.Contains("rpg") ||
-                combined.Contains("adventure") || combined.Contains("macera") || combined.Contains("action") ||
-                combined.Contains("aksiyon") || combined.Contains("gizlilik") || combined.Contains("stealth") ||
-                combined.Contains("horror") || combined.Contains("korku") || combined.Contains("narrative") ||
-                combined.Contains("007") || combined.Contains("bond") || combined.Contains("noir") ||
-                combined.Contains("chronicles") || combined.Contains("odyssey") || combined.Contains("origins") ||
-                combined.Contains("remake") || combined.Contains("remastered") || combined.Contains("definitive") ||
-                combined.Contains("tales") || combined.Contains("legend") || combined.Contains("chapter"))
+            // Bilinen veritabanında yoksa bile Türkçe desteklemeyen/altyazısız TÜM oyunlarda
+            // kurulum bitince otomatik Türkçe dil/altyazı yapılandırması ve canlı çeviri altyazı HUD kurulur.
+            patchInfo = new TurkishPatchInfo
             {
-                patchInfo = new TurkishPatchInfo
-                {
-                    GameName = gp.Name,
-                    PatchTitle = gp.Name + " — Türkçe Altyazı ve Dil Yapılandırması",
-                    Author = "Titan Türkçe Lokalizasyon",
-                    Version = "v1.0",
-                    TargetSubFolder = "",
-                    DownloadUrl = null
-                };
-                return true;
-            }
-
-            return false;
+                GameName = gp.Name,
+                PatchTitle = gp.Name + " — Otomatik Türkçe Yama & Altyazı",
+                Author = "Titan Türkçe Lokalizasyon",
+                Version = "v1.0",
+                TargetSubFolder = "",
+                DownloadUrl = null
+            };
+            return true;
         }
 
         public static void InstallPatchAsync(GameProfile profile, Action<string, int> progressCallback, Action<bool, string> completedCallback)
