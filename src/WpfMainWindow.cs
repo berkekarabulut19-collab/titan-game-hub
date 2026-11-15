@@ -1902,7 +1902,8 @@ namespace TitanGameHub
                 }
                 string sMsg;
                 bool ok;
-                if (SteamIntegrationService.IsGameInSteamShortcuts(_selectedProfile))
+                bool wasInSteam = SteamIntegrationService.IsGameInSteamShortcuts(_selectedProfile);
+                if (wasInSteam)
                 {
                     ok = SteamIntegrationService.RemoveGameFromSteamShortcuts(_selectedProfile, out sMsg);
                 }
@@ -1914,6 +1915,35 @@ namespace TitanGameHub
                 _txtBottomStatus.Text = sMsg;
                 RefreshSteamShortcutButton(_selectedProfile);
                 Win32.PlayTechChirp(ok);
+
+                if (!ok)
+                {
+                    MessageBox.Show(sMsg, "Titan // Steam Kısayol", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                if (Process.GetProcessesByName("steam").Length > 0)
+                {
+                    MessageBoxResult res = MessageBox.Show(
+                        sMsg + "\n\nSteam şu an açık olduğu için Valve Steam istemcisi kısayol değişikliğini ancak yenilenince kütüphanede gösterir.\n\nSteam 2 saniyeliğine şimdi yenilensin mi?\n• EVET: Steam hemen yenilenir ve oyun Steam Kütüphanesinde anında görünür/kalkar.\n• HAYIR: Steam hiç kapanmaz (Online-Fix 480 hazır; OYNA deyince doğrudan Steam online başlar).",
+                        "Titan // Steam Kütüphane Senkronizasyonu",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question);
+                    if (res == MessageBoxResult.Yes)
+                    {
+                        _txtBottomStatus.Text = "🔄 Steam kütüphane listesini güncellemek için yenileniyor...";
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            string rstMsg;
+                            bool rOk = SteamIntegrationService.RestartSteamClient(out rstMsg);
+                            Dispatcher.BeginInvoke(new Action(delegate
+                            {
+                                _txtBottomStatus.Text = rstMsg;
+                                Win32.PlayTechChirp(rOk);
+                            }));
+                        });
+                    }
+                }
             };
             ContextMenu steamMenu = new ContextMenu();
             MenuItem miAddAllOnline = new MenuItem() { Header = "🎮 Tüm Kurulu Online Oyunları Steam'e Ekle (Online Fix Dahil)" };
