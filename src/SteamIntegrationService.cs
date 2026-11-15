@@ -228,7 +228,8 @@ namespace TitanGameHub
                         try { File.Copy(vdfPath, vdfPath + ".bak", true); } catch { }
                         string mExe = match.GetString("Exe");
                         string mName = match.GetString("AppName");
-                        uint appId = ComputeNonSteamAppId(mExe, mName);
+                        uint appId = match.GetUInt("appid");
+                        if (appId == 0) appId = ComputeNonSteamAppId(mExe, mName);
                         entries.Remove(match);
                         File.WriteAllBytes(vdfPath, SerializeShortcutsVdf(entries));
                         CleanupSteamGridArtwork(configDir, appId);
@@ -286,7 +287,8 @@ namespace TitanGameHub
                     {
                         if (HasTitanTag(e))
                         {
-                            uint appId = ComputeNonSteamAppId(e.GetString("Exe"), e.GetString("AppName"));
+                            uint appId = e.GetUInt("appid");
+                            if (appId == 0) appId = ComputeNonSteamAppId(e.GetString("Exe"), e.GetString("AppName"));
                             CleanupSteamGridArtwork(configDir, appId);
                             localRemoved++;
                         }
@@ -340,16 +342,17 @@ namespace TitanGameHub
                         Process.Start(new ProcessStartInfo { FileName = steamExe, Arguments = "-shutdown", UseShellExecute = true });
                     }
                     catch { }
-                    Thread.Sleep(2500);
-                    foreach (Process p in Process.GetProcessesByName("steam"))
+                    // Steam oturum/token dosyalarını bozmamak için ASLA p.Kill() yapma; zarif kapanmasını bekle
+                    for (int w = 0; w < 30; w++)
                     {
-                        try { if (!p.HasExited) p.Kill(); } catch { }
+                        Thread.Sleep(500);
+                        if (Process.GetProcessesByName("steam").Length == 0) break;
                     }
                     Thread.Sleep(600);
                 }
 
                 Process.Start(new ProcessStartInfo { FileName = steamExe, UseShellExecute = true });
-                message = "🔄 Steam yeniden başlatıldı — eklenen/kaldırılan oyunlar kütüphanede güncellendi!";
+                message = "🔄 Steam oturum korunarak yeniden başlatıldı — eklenen/kaldırılan oyunlar kütüphanede güncellendi!";
                 return true;
             }
             catch (Exception ex)
@@ -389,8 +392,13 @@ namespace TitanGameHub
                 string[] files = new string[]
                 {
                     Path.Combine(gridDir, appId + "p.jpg"),
+                    Path.Combine(gridDir, appId + "p.png"),
                     Path.Combine(gridDir, appId + ".jpg"),
-                    Path.Combine(gridDir, appId + "_hero.jpg")
+                    Path.Combine(gridDir, appId + ".png"),
+                    Path.Combine(gridDir, appId + "_hero.jpg"),
+                    Path.Combine(gridDir, appId + "_hero.png"),
+                    Path.Combine(gridDir, appId + "_logo.png"),
+                    Path.Combine(gridDir, appId + "_logo.jpg")
                 };
                 foreach (string f in files)
                 {
@@ -579,37 +587,87 @@ namespace TitanGameHub
                 string portraitPath = Path.Combine(gridDir, appId + "p.jpg");
                 string widePath = Path.Combine(gridDir, appId + ".jpg");
                 string heroPath = Path.Combine(gridDir, appId + "_hero.jpg");
+                string logoPath = Path.Combine(gridDir, appId + "_logo.png");
 
-                if (File.Exists(portraitPath) && File.Exists(heroPath)) return;
+                if (File.Exists(portraitPath) && File.Exists(widePath) && File.Exists(heroPath) && File.Exists(logoPath)) return;
 
-                byte[] imgBytes = null;
-                if (!string.IsNullOrEmpty(gp.WorkingDirectory))
+                Func<string, byte[]> tryFetch = delegate(string u)
                 {
-                    string localCover = Path.Combine(gp.WorkingDirectory, "cover.jpg");
-                    string localHeader = Path.Combine(gp.WorkingDirectory, "header.jpg");
-                    if (File.Exists(localCover)) imgBytes = File.ReadAllBytes(localCover);
-                    else if (File.Exists(localHeader)) imgBytes = File.ReadAllBytes(localHeader);
-                }
-
-                if (imgBytes == null)
-                {
-                    string url = !string.IsNullOrEmpty(gp.CapsuleUrl) ? gp.CapsuleUrl : gp.BannerUrl;
-                    if (!string.IsNullOrEmpty(url) && url.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                    if (string.IsNullOrEmpty(u) || !u.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return null;
+                    try
                     {
                         using (WebClient wc = new WebClient())
                         {
                             wc.Proxy = null;
                             wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
-                            imgBytes = wc.DownloadData(url);
+                            byte[] b = wc.DownloadData(u);
+                            return (b != null && b.Length >= 1024) ? b : null;
                         }
                     }
+                    catch { return null; }
+                };
+
+                byte[] fallbackBytes = null;
+                if (!string.IsNullOrEmpty(gp.WorkingDirectory))
+                {
+                    string localCover = Path.Combine(gp.WorkingDirectory, "cover.jpg");
+                    string localHeader = Path.Combine(gp.WorkingDirectory, "header.jpg");
+                    if (File.Exists(localCover)) fallbackBytes = File.ReadAllBytes(localCover);
+                    else if (File.Exists(localHeader)) fallbackBytes = File.ReadAllBytes(localHeader);
+                }
+                if (fallbackBytes == null) fallbackBytes = tryFetch(gp.CapsuleUrl);
+                if (fallbackBytes == null) fallbackBytes = tryFetch(gp.BannerUrl);
+
+                string steamAppId = (gp.SteamAppId ?? "").Trim();
+                bool hasRealSteamApp = !string.IsNullOrEmpty(steamAppId) && steamAppId != "0" && steamAppId != "480";
+
+                if (!File.Exists(portraitPath))
+                {
+                    byte[] pBytes = hasRealSteamApp
+                        ? (tryFetch("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/library_600x900_2x.jpg")
+                           ?? tryFetch("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/library_600x900.jpg")
+                           ?? fallbackBytes)
+                        : fallbackBytes;
+                    if (pBytes != null) File.WriteAllBytes(portraitPath, pBytes);
+                }
+                if (!File.Exists(widePath))
+                {
+                    byte[] wBytes = hasRealSteamApp
+                        ? (tryFetch("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/header.jpg") ?? fallbackBytes)
+                        : fallbackBytes;
+                    if (wBytes != null) File.WriteAllBytes(widePath, wBytes);
+                }
+                if (!File.Exists(heroPath))
+                {
+                    byte[] hBytes = hasRealSteamApp
+                        ? (tryFetch("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/library_hero.jpg") ?? fallbackBytes)
+                        : fallbackBytes;
+                    if (hBytes != null) File.WriteAllBytes(heroPath, hBytes);
+                }
+                if (!File.Exists(logoPath) && hasRealSteamApp)
+                {
+                    byte[] lBytes = tryFetch("https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + steamAppId + "/logo.png");
+                    if (lBytes != null) File.WriteAllBytes(logoPath, lBytes);
                 }
 
-                if (imgBytes != null && imgBytes.Length >= 2048)
+                // Son çare: URL ve SteamAppId yoksa oyunun .exe ikonundan kapak oluştur
+                if (!File.Exists(portraitPath) && !string.IsNullOrEmpty(gp.ExecutablePath) && File.Exists(gp.ExecutablePath))
                 {
-                    if (!File.Exists(portraitPath)) File.WriteAllBytes(portraitPath, imgBytes);
-                    if (!File.Exists(widePath)) File.WriteAllBytes(widePath, imgBytes);
-                    if (!File.Exists(heroPath)) File.WriteAllBytes(heroPath, imgBytes);
+                    try
+                    {
+                        using (System.Drawing.Icon ico = System.Drawing.Icon.ExtractAssociatedIcon(gp.ExecutablePath))
+                        {
+                            if (ico != null)
+                            {
+                                using (System.Drawing.Bitmap bmp = ico.ToBitmap())
+                                {
+                                    bmp.Save(portraitPath, System.Drawing.Imaging.ImageFormat.Png);
+                                    if (!File.Exists(widePath)) bmp.Save(widePath, System.Drawing.Imaging.ImageFormat.Png);
+                                }
+                            }
+                        }
+                    }
+                    catch { }
                 }
             }
             catch { }
@@ -671,6 +729,16 @@ namespace TitanGameHub
                         return Fields[i].Value as string ?? "";
                 }
                 return "";
+            }
+
+            public uint GetUInt(string key)
+            {
+                for (int i = 0; i < Fields.Count; i++)
+                {
+                    if (string.Equals(Fields[i].Key, key, StringComparison.OrdinalIgnoreCase) && Fields[i].Type == 0x02 && Fields[i].Value is uint)
+                        return (uint)Fields[i].Value;
+                }
+                return 0;
             }
 
             public void Set(byte type, string key, object val)
