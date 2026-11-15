@@ -1269,10 +1269,12 @@ namespace TitanGameHub
                             req.Proxy = null;
                             req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
                             req.Referer = refU;
-                            req.Timeout = 1800;
-                            req.ReadWriteTimeout = 1800;
+                            req.Timeout = 2400;
+                            req.ReadWriteTimeout = 2400;
+                            req.ServicePoint.UseNagleAlgorithm = false;
+                            req.ServicePoint.Expect100Continue = false;
                             if (!string.IsNullOrEmpty(ck)) req.Headers["Cookie"] = ck;
-                            req.AddRange(0, 262143);
+                            req.AddRange(0, 1048575);
 
                             Stopwatch sw = Stopwatch.StartNew();
                             using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
@@ -1462,11 +1464,11 @@ namespace TitanGameHub
                                         break;
 
                                     using (Stream rs = sResp.GetResponseStream())
-                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 262144, FileOptions.RandomAccess))
+                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 1048576, FileOptions.RandomAccess))
                                     {
                                         try { if (rs.CanTimeout) rs.ReadTimeout = 15000; } catch { }
                                         fs.Seek(curPos, SeekOrigin.Begin);
-                                        byte[] buf = new byte[262144]; // 256 KB smooth streaming buffer
+                                        byte[] buf = new byte[1048576]; // 1 MB high-throughput streaming buffer
                                         long remaining = (segEnd - curPos) + 1;
                                         while (remaining > 0)
                                         {
@@ -1775,9 +1777,12 @@ namespace TitanGameHub
                         if (tryMulti)
                         {
                             try { resp.Close(); } catch { }
-                            int segs = (fullSize >= 2000L * 1024 * 1024) ? 24 : ((fullSize >= 500L * 1024 * 1024) ? 16 : ((fullSize >= 50L * 1024 * 1024) ? 12 : 8));
+                            if (ServicePointManager.DefaultConnectionLimit < 512) ServicePointManager.DefaultConnectionLimit = 512;
+                            ServicePointManager.Expect100Continue = false;
+                            ServicePointManager.UseNagleAlgorithm = false;
+                            int segs = (fullSize >= 1000L * 1024 * 1024) ? 32 : ((fullSize >= 250L * 1024 * 1024) ? 24 : ((fullSize >= 50L * 1024 * 1024) ? 16 : 8));
                             if (directUrl.IndexOf("gofile.io", StringComparison.OrdinalIgnoreCase) >= 0)
-                                segs = Math.Min(segs, 6); // GoFile ücretsiz API 24 eşzamanlı bağlantıda 429/reset verebilir -> 6 güvenli paralel stream
+                                segs = Math.Min(segs, 10); // GoFile ücretsiz API aşırı bağlantıda 429 verebilir -> 10 dengeli paralel stream
                             if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
                             {
                                 receivedTotal = fullSize;
@@ -1802,8 +1807,9 @@ namespace TitanGameHub
                                 fbReq.Timeout = 20000;
                                 fbReq.ReadWriteTimeout = 35000;
                                 fbReq.ServicePoint.UseNagleAlgorithm = false;
-                                fbReq.ServicePoint.ConnectionLimit = 64;
-                                fbReq.ServicePoint.ReceiveBufferSize = 2097152;
+                                fbReq.ServicePoint.Expect100Continue = false;
+                                fbReq.ServicePoint.ConnectionLimit = 512;
+                                fbReq.ServicePoint.ReceiveBufferSize = 8388608;
                                 if (!string.IsNullOrEmpty(authCookie)) fbReq.Headers["Cookie"] = authCookie;
                                 reopenedResp = (HttpWebResponse)fbReq.GetResponse();
                                 activeResp = reopenedResp;
@@ -1815,7 +1821,7 @@ namespace TitanGameHub
                                 using (FileStream fs = new FileStream(partialFile, mode, FileAccess.Write, FileShare.Read))
                         {
                             try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
-                            byte[] buf = new byte[262144]; // 256KB smooth streaming buffer
+                            byte[] buf = new byte[1048576]; // 1MB high-throughput streaming buffer
                             long received = existingLength;
                             int read;
                             Stopwatch sw = Stopwatch.StartNew();

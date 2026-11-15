@@ -195,8 +195,10 @@ namespace TitanGameHub
                     req.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
                     req.Timeout = 25000;
                     req.ReadWriteTimeout = 60000;
-                    req.ServicePoint.ConnectionLimit = 32;
-                    req.ServicePoint.ReceiveBufferSize = 1048576;
+                    req.ServicePoint.UseNagleAlgorithm = false;
+                    req.ServicePoint.Expect100Continue = false;
+                    req.ServicePoint.ConnectionLimit = 128;
+                    req.ServicePoint.ReceiveBufferSize = 8388608;
                     if (existing > 0) req.AddRange(existing);
 
                     using (HttpWebResponse resp = (HttpWebResponse)req.GetResponse())
@@ -211,7 +213,7 @@ namespace TitanGameHub
                         if (mode == FileMode.Create) existing = 0;
 
                         using (Stream rs = resp.GetResponseStream())
-                        using (FileStream fs = new FileStream(destPath, mode, FileAccess.Write, FileShare.Read))
+                        using (FileStream fs = new FileStream(destPath, mode, FileAccess.Write, FileShare.Read, 1048576))
                         {
                             try { if (rs.CanTimeout) rs.ReadTimeout = 20000; } catch { }
                             byte[] buf = new byte[1048576];
