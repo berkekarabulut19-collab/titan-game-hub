@@ -80,7 +80,13 @@ namespace TitanGameHub
 
         static ImageCacheService()
         {
-            try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)12288 | SecurityProtocolType.Tls12; } catch { }
+            try
+            {
+                ServicePointManager.SecurityProtocol |= (SecurityProtocolType)12288 | SecurityProtocolType.Tls12;
+                ServicePointManager.DefaultConnectionLimit = 64;
+                ServicePointManager.Expect100Continue = false;
+            }
+            catch { }
             try
             {
                 if (!Directory.Exists(CacheDir))
