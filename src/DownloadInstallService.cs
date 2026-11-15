@@ -1464,11 +1464,11 @@ namespace TitanGameHub
                                         break;
 
                                     using (Stream rs = sResp.GetResponseStream())
-                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 1048576, FileOptions.RandomAccess))
+                                    using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 2097152, FileOptions.RandomAccess))
                                     {
-                                        try { if (rs.CanTimeout) rs.ReadTimeout = 15000; } catch { }
+                                        try { if (rs.CanTimeout) rs.ReadTimeout = 10000; } catch { }
                                         fs.Seek(curPos, SeekOrigin.Begin);
-                                        byte[] buf = new byte[1048576]; // 1 MB high-throughput streaming buffer
+                                        byte[] buf = new byte[2097152]; // 2 MB ultra-throughput streaming buffer
                                         long remaining = (segEnd - curPos) + 1;
                                         while (remaining > 0)
                                         {

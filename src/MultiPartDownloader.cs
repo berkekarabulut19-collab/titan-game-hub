@@ -127,24 +127,46 @@ namespace TitanGameHub
                 Match extMatch = Regex.Match(firstUrl, @"(?i)\.(rar|zip|7z)");
                 if (extMatch.Success) extension = "." + extMatch.Groups[1].Value.ToLowerInvariant();
 
-                // Kaç parça var? (1..99 arası HEAD ile doğrula)
+                // Kaç parça var? (8'li paralel HEAD kontrolü ile anında keşfet)
                 List<string> urls = BuildPartCandidates(firstUrl, 199);
                 List<string> confirmed = new List<string>();
                 confirmed.Add(urls[0]);
-                for (int i = 1; i < urls.Count; i++)
+                for (int b = 1; b < urls.Count; b += 8)
                 {
                     if (isCancelled != null && isCancelled()) break;
-                    if (!RemoteExists(urls[i])) break;
-                    confirmed.Add(urls[i]);
+                    int batchLen = Math.Min(8, urls.Count - b);
+                    bool[] exists = new bool[batchLen];
+                    ManualResetEvent batchDone = new ManualResetEvent(false);
+                    int rem = batchLen;
+                    for (int k = 0; k < batchLen; k++)
+                    {
+                        int slot = k;
+                        string probeUrl = urls[b + slot];
+                        ThreadPool.QueueUserWorkItem(delegate
+                        {
+                            try { exists[slot] = RemoteExists(probeUrl); }
+                            finally { if (Interlocked.Decrement(ref rem) == 0) { try { batchDone.Set(); } catch { } } }
+                        });
+                    }
+                    batchDone.WaitOne();
+                    batchDone.Dispose();
+
+                    bool hitEnd = false;
+                    for (int k = 0; k < batchLen; k++)
+                    {
+                        if (!exists[k]) { hitEnd = true; break; }
+                        confirmed.Add(urls[b + k]);
+                    }
+                    if (hitEnd) break;
                 }
 
                 if (ServicePointManager.DefaultConnectionLimit < 512) ServicePointManager.DefaultConnectionLimit = 512;
                 ServicePointManager.Expect100Continue = false;
                 ServicePointManager.UseNagleAlgorithm = false;
 
-                result.Message = string.Format("{0} parça bulundu (4x paralel indirme)", confirmed.Count);
+                result.Message = string.Format("{0} parça bulundu (6x paralel indirme)", confirmed.Count);
 
-                int workerCount = Math.Min(4, confirmed.Count);
+                int workerCount = Math.Min(6, confirmed.Count);
                 string[] partPaths = new string[confirmed.Count];
                 long[] partSizes = new long[confirmed.Count];
                 int nextIdx = -1;

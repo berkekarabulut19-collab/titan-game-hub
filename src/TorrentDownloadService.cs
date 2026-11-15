@@ -185,8 +185,9 @@ namespace TitanGameHub
                                 " --rpc-secret=" + cfg.Secret +
                                 " --seed-time=0 --bt-stop-timeout=0" +
                                 " --max-connection-per-server=16 --split=16 --min-split-size=1M" +
-                                " --bt-max-peers=200 --bt-request-peer-speed-limit=0 --max-overall-download-limit=0" +
-                                " --disk-cache=128M --file-allocation=trunc" +
+                                " --bt-max-peers=250 --bt-request-peer-speed-limit=0 --max-overall-download-limit=0" +
+                                " --enable-dht=true --enable-peer-exchange=true --bt-enable-lpd=true" +
+                                " --optimize-concurrent-downloads=true --disk-cache=128M --file-allocation=trunc" +
                                 " --continue=true --auto-file-renaming=false" +
                                 " --dir=\"" + dir + "\"" +
                                 " --console-log-level=error --summary-interval=0",

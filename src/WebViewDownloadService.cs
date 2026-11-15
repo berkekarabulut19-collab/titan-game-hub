@@ -198,10 +198,10 @@ namespace TitanGameHub
 
                         core.Navigate(url);
 
-                        // İndirme başlamadıysa 2.5s, 5s, 8.5s, 13s, 18s aralıklarında sayfadaki indirme linkini/butonunu otomatik tıkla
+                        // İndirme başlamadıysa 0.6s'den başlayarak hızla sayfadaki indirme linkini/butonunu otomatik tıkla
                         ThreadPool.QueueUserWorkItem(delegate
                         {
-                            int[] delays = new int[] { 2500, 2500, 3500, 4500, 5000 };
+                            int[] delays = new int[] { 600, 1000, 1500, 2500, 3500 };
                             foreach (int waitMs in delays)
                             {
                                 Thread.Sleep(waitMs);
