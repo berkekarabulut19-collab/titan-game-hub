@@ -27,7 +27,8 @@ namespace TitanGameHub
             clean = Regex.Replace(clean, @"(digital\s+deluxe|deluxe|ultimate|premium|gold|complete|collector'?s|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary)(\s+edition)?", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"(bundle|collection|pack).*$", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"multi?\d+", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"(elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|dodi|fitgirl|online-?fix|empress|goldberg)", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"(elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|dodi|fitgirl|online-?fix|empress|goldberg|xatab|kaos|razor1911|p2p)", "", RegexOptions.IgnoreCase);
+            clean = Regex.Replace(clean, @"(?:\s*-\s*|\b)gog\b", "", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"\([^\)]*\)", " ", RegexOptions.IgnoreCase);
             clean = Regex.Replace(clean, @"[–—-]\s*v?\d+\.\d+.*$", "", RegexOptions.IgnoreCase);
             // Kuyruk temizliği: ", v142058 (v1.5.3) + v66884 + 6 DLCs/Bonuses" gibi artıklar
