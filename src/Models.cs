@@ -229,31 +229,7 @@ namespace TitanGameHub
 
         public bool UninstallManagedGame(out string message)
         {
-            message = "";
-            try
-            {
-                string gamesRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Games");
-                if (!string.IsNullOrEmpty(WorkingDirectory) && Directory.Exists(WorkingDirectory))
-                {
-                    if (WorkingDirectory.StartsWith(gamesRoot, StringComparison.OrdinalIgnoreCase))
-                    {
-                        Directory.Delete(WorkingDirectory, true);
-                        message = Name + " kurulum klasörü diskten tamamen silindi.";
-                    }
-                    else
-                    {
-                        message = Name + " harici disk bağlantısı kütüphaneden kaldırıldı (Orijinal klasör korundu).";
-                    }
-                }
-                ExecutablePath = "";
-                WorkingDirectory = "";
-                return true;
-            }
-            catch (Exception ex)
-            {
-                message = "Kaldırma hatası: " + ex.Message;
-                return false;
-            }
+            return GameMaintenanceService.Uninstall(this, true, out message);
         }
     }
 

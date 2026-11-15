@@ -42,57 +42,60 @@ namespace TitanGameHub
                 {
                     // Güvenlik: yalnızca bilinen kütüphane kökleri altındaysa sil
                     string target = Path.GetFullPath(workDir).TrimEnd('\\');
-                    bool allowed = false;
-                    foreach (string root in GamePathResolver.GetLibraryRoots(false))
+                    string matchedRoot = null;
+                    List<string> allowedRoots = new List<string>(GamePathResolver.GetLibraryRoots(false));
+                    string effRoot = DownloadInstallService.GetEffectiveGamesRoot();
+                    if (!string.IsNullOrEmpty(effRoot)) allowedRoots.Add(effRoot);
+
+                    foreach (string root in allowedRoots)
                     {
-                        string r = Path.GetFullPath(root).TrimEnd('\\') + "\\";
-                        if ((target + "\\").StartsWith(r, StringComparison.OrdinalIgnoreCase)) { allowed = true; break; }
+                        if (string.IsNullOrEmpty(root)) continue;
+                        string r = Path.GetFullPath(root).TrimEnd('\\');
+                        if ((target + "\\").StartsWith(r + "\\", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(target, r, StringComparison.OrdinalIgnoreCase))
+                        {
+                            if (matchedRoot == null || r.Length > matchedRoot.Length)
+                                matchedRoot = r;
+                        }
                     }
-                    if (!allowed)
+                    if (string.IsNullOrEmpty(matchedRoot))
                     {
                         message = "Güvenlik: bu klasör bir oyun kütüphanesi kökünde değil, silinmedi (" + target + ").";
                         return false;
                     }
 
-                    foreach (string f in Directory.GetFiles(target, "*", SearchOption.AllDirectories))
-                    {
-                        try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
-                    }
+                    // Eğer ExecutablePath/WorkingDirectory alt klasördeyse (ör. D:\Games\Oyun\Binaries\Win64),
+                    // kök altındaki 1. seviye oyun klasörünü (D:\Games\Oyun) bul ki geride tek dosya bile kalmasın!
+                    string deleteTarget = target;
                     try
                     {
-                        Directory.Delete(target, true);
-                    }
-                    catch
-                    {
-                        foreach (string f in Directory.GetFiles(target, "*", SearchOption.AllDirectories))
+                        string rel = target.Substring(matchedRoot.Length).TrimStart('\\');
+                        int slashIdx = rel.IndexOf('\\');
+                        if (slashIdx > 0)
                         {
-                            try { File.Delete(f); } catch { }
-                        }
-                        try { Directory.Delete(target, true); } catch { }
-                    }
-
-                    // Eğer iç içe oyun klasörü (ör. D:\Games\Oyun\Oyun) silindiyse ve üst klasör boş kaldıysa onu da kaldır
-                    try
-                    {
-                        string parent = Path.GetDirectoryName(target);
-                        if (!string.IsNullOrEmpty(parent) && Directory.Exists(parent))
-                        {
-                            bool isRoot = false;
-                            foreach (string root in GamePathResolver.GetLibraryRoots(false))
+                            string topGameFolder = Path.Combine(matchedRoot, rel.Substring(0, slashIdx));
+                            string topName = Path.GetFileName(topGameFolder).ToLowerInvariant();
+                            if (Directory.Exists(topGameFolder) &&
+                                topName != "games" && topName != "common" && topName != "steamapps" &&
+                                topName != "_incoming" && !topName.StartsWith("_staging"))
                             {
-                                string r = Path.GetFullPath(root).TrimEnd('\\');
-                                if (string.Equals(Path.GetFullPath(parent).TrimEnd('\\'), r, StringComparison.OrdinalIgnoreCase)) { isRoot = true; break; }
+                                deleteTarget = topGameFolder;
                             }
-                            if (!isRoot && Directory.GetFileSystemEntries(parent).Length == 0)
-                                Directory.Delete(parent, false);
                         }
                     }
                     catch { }
-                    message = "Oyun dosyaları silindi: " + target;
+
+                    ForceDeleteDirectoryCompletely(deleteTarget);
+                    message = "Oyun ve tüm dosyaları diskten sıfır kalıntıyla silindi: " + deleteTarget;
                 }
                 else
                 {
                     message = "Oyun kurulumu temizlendi (katalogda indirmeye hazır).";
+                }
+
+                if (deleteFiles)
+                {
+                    try { string stMsg; SteamIntegrationService.RemoveGameFromSteamShortcuts(gp, out stMsg); } catch { }
                 }
 
                 CleanupGameArtifacts(gp);
@@ -129,6 +132,41 @@ namespace TitanGameHub
                 message = "Kaldırma hatası: " + ex.Message;
                 return false;
             }
+        }
+
+        private static void ForceDeleteDirectoryCompletely(string dir)
+        {
+            if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) return;
+
+            foreach (string f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
+            }
+            List<string> subDirs = new List<string>();
+            foreach (string d in Directory.EnumerateDirectories(dir, "*", SearchOption.AllDirectories))
+            {
+                subDirs.Add(d);
+                try { File.SetAttributes(d, FileAttributes.Normal); } catch { }
+            }
+            try { File.SetAttributes(dir, FileAttributes.Normal); } catch { }
+
+            try
+            {
+                Directory.Delete(dir, true);
+                return;
+            }
+            catch { }
+
+            foreach (string f in Directory.EnumerateFiles(dir, "*", SearchOption.AllDirectories))
+            {
+                try { File.SetAttributes(f, FileAttributes.Normal); File.Delete(f); } catch { }
+            }
+            subDirs.Sort(delegate(string a, string b) { return b.Length.CompareTo(a.Length); });
+            foreach (string d in subDirs)
+            {
+                try { File.SetAttributes(d, FileAttributes.Normal); Directory.Delete(d, true); } catch { }
+            }
+            try { Directory.Delete(dir, true); } catch { }
         }
 
         /// <summary>Oyunun geçici indirme dosyalarını (<oyun>_pkg*, _parts) siler.</summary>
