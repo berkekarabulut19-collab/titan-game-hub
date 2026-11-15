@@ -313,6 +313,11 @@ namespace TitanGameHub
                 !GameProfile.IsRemoteVersionNewer("v1.2.0", "v1.1.9"), "");
             Check("Uzak sürüm gerçekten yeniyse güncelleme sayılır",
                 GameProfile.IsRemoteVersionNewer("v1.0.5", "v1.0.6"), "");
+
+            Report.AppendLine("\n-- Steam Kısayol (VDF) Round-Trip --");
+            string vdfDetail;
+            Check("Steam shortcuts.vdf yazma/okuma/kaldırma sağlam",
+                SteamIntegrationService.SelfTestShortcutsVdfRoundTrip(out vdfDetail), vdfDetail);
         }
     }
 }

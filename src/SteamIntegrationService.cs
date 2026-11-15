@@ -880,5 +880,42 @@ namespace TitanGameHub
             crc ^= 0xFFFFFFFFu;
             return crc | 0x80000000u;
         }
+
+        public static bool SelfTestShortcutsVdfRoundTrip(out string detail)
+        {
+            detail = "";
+            try
+            {
+                List<VdfEntry> list = new List<VdfEntry>();
+                VdfEntry e1 = new VdfEntry();
+                string exeClean = @"D:\Games\TestGame\TestGame.exe";
+                string exeQuoted = "\"" + exeClean + "\"";
+                string dirQuoted = "\"D:\\Games\\TestGame\"";
+                uint appId = ComputeNonSteamAppId(exeQuoted, "Test Game Co-Op");
+                SetEntryFields(e1, appId, "Test Game Co-Op", exeQuoted, dirQuoted, exeClean, "");
+                list.Add(e1);
+
+                byte[] raw = SerializeShortcutsVdf(list);
+                List<VdfEntry> parsed = ParseShortcutsVdf(raw);
+                if (parsed.Count != 1) { detail = "count=" + parsed.Count; return false; }
+
+                VdfEntry found = FindMatchingEntry(parsed, exeClean, "Test Game Co-Op");
+                if (found == null) { detail = "match null"; return false; }
+                if (!HasTitanTag(found)) { detail = "tag missing"; return false; }
+
+                parsed.Remove(found);
+                byte[] emptyRaw = SerializeShortcutsVdf(parsed);
+                List<VdfEntry> reparsed = ParseShortcutsVdf(emptyRaw);
+                if (reparsed.Count != 0) { detail = "remove failed"; return false; }
+
+                detail = raw.Length + " bayt VDF okundu/yazıldı/silindi";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                detail = ex.Message;
+                return false;
+            }
+        }
     }
 }
