@@ -633,6 +633,7 @@ namespace TitanGameHub
         }
 
         private DateTime _lastGitHubCheckUtc = DateTime.MinValue;
+        private DateTime _lastGitHubBlindProbeUtc = DateTime.MinValue;
 
         private void CheckGitHubMainUpdate(List<GameProfile> catalog)
         {
@@ -677,6 +678,13 @@ namespace TitanGameHub
 
                 if (!string.IsNullOrEmpty(remoteSha) && string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase))
                     return;
+
+                if (string.IsNullOrEmpty(remoteSha))
+                {
+                    if ((DateTime.UtcNow - _lastGitHubBlindProbeUtc).TotalMinutes < 60.0)
+                        return;
+                    _lastGitHubBlindProbeUtc = DateTime.UtcNow;
+                }
 
                 bool catalogSynced = false;
                 try { catalogSynced = SyncCatalogFromGitHubRaw(catalog, remoteSha); } catch { }
@@ -836,15 +844,28 @@ namespace TitanGameHub
                                 changed++;
                             }
                             string remoteVer = (p[5] ?? "").Trim();
-                            if (!string.IsNullOrEmpty(remoteVer) &&
-                                (string.IsNullOrEmpty(existing.Version) ||
-                                 existing.Version.Equals("Full Version", StringComparison.OrdinalIgnoreCase) ||
-                                 existing.Version.Equals("Son Sürüm", StringComparison.OrdinalIgnoreCase) ||
-                                 (remoteVer.IndexOf("DLC", StringComparison.OrdinalIgnoreCase) >= 0 && (existing.Version ?? "").IndexOf("DLC", StringComparison.OrdinalIgnoreCase) < 0)))
+                            string catalogRemoteVer = !string.IsNullOrEmpty(p[6]) ? p[6].Trim() : remoteVer;
+                            bool isInstalledGame = !string.IsNullOrEmpty(existing.ExecutablePath) && File.Exists(existing.ExecutablePath);
+                            if (!string.IsNullOrEmpty(remoteVer))
                             {
-                                existing.Version = remoteVer;
-                                existing.RemoteVersion = !string.IsNullOrEmpty(p[6]) ? p[6].Trim() : remoteVer;
-                                changed++;
+                                if (isInstalledGame)
+                                {
+                                    // Kurulu oyunun yerel sürümünü ezme; sadece uzak sürüm referansını güncelle
+                                    if (!string.Equals(existing.RemoteVersion, catalogRemoteVer, StringComparison.Ordinal))
+                                    {
+                                        existing.RemoteVersion = catalogRemoteVer;
+                                        changed++;
+                                    }
+                                }
+                                else if (string.IsNullOrEmpty(existing.Version) ||
+                                         existing.Version.Equals("Full Version", StringComparison.OrdinalIgnoreCase) ||
+                                         existing.Version.Equals("Son Sürüm", StringComparison.OrdinalIgnoreCase) ||
+                                         (remoteVer.IndexOf("DLC", StringComparison.OrdinalIgnoreCase) >= 0 && (existing.Version ?? "").IndexOf("DLC", StringComparison.OrdinalIgnoreCase) < 0))
+                                {
+                                    existing.Version = remoteVer;
+                                    existing.RemoteVersion = catalogRemoteVer;
+                                    changed++;
+                                }
                             }
                             string remoteMp = (p[11] ?? "").Trim();
                             if (!string.IsNullOrEmpty(remoteMp) &&

@@ -30,10 +30,12 @@ namespace TitanGameHub
         {
             try
             {
-                ServicePointManager.DefaultConnectionLimit = 128;
+                ServicePointManager.DefaultConnectionLimit = 512;
                 ServicePointManager.Expect100Continue = false;
                 ServicePointManager.UseNagleAlgorithm = false;
                 ServicePointManager.MaxServicePointIdleTime = 120000;
+                try { ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | (SecurityProtocolType)12288; }
+                catch { try { ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; } catch { } }
             }
             catch { }
             try
