@@ -1516,13 +1516,15 @@ namespace TitanGameHub
                         expectedTotal = fullSize;
 
                         bool multiDone = false;
+                        string acceptRangesHdr = (resp.Headers["Accept-Ranges"] ?? "").Trim();
                         bool tryMulti = (existingLength == 0 && fullSize >= 8L * 1024 * 1024 &&
                                          SpeedLimitBytesPerSec <= 0 && !AutoThrottleWhenGameRunning &&
-                                         string.Equals(resp.Headers["Accept-Ranges"], "bytes", StringComparison.OrdinalIgnoreCase));
+                                         !string.Equals(acceptRangesHdr, "none", StringComparison.OrdinalIgnoreCase));
                         if (tryMulti)
                         {
                             try { resp.Close(); } catch { }
-                            if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, 8))
+                            int segs = (fullSize >= 50L * 1024 * 1024) ? 12 : 8;
+                            if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
                             {
                                 receivedTotal = fullSize;
                                 multiDone = true;

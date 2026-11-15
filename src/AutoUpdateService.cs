@@ -271,6 +271,7 @@ namespace TitanGameHub
         }
 
         private static volatile bool _pendingAppHotSwap = false;
+        private static string _pendingGitHubSha = null;
         public static bool HasPendingAppHotSwap { get { return _pendingAppHotSwap; } }
 
         public static bool IsAnyGameCurrentlyPlaying(List<GameProfile> catalog)
@@ -308,6 +309,12 @@ namespace TitanGameHub
                 bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
                 bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
                 bat.AppendLine("xcopy /y /e \"" + stageDir + "\\*\" \"" + appDir + "\" >nul 2>&1");
+                if (!string.IsNullOrEmpty(_pendingGitHubSha))
+                {
+                    string shaFile = Path.Combine(appDir, "data", "last_github_sha.txt");
+                    bat.AppendLine("if not exist \"" + Path.GetDirectoryName(shaFile) + "\" mkdir \"" + Path.GetDirectoryName(shaFile) + "\"");
+                    bat.AppendLine("(echo " + _pendingGitHubSha + ")> \"" + shaFile + "\"");
+                }
                 bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
                 bat.AppendLine("start \"\" \"" + currentExe + "\"");
                 bat.AppendLine("del \"%~f0\"");
@@ -643,6 +650,23 @@ namespace TitanGameHub
                 }
                 catch { }
 
+                if (string.IsNullOrEmpty(remoteSha))
+                {
+                    try
+                    {
+                        using (WebClient awc = new WebClient())
+                        {
+                            awc.Proxy = null;
+                            awc.Encoding = Encoding.UTF8;
+                            awc.Headers.Add("User-Agent", "TitanGameHub-AutoUpdate/11.0");
+                            string atom = awc.DownloadString("https://github.com/berkekarabulut19-collab/titan-game-hub/commits/main.atom");
+                            Match am = Regex.Match(atom, @"Grit::Commit/([0-9a-fA-F]{40})");
+                            if (am.Success) remoteSha = am.Groups[1].Value;
+                        }
+                    }
+                    catch { }
+                }
+
                 if (!string.IsNullOrEmpty(remoteSha) && string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase))
                     return;
 
@@ -698,6 +722,7 @@ namespace TitanGameHub
 
                 if (IsAnyGameCurrentlyPlaying(catalog))
                 {
+                    _pendingGitHubSha = remoteSha;
                     _pendingAppHotSwap = true;
                     if (OnOtaStatusChanged != null)
                         OnOtaStatusChanged("🛡️ GitHub güncellemesi hazır! Oyundan çıktığınız anda otomatik uygulanacak.", 1);
