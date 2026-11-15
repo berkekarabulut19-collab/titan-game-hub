@@ -897,6 +897,10 @@ namespace TitanGameHub
 
             // Start rendering after current frame
             Dispatcher.BeginInvoke(DispatcherPriority.Background, renderBatch);
+            if (totalCount > renderCount)
+            {
+                ImageCacheService.PrefetchCovers(_storeFilteredProfiles, renderCount, 24);
+            }
         }
 
         private Border CreateSteamStoreGameCard(GameProfile gp)

@@ -330,5 +330,69 @@ namespace TitanGameHub
                 return null;
             }
         }
+
+        /// <summary>
+        /// Sonraki sayfa/scroll kartlarının kapaklarını arka planda sessizce diske ön-yükler.
+        /// </summary>
+        public static void PrefetchCovers(IList<GameProfile> list, int startIndex, int count)
+        {
+            if (list == null || startIndex < 0 || startIndex >= list.Count || count <= 0) return;
+            int end = Math.Min(list.Count, startIndex + count);
+            List<GameProfile> slice = new List<GameProfile>();
+            for (int i = startIndex; i < end; i++)
+            {
+                if (list[i] != null) slice.Add(list[i]);
+            }
+            if (slice.Count == 0) return;
+
+            ThreadPool.QueueUserWorkItem(delegate
+            {
+                foreach (GameProfile gp in slice)
+                {
+                    try
+                    {
+                        string url = IsUsableImageUrl(gp.BannerUrl) ? gp.BannerUrl.Trim() : (IsUsableImageUrl(gp.CapsuleUrl) ? gp.CapsuleUrl.Trim() : null);
+                        if (string.IsNullOrEmpty(url))
+                        {
+                            string sid = (gp.SteamAppId ?? "").Trim();
+                            if (!string.IsNullOrEmpty(sid) && sid != "480" && Regex.IsMatch(sid, @"^\d{2,8}$"))
+                                url = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/" + sid + "/header.jpg";
+                        }
+                        if (string.IsNullOrEmpty(url)) continue;
+
+                        string safeFile = Regex.Replace(gp.Id ?? gp.SteamAppId ?? "game", @"[^a-zA-Z0-9_-]", "");
+                        if (string.IsNullOrEmpty(safeFile)) safeFile = "game";
+                        string localPath = Path.Combine(CacheDir, safeFile + ".jpg");
+                        if (File.Exists(localPath) && new FileInfo(localPath).Length > 1024) continue;
+
+                        bool entered = false;
+                        try
+                        {
+                            entered = DownloadGate.Wait(5000);
+                            if (!entered) continue;
+                            string tmpPath = localPath + ".pre.tmp";
+                            using (TimeoutWebClient wc = new TimeoutWebClient(5000))
+                            {
+                                wc.Proxy = null;
+                                wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                                wc.DownloadFile(url, tmpPath);
+                                if (IsValidRasterFile(tmpPath))
+                                {
+                                    if (File.Exists(localPath)) File.Delete(localPath);
+                                    File.Move(tmpPath, localPath);
+                                }
+                                else
+                                {
+                                    try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+                                }
+                            }
+                        }
+                        catch { }
+                        finally { if (entered) { try { DownloadGate.Release(); } catch { } } }
+                    }
+                    catch { }
+                }
+            });
+        }
     }
 }

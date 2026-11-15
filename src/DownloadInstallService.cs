@@ -1188,7 +1188,7 @@ namespace TitanGameHub
         }
 
         /// <summary>
-        /// 8-segment parallel HTTP Range downloader (IDM/aria2c style) for maximum throughput.
+        /// Multi-segment parallel HTTP Range downloader (8x-12x Turbo) with .segmap resume support.
         /// Falls back cleanly to single-stream if server rejects 206 Partial Content or any segment fails.
         /// </summary>
         private bool TryParallelSegmentedDownload(
@@ -1196,15 +1196,82 @@ namespace TitanGameHub
             string customReferer, string authCookie, int segmentCount)
         {
             if (fullSize < 8L * 1024 * 1024 || segmentCount < 2) return false;
+            string segMapPath = partialFile + ".segmap";
             try
             {
-                using (FileStream pre = new FileStream(partialFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
-                {
-                    pre.SetLength(fullSize);
-                }
+                long[] segStarts = new long[segmentCount];
+                long[] segEnds = new long[segmentCount];
+                long[] segCur = new long[segmentCount];
+                long totalWritten = 0;
+                bool resumedFromMap = false;
 
                 long chunkSize = fullSize / segmentCount;
-                long totalWritten = 0;
+                for (int i = 0; i < segmentCount; i++)
+                {
+                    segStarts[i] = i * chunkSize;
+                    segEnds[i] = (i == segmentCount - 1) ? (fullSize - 1) : ((i + 1) * chunkSize - 1);
+                    segCur[i] = segStarts[i];
+                }
+
+                if (File.Exists(segMapPath) && File.Exists(partialFile) && new FileInfo(partialFile).Length == fullSize)
+                {
+                    try
+                    {
+                        string[] mapLines = File.ReadAllLines(segMapPath, Encoding.UTF8);
+                        if (mapLines.Length == segmentCount + 1)
+                        {
+                            long mapSize;
+                            if (long.TryParse(mapLines[0].Trim(), out mapSize) && mapSize == fullSize)
+                            {
+                                long loadedBytes = 0;
+                                bool validMap = true;
+                                for (int i = 0; i < segmentCount; i++)
+                                {
+                                    long pos;
+                                    if (!long.TryParse(mapLines[i + 1].Trim(), out pos) || pos < segStarts[i] || pos > segEnds[i] + 1)
+                                    {
+                                        validMap = false;
+                                        break;
+                                    }
+                                    segCur[i] = pos;
+                                    loadedBytes += (pos - segStarts[i]);
+                                }
+                                if (validMap)
+                                {
+                                    totalWritten = loadedBytes;
+                                    resumedFromMap = true;
+                                }
+                            }
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!resumedFromMap)
+                {
+                    using (FileStream pre = new FileStream(partialFile, FileMode.Create, FileAccess.Write, FileShare.ReadWrite))
+                    {
+                        pre.SetLength(fullSize);
+                    }
+                }
+
+                object mapLock = new object();
+                Action saveSegMap = delegate
+                {
+                    try
+                    {
+                        lock (mapLock)
+                        {
+                            StringBuilder sb = new StringBuilder();
+                            sb.AppendLine(fullSize.ToString());
+                            for (int i = 0; i < segmentCount; i++)
+                                sb.AppendLine(Interlocked.Read(ref segCur[i]).ToString());
+                            File.WriteAllText(segMapPath, sb.ToString(), Encoding.UTF8);
+                        }
+                    }
+                    catch { }
+                };
+
                 int failedCount = 0;
                 int activeWorkers = segmentCount;
                 ManualResetEvent allDone = new ManualResetEvent(false);
@@ -1212,12 +1279,17 @@ namespace TitanGameHub
                 for (int i = 0; i < segmentCount; i++)
                 {
                     int segIdx = i;
-                    long segStart = segIdx * chunkSize;
-                    long segEnd = (segIdx == segmentCount - 1) ? (fullSize - 1) : ((segIdx + 1) * chunkSize - 1);
+                    long segEnd = segEnds[segIdx];
 
                     Thread t = new Thread(delegate()
                     {
-                        long curPos = segStart;
+                        long curPos = Interlocked.Read(ref segCur[segIdx]);
+                        if (curPos > segEnd)
+                        {
+                            if (Interlocked.Decrement(ref activeWorkers) == 0) { try { allDone.Set(); } catch { } }
+                            return;
+                        }
+
                         bool segOk = false;
                         for (int attempt = 0; attempt < 3 && !segOk && !_cancelRequested; attempt++)
                         {
@@ -1259,6 +1331,7 @@ namespace TitanGameHub
                                             fs.Write(buf, 0, r);
                                             curPos += r;
                                             remaining -= r;
+                                            Interlocked.Exchange(ref segCur[segIdx], curPos);
                                             Interlocked.Add(ref totalWritten, r);
                                         }
                                         if (remaining == 0) segOk = true;
@@ -1282,16 +1355,26 @@ namespace TitanGameHub
                 }
 
                 Stopwatch sw = Stopwatch.StartNew();
-                long lastBytes = 0;
+                long lastBytes = totalWritten;
                 long lastMs = 0;
+                long lastMapSaveMs = 0;
                 double smoothSpeed = 0.0;
                 double mbTot = fullSize / (1024.0 * 1024.0);
 
                 while (!allDone.WaitOne(150))
                 {
-                    if (_cancelRequested) break;
-                    long cur = Interlocked.Read(ref totalWritten);
+                    if (_cancelRequested)
+                    {
+                        saveSegMap();
+                        break;
+                    }
                     long nowMs = sw.ElapsedMilliseconds;
+                    if (nowMs - lastMapSaveMs >= 1000)
+                    {
+                        lastMapSaveMs = nowMs;
+                        saveSegMap();
+                    }
+                    long cur = Interlocked.Read(ref totalWritten);
                     double secDelta = (nowMs - lastMs) / 1000.0;
                     long bytesDelta = cur - lastBytes;
                     lastMs = nowMs;
@@ -1316,7 +1399,7 @@ namespace TitanGameHub
                     }
 
                     ReportProgress(
-                        string.Format("[2/4] {0} İndiriliyor (8x Turbo): {1:0.0} MB / {2:0.0} MB{3}", profile.Name, mbRec, mbTot, eta),
+                        string.Format("[2/4] {0} İndiriliyor ({1}x Turbo): {2:0.0} MB / {3:0.0} MB{4}", profile.Name, segmentCount, mbRec, mbTot, eta),
                         pct,
                         string.Format("{0:0.0} MB/sn", smoothSpeed));
                 }
@@ -1326,6 +1409,7 @@ namespace TitanGameHub
                 long finalBytes = Interlocked.Read(ref totalWritten);
                 if (!_cancelRequested && failedCount == 0 && finalBytes == fullSize)
                 {
+                    try { if (File.Exists(segMapPath)) File.Delete(segMapPath); } catch { }
                     ReportProgress(
                         string.Format("[2/4] {0} İndirme Tamamlandı: {1:0.0} MB — Arşiv doğrulanıyor...", profile.Name, finalBytes / 1048576.0),
                         85,
@@ -1333,12 +1417,23 @@ namespace TitanGameHub
                     return true;
                 }
 
+                if (_cancelRequested)
+                {
+                    saveSegMap();
+                    return false;
+                }
+
+                try { if (File.Exists(segMapPath)) File.Delete(segMapPath); } catch { }
                 try { if (File.Exists(partialFile)) File.Delete(partialFile); } catch { }
                 return false;
             }
             catch
             {
-                try { if (File.Exists(partialFile)) File.Delete(partialFile); } catch { }
+                if (!_cancelRequested)
+                {
+                    try { if (File.Exists(segMapPath)) File.Delete(segMapPath); } catch { }
+                    try { if (File.Exists(partialFile)) File.Delete(partialFile); } catch { }
+                }
                 return false;
             }
         }
@@ -1424,9 +1519,9 @@ namespace TitanGameHub
                 {
                     if (!Directory.Exists(gamesRoot)) Directory.CreateDirectory(gamesRoot);
 
-                    // HTTP 206 Partial Content Resume Support
+                    // HTTP 206 Partial Content Resume Support (skip AddRange if .segmap multi-segment map exists)
                     long existingLength = 0;
-                    if (File.Exists(partialFile))
+                    if (File.Exists(partialFile) && !File.Exists(partialFile + ".segmap"))
                     {
                         existingLength = new FileInfo(partialFile).Length;
                     }
