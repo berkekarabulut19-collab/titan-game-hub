@@ -2883,43 +2883,42 @@ namespace TitanGameHub
             {
                 if (!Directory.Exists(targetDir)) return;
 
-                // 1. Blacklist rogue or adware file extensions
-                string[] dangerousExts = new string[]
+                // 1. Blacklist rogue or adware file extensions (EnumerateFiles + HashSet -> zero big-array alloc)
+                HashSet<string> dangerousExts = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
                 {
                     ".url", ".lnk", ".vbs", ".vbe", ".wsf", ".wsh", ".scr", ".pif", ".cmd"
                 };
 
-                string[] allFiles = Directory.GetFiles(targetDir, "*.*", SearchOption.AllDirectories);
-                foreach (string f in allFiles)
+                foreach (string f in Directory.EnumerateFiles(targetDir, "*.*", SearchOption.AllDirectories))
                 {
                     try
                     {
-                        string ext = Path.GetExtension(f).ToLowerInvariant();
-                        foreach (string bad in dangerousExts)
+                        string ext = Path.GetExtension(f);
+                        if (!string.IsNullOrEmpty(ext) && dangerousExts.Contains(ext))
                         {
-                            if (ext == bad)
-                            {
-                                File.Delete(f);
-                                break;
-                            }
+                            File.Delete(f);
+                            continue;
                         }
 
                         // Inspect rogue .bat scripts
-                        if (ext == ".bat")
+                        if (string.Equals(ext, ".bat", StringComparison.OrdinalIgnoreCase))
                         {
                             string txt = File.ReadAllText(f).ToLowerInvariant();
                             if (txt.Contains("http://") || txt.Contains("https://") ||
                                 txt.Contains("powershell") || txt.Contains("bitsadmin") || txt.Contains("curl"))
                             {
                                 File.Delete(f);
+                                continue;
                             }
                         }
 
                         // Remove adware text files
-                        string fname = (Path.GetFileName(f) ?? "").ToLowerInvariant();
-                        if (fname.Contains("visit") || fname.Contains("website") || fname.Contains("telegram") || fname.Contains("discord_link"))
+                        if (string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase) ||
+                            string.Equals(ext, ".html", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (ext == ".txt" || ext == ".html") File.Delete(f);
+                            string fname = (Path.GetFileName(f) ?? "").ToLowerInvariant();
+                            if (fname.Contains("visit") || fname.Contains("website") || fname.Contains("telegram") || fname.Contains("discord_link"))
+                                File.Delete(f);
                         }
                     }
                     catch { }

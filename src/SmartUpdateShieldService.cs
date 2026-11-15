@@ -927,7 +927,18 @@ namespace TitanGameHub
                             continue;
                         }
 
-                        File.Copy(sf, dest, true);
+                        bool moved = false;
+                        try
+                        {
+                            if (string.Equals(Path.GetPathRoot(Path.GetFullPath(sf)), Path.GetPathRoot(Path.GetFullPath(dest)), StringComparison.OrdinalIgnoreCase))
+                            {
+                                if (File.Exists(dest)) File.Delete(dest);
+                                File.Move(sf, dest);
+                                moved = true;
+                            }
+                        }
+                        catch { moved = false; }
+                        if (!moved) File.Copy(sf, dest, true);
                         updatedFiles++;
                         bytesWritten += srcInfo.Length;
                     }
