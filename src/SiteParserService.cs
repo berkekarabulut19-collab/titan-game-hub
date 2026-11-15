@@ -767,6 +767,14 @@ namespace TitanGameHub
                 {
                     targetPostUrl = FindSteamRipPostUrl(gp.Name);
                 }
+                else if (result.Mirrors.Count == 0 &&
+                         targetPostUrl.IndexOf("steamrip.com", StringComparison.OrdinalIgnoreCase) < 0 &&
+                         !string.IsNullOrWhiteSpace(gp.Name))
+                {
+                    // OvaGames / CroTorrents vb. kaynaklarda doğrudan ayna yoksa SteamRIP karşılığını da ara
+                    string srAlt = FindSteamRipPostUrl(gp.Name);
+                    if (!string.IsNullOrEmpty(srAlt)) targetPostUrl = srAlt;
+                }
                 bool isSupportedMirrorHost = !string.IsNullOrWhiteSpace(targetPostUrl) &&
                     (targetPostUrl.IndexOf("steamrip.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
                      (result.Mirrors.Count == 0 && (
@@ -1068,8 +1076,8 @@ namespace TitanGameHub
                 catch { }
             }
 
-            // 5C. Extract raw GoFile / PixelDrain / Fileditch / Buzzheavier URLs that might appear without an <a> tag
-            MatchCollection rawLinks = Regex.Matches(html, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]+\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/)[^\s\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            // 5C. Extract raw GoFile / PixelDrain / Fileditch / Buzzheavier / VikingFile / DataNodes / FuckingFast URLs
+            MatchCollection rawLinks = Regex.Matches(html, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]+\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/|vik(?:1|i)ngfile\.com/f/|datanodes\.to/|fuckingfast\.co/|megadb\.net/|qiwi\.gg/|1fichier\.com/|drop\.download/)[^\s\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             foreach (Match rm in rawLinks)
             {
                 string url = rm.Groups[1].Value.Trim().Replace("\\/", "/");
@@ -1135,13 +1143,30 @@ namespace TitanGameHub
                 TryAddSupportedMirror(url, seenUrls, result.Mirrors);
             }
 
-            // 3. Raw GoFile / PixelDrain / Fileditch URLs in markdown body
-            MatchCollection rawMatches = Regex.Matches(markdown, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]+\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/)[^\s\)\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            // 3. Raw GoFile / PixelDrain / Fileditch / Buzzheavier / VikingFile / DataNodes / FuckingFast URLs in markdown body
+            MatchCollection rawMatches = Regex.Matches(markdown, @"((?:https?:)?//(?:www\.)?(?:gofile\.io/d/|pixeldrain\.com/(?:u|l)/|(?:[a-zA-Z0-9-]+\.)?fileditchfiles\.[a-z]+/|buzzheavier\.com/|bzzhr\.(?:co|to)/|vik(?:1|i)ngfile\.com/f/|datanodes\.to/|fuckingfast\.co/|megadb\.net/|qiwi\.gg/|1fichier\.com/|drop\.download/)[^\s\)\""'<>]+)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             foreach (Match rm in rawMatches)
             {
                 string url = rm.Groups[1].Value.Trim();
                 if (url.StartsWith("//")) url = "https:" + url;
                 TryAddSupportedMirror(url, seenUrls, result.Mirrors);
+            }
+
+            // 4. Extract direct magnet:?xt=urn:btih:... links in markdown body
+            MatchCollection magMd = Regex.Matches(markdown, @"magnet:\?xt=urn:btih:[^""'\s<>)\]]+", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            foreach (Match mm in magMd)
+            {
+                string magUrl = WebUtility.HtmlDecode(mm.Value.Trim());
+                if (seenUrls.Add(magUrl))
+                {
+                    result.Mirrors.Add(new SiteMirror
+                    {
+                        HostName = "Torrent Magnet (aria2)",
+                        Url = magUrl,
+                        IsDirectArchive = true,
+                        Priority = 3
+                    });
+                }
             }
 
             result.Mirrors.Sort(delegate(SiteMirror a, SiteMirror b) { return a.Priority.CompareTo(b.Priority); });
@@ -1396,11 +1421,11 @@ namespace TitanGameHub
                 return true;
             }
             // Priority 2: VikingFile Direct High Speed Stream
-            if (u.Contains("vikingfile.com"))
+            if (u.Contains("vikingfile.com") || u.Contains("vik1ngfile.com"))
             {
                 hostName = "VikingFile (Yüksek Hız)";
                 isDirectArchive = true;
-                priority = 2;
+                priority = 4;
                 return true;
             }
             // Priority 2: Fileditch Direct Archive Stream
@@ -1451,9 +1476,16 @@ namespace TitanGameHub
                 priority = 7;
                 return true;
             }
-            // Blocked / Interactive Captcha Hosts: Ignore completely so they never cause in-app download failures!
-            if (u.Contains("akirabox.to") || u.Contains("akirabox.com") ||
-                u.Contains("datanodes.to") || u.Contains("megadb.net") || u.Contains("filekeeper.net"))
+            // DataNodes / MegaDB: WebView2 arka plan oturumuyla yedek indirme
+            if (u.Contains("datanodes.to") || u.Contains("megadb.net"))
+            {
+                hostName = u.Contains("datanodes.to") ? "DataNodes (Uygulama İçi)" : "MegaDB (Uygulama İçi)";
+                isDirectArchive = true;
+                priority = 6;
+                return true;
+            }
+            // Blocked / Interactive Captcha Hosts
+            if (u.Contains("akirabox.to") || u.Contains("akirabox.com") || u.Contains("filekeeper.net"))
             {
                 return false;
             }

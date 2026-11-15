@@ -75,8 +75,9 @@ namespace TitanGameHub
 
             if (u.Contains("pixeldrain.com")) return 100;
             if (u.Contains("gofile.io")) return 60;                  // API ile çözülebilir
-            if (u.Contains("vikingfile") || u.Contains("vik1ngfile")) return 30;
-            if (u.Contains("megadb.net") || u.Contains("datanodes.to")) return 25;
+            if (u.StartsWith("magnet:") || u.EndsWith(".torrent")) return 35; // Tam paket (part hatası yok)
+            if (u.Contains("vikingfile") || u.Contains("vik1ngfile")) return 20;
+            if (u.Contains("megadb.net") || u.Contains("datanodes.to")) return 15;
             if (u.Contains("1fichier.com")) return 20;
             if (NeedsBrowserSession(u)) return 10;                    // sadece tarayıcıdan iner
             if (u.EndsWith(".rar") || u.Contains(".rar?") || u.Contains(".zip") || u.Contains(".7z")) return 40;
@@ -95,6 +96,10 @@ namespace TitanGameHub
                 || u.Contains("qiwi.gg")
                 || u.Contains("drop.download")
                 || u.Contains("spyderrock")
+                || u.Contains("vikingfile")
+                || u.Contains("vik1ngfile")
+                || u.Contains("datanodes.to")
+                || u.Contains("megadb.net")
                 || u.Contains("akirabox");
         }
     }

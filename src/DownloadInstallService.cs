@@ -942,9 +942,7 @@ namespace TitanGameHub
                     bool storedLooksLikePage = IsLikelyPageUrl(profile.DirectMirrorUrl);
 
                     if (!string.IsNullOrEmpty(profile.DirectMirrorUrl) && !storedLooksLikePage &&
-                        !profile.DirectMirrorUrl.Contains("vikingfile.com") &&
-                        !profile.DirectMirrorUrl.Contains("akirabox.to") &&
-                        !profile.DirectMirrorUrl.Contains("datanodes.to"))
+                        !profile.DirectMirrorUrl.Contains("akirabox.to"))
                     {
                         bool acceptStored;
                         string storedVerdict = MirrorTrustPolicy.DescribeVerdict(profile.DirectMirrorUrl, profile, out acceptStored);
@@ -1778,6 +1776,8 @@ namespace TitanGameHub
                         {
                             try { resp.Close(); } catch { }
                             int segs = (fullSize >= 2000L * 1024 * 1024) ? 24 : ((fullSize >= 500L * 1024 * 1024) ? 16 : ((fullSize >= 50L * 1024 * 1024) ? 12 : 8));
+                            if (directUrl.IndexOf("gofile.io", StringComparison.OrdinalIgnoreCase) >= 0)
+                                segs = Math.Min(segs, 6); // GoFile ücretsiz API 24 eşzamanlı bağlantıda 429/reset verebilir -> 6 güvenli paralel stream
                             if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
                             {
                                 receivedTotal = fullSize;
