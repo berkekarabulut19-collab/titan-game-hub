@@ -8,6 +8,24 @@ namespace TitanGameHub
 {
     public static class GameDeduplicationEngine
     {
+        private static readonly Dictionary<string, string> NormCache = new Dictionary<string, string>(StringComparer.Ordinal);
+        private static readonly Regex RxFreeTorrent = new Regex(@"\s*(?:free|torrent)\s+download.*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxBrackets = new Regex(@"\[[^\]]*\]", RegexOptions.Compiled);
+        private static readonly Regex RxAmpBundle = new Regex(@"\s*&\s*(?:all\s+dlcs?|soundtrack|bonus(?:\s+ost)?)\s*(?:bundle)?.*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxPlusDlc = new Regex(@"\s*\+\s*\d*\s*dlcs?.*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxPlusAllDlc = new Regex(@"\s*\+\s*all\s+dlcs?.*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxPlusMp = new Regex(@"\s*\+\s*(?:multiplayer|online|co-?op|lan|bonuses?|soundtrack|ost).*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxDashVer = new Regex(@"\s*[–—-]\s*(?:v\d|build\s+\d|cl#\d|hotfix).*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxParenTags = new Regex(@"\s*\((?:v\d|build\s+\d|repack|fitgirl|dodi|gog|steamrip|early\s+access|multi\d*)[^\)]*\)", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxEditions = new Regex(@"[:\s,-]*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary|infernal|gold|premium|special|remastered|legacy|royal|master|standard)\s+edition\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxDirectorsCut = new Regex(@"[:\s,-]+director'?s\s+cut\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxDashEdition = new Regex(@"[:\s]*[–—-]\s*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|definitive|goty|infernal|remastered)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxSceneGroups = new Regex(@"\b(?:repack|fitgirl|dodi|online-?fix|steamrip|elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|empress|goldberg|xatab|kaos|razor1911|p2p|gog|multi\d+|all\s+dlcs?|early\s+access)\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxVerToken = new Regex(@"\bv\d+(?:\.\d+)*[a-z]?\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxBuildToken = new Regex(@"\b(?:build|update|hotfix)\s*\d+\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxClToken = new Regex(@"\bcl#\d+\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+        private static readonly Regex RxNonAlnum = new Regex(@"[^a-z0-9]", RegexOptions.Compiled);
+
         private static string FoldAscii(string input)
         {
             if (string.IsNullOrEmpty(input)) return "";
@@ -26,27 +44,39 @@ namespace TitanGameHub
         public static string NormalizeGameTitle(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return "";
+            lock (NormCache)
+            {
+                string cached;
+                if (NormCache.TryGetValue(raw, out cached))
+                    return cached;
+            }
+
             string clean = FoldAscii(raw.Trim()).ToLowerInvariant()
                 .Replace('\u2019', '\'').Replace('\u2018', '\'').Replace('\u201C', '"').Replace('\u201D', '"');
 
-            // Strip download, repack, bracketed tags, and edition/DLC/version suffixes
-            clean = Regex.Replace(clean, @"\s*(?:free|torrent)\s+download.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\[[^\]]*\]", " ");
-            clean = Regex.Replace(clean, @"\s*&\s*(?:all\s+dlcs?|soundtrack|bonus(?:\s+ost)?)\s*(?:bundle)?.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\+\s*\d*\s*dlcs?.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\+\s*all\s+dlcs?.*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\+\s*(?:multiplayer|online|co-?op|lan|bonuses?|soundtrack|ost).*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*[–—-]\s*(?:v\d|build\s+\d|cl#\d|hotfix).*$", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\s*\((?:v\d|build\s+\d|repack|fitgirl|dodi|gog|steamrip|early\s+access|multi\d*)[^\)]*\)", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"[:\s,-]*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|enhanced|definitive|goty|game\s+of\s+the\s+year|anniversary|infernal|gold|premium|special|remastered|legacy|royal|master|standard)\s+edition\b", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"[:\s,-]+director'?s\s+cut\b", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"[:\s]*[–—-]\s*(?:digital\s+deluxe|deluxe|ultimate|complete|supporter'?s?|collector'?s?|definitive|goty|infernal|remastered)\b", "", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\b(?:repack|fitgirl|dodi|online-?fix|steamrip|elamigos|tenoke|flt|rune|codex|plaza|skidrow|reloaded|empress|goldberg|xatab|kaos|razor1911|p2p|gog|multi\d+|all\s+dlcs?|early\s+access)\b", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\bv\d+(?:\.\d+)*[a-z]?\b", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\b(?:build|update|hotfix)\s*\d+\b", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"\bcl#\d+\b", " ", RegexOptions.IgnoreCase);
-            clean = Regex.Replace(clean, @"[^a-z0-9]", "");
-            return clean.Trim();
+            clean = RxFreeTorrent.Replace(clean, "");
+            clean = RxBrackets.Replace(clean, " ");
+            clean = RxAmpBundle.Replace(clean, "");
+            clean = RxPlusDlc.Replace(clean, "");
+            clean = RxPlusAllDlc.Replace(clean, "");
+            clean = RxPlusMp.Replace(clean, "");
+            clean = RxDashVer.Replace(clean, "");
+            clean = RxParenTags.Replace(clean, " ");
+            clean = RxEditions.Replace(clean, "");
+            clean = RxDirectorsCut.Replace(clean, "");
+            clean = RxDashEdition.Replace(clean, "");
+            clean = RxSceneGroups.Replace(clean, " ");
+            clean = RxVerToken.Replace(clean, " ");
+            clean = RxBuildToken.Replace(clean, " ");
+            clean = RxClToken.Replace(clean, " ");
+            clean = RxNonAlnum.Replace(clean, "").Trim();
+
+            lock (NormCache)
+            {
+                if (NormCache.Count > 40000) NormCache.Clear();
+                NormCache[raw] = clean;
+            }
+            return clean;
         }
 
         private static void MergeEditionAndDlcMetadata(GameProfile target, GameProfile source)

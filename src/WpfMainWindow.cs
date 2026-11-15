@@ -185,7 +185,6 @@ namespace TitanGameHub
             StartupTimer.Mark("LoadProfiles başladı");
             _allProfiles = ProfileStore.LoadProfiles();
             StartupTimer.Mark("LoadProfiles bitti (" + _allProfiles.Count + " oyun)");
-            _allProfiles = GameDeduplicationEngine.Deduplicate(_allProfiles);
             _libraryFilteredProfiles = new List<GameProfile>(_allProfiles);
             _storeFilteredProfiles = new List<GameProfile>(_allProfiles);
 
@@ -1015,7 +1014,17 @@ namespace TitanGameHub
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Height = 24
             };
-            _txtLibSearch.TextChanged += delegate { ApplyLibraryFilter(); };
+            DispatcherTimer libSearchDebounce = new DispatcherTimer() { Interval = TimeSpan.FromMilliseconds(160) };
+            libSearchDebounce.Tick += delegate
+            {
+                libSearchDebounce.Stop();
+                ApplyLibraryFilter();
+            };
+            _txtLibSearch.TextChanged += delegate
+            {
+                libSearchDebounce.Stop();
+                libSearchDebounce.Start();
+            };
             Grid.SetColumn(_txtLibSearch, 1);
             sBoxGrid.Children.Add(_txtLibSearch);
 
@@ -1168,8 +1177,6 @@ namespace TitanGameHub
                 }
                 _libraryFilteredProfiles.Add(gp);
             }
-
-            _libraryFilteredProfiles = GameDeduplicationEngine.Deduplicate(_libraryFilteredProfiles);
 
             if (_libSortMode == "SIZE")
             {

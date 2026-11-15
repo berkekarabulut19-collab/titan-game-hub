@@ -499,7 +499,6 @@ namespace TitanGameHub
                     }
                 }
                 int countBefore = list.Count;
-                list.RemoveAll(delegate(GameProfile p) { return p != null && IsGameRemoved(p.Id, p.Name, removedKeys); });
                 list = GameDeduplicationEngine.Deduplicate(list);
                 if (addedNew || list.Count != countBefore) { SaveProfiles(list); dedupChanged = true; }
             }
