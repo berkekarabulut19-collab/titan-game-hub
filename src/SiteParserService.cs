@@ -713,13 +713,35 @@ namespace TitanGameHub
             {
                 ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
 
-                // Source 1: Try SteamRIP WP-JSON if accessible
+                // Source 1: Query the game's own WP-JSON host first (FitGirl, FreeGOG, OvaGames, CroTorrents, SteamRIP)
+                string wpHost = "https://steamrip.com";
+                if (!string.IsNullOrWhiteSpace(gp.DownloadUrl) && gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        Uri du = new Uri(gp.DownloadUrl);
+                        string h = du.Host.ToLowerInvariant();
+                        if (h.Contains("fitgirl-repacks.site") || h.Contains("freegogpcgames.com") ||
+                            h.Contains("ovagames.com") || h.Contains("crotorrents.com") || h.Contains("steamrip.com"))
+                        {
+                            wpHost = du.Scheme + "://" + du.Host;
+                        }
+                    }
+                    catch { }
+                }
+
                 string slug = ExtractSlugFromUrl(gp.DownloadUrl);
                 string wpJsonUrl = !string.IsNullOrEmpty(slug)
-                    ? ("https://steamrip.com/wp-json/wp/v2/posts?slug=" + Uri.EscapeDataString(slug) + "&_fields=id,slug,link,title,content,yoast_head_json")
-                    : ("https://steamrip.com/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(gp.Name) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json");
+                    ? (wpHost + "/wp-json/wp/v2/posts?slug=" + Uri.EscapeDataString(slug) + "&_fields=id,slug,link,title,content,yoast_head_json")
+                    : (wpHost + "/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(gp.Name) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json");
 
                 string json = DownloadStringWithHeaders(wpJsonUrl);
+                if ((string.IsNullOrWhiteSpace(json) || !json.TrimStart().StartsWith("[") || json.Trim() == "[]") &&
+                    !wpHost.Equals("https://steamrip.com", StringComparison.OrdinalIgnoreCase))
+                {
+                    wpJsonUrl = "https://steamrip.com/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(gp.Name) + "&per_page=5&_fields=id,slug,link,title,content,yoast_head_json";
+                    json = DownloadStringWithHeaders(wpJsonUrl);
+                }
                 if (!string.IsNullOrWhiteSpace(json) && json.TrimStart().StartsWith("["))
                 {
                     JavaScriptSerializer ser = new JavaScriptSerializer();
