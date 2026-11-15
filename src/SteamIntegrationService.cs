@@ -128,9 +128,9 @@ namespace TitanGameHub
                     coopNote = " | Online-Fix & Spacewar 480 hazır";
                 }
                 string steamNote = steamOpen
-                    ? " (Steam'i yeniden başlatınca anında görünür)"
+                    ? " (Steam kapatılmadan eklendi — Online-Fix doğrudan aktif; kütüphane kartı Steam yeniden açılınca görünür)"
                     : " (Steam'i açınca kütüphanede görünür)";
-                message = string.Format("✔ '{0}' Steam'e eklendi ({1} hesap{2}).{3}",
+                message = string.Format("✔ '{0}' Steam'e yollandı ({1} hesap{2}).{3}",
                     gp.Name, accounts, coopNote, steamNote);
             }
             return ok;
@@ -750,12 +750,19 @@ namespace TitanGameHub
                     string val = ReadNullTerminatedString(data, ref pos);
                     fields.Add(new VdfField { Type = 0x01, Key = key, Value = val });
                 }
-                else if (t == 0x02)
+                else if (t == 0x02 || t == 0x03 || t == 0x04)
                 {
                     if (pos + 4 > data.Length) break;
                     uint val = BitConverter.ToUInt32(data, pos);
                     pos += 4;
-                    fields.Add(new VdfField { Type = 0x02, Key = key, Value = val });
+                    fields.Add(new VdfField { Type = t, Key = key, Value = val });
+                }
+                else if (t == 0x07 || t == 0x0A)
+                {
+                    if (pos + 8 > data.Length) break;
+                    ulong val64 = BitConverter.ToUInt64(data, pos);
+                    pos += 8;
+                    fields.Add(new VdfField { Type = t, Key = key, Value = val64 });
                 }
                 else
                 {
@@ -810,11 +817,17 @@ namespace TitanGameHub
                 {
                     WriteNullTerminatedString(ms, f.Value as string ?? "");
                 }
-                else if (f.Type == 0x02)
+                else if (f.Type == 0x02 || f.Type == 0x03 || f.Type == 0x04)
                 {
                     uint v = (f.Value is uint) ? (uint)f.Value : 0u;
                     byte[] b = BitConverter.GetBytes(v);
                     ms.Write(b, 0, 4);
+                }
+                else if (f.Type == 0x07 || f.Type == 0x0A)
+                {
+                    ulong v64 = (f.Value is ulong) ? (ulong)f.Value : 0ul;
+                    byte[] b = BitConverter.GetBytes(v64);
+                    ms.Write(b, 0, 8);
                 }
             }
             ms.WriteByte(0x08);

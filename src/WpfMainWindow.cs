@@ -1933,6 +1933,12 @@ namespace TitanGameHub
                 RefreshSteamShortcutButton(_selectedProfile);
                 Win32.PlayTechChirp(ok);
             };
+            MenuItem miLiveAddSteam = new MenuItem() { Header = "⚡ Steam Kapanmadan Anında Ekle Penceresini Aç" };
+            miLiveAddSteam.Click += delegate
+            {
+                try { Process.Start(new ProcessStartInfo { FileName = "steam://AddNonSteamGame", UseShellExecute = true }); } catch { }
+                _txtBottomStatus.Text = "⚡ Steam kapatılmadan anında ekleme penceresi açıldı (Listedeki .exe'yi seçmeniz yeterli).";
+            };
             MenuItem miRestartSteam = new MenuItem() { Header = "🔄 Steam'i Yeniden Başlat (Değişiklikleri Hemen Gör)" };
             miRestartSteam.Click += delegate
             {
@@ -1944,6 +1950,7 @@ namespace TitanGameHub
             steamMenu.Items.Add(miAddAllOnline);
             steamMenu.Items.Add(miRemoveAllTitan);
             steamMenu.Items.Add(new Separator());
+            steamMenu.Items.Add(miLiveAddSteam);
             steamMenu.Items.Add(miRestartSteam);
             _btnAddToSteam.ContextMenu = steamMenu;
             primaryQuickStack.Children.Add(_btnAddToSteam);

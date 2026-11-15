@@ -210,6 +210,19 @@ namespace TitanGameHub
             {
                 // DeployFullEmulationSuite sonrası köprü AppID'sini kesinleştir
                 File.WriteAllText(Path.Combine(WorkingDirectory, "steam_appid.txt"), bridgeAppId, Encoding.ASCII);
+                if (!string.IsNullOrEmpty(ExecutablePath))
+                {
+                    string exeDir = Path.GetDirectoryName(ExecutablePath);
+                    if (!string.IsNullOrEmpty(exeDir) && Directory.Exists(exeDir) &&
+                        !string.Equals(exeDir.TrimEnd('\\'), WorkingDirectory.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                    {
+                        File.WriteAllText(Path.Combine(exeDir, "steam_appid.txt"), bridgeAppId, Encoding.ASCII);
+                        string rootIni = Path.Combine(WorkingDirectory, "OnlineFix.ini");
+                        string exeIni = Path.Combine(exeDir, "OnlineFix.ini");
+                        if (File.Exists(rootIni) && !File.Exists(exeIni))
+                            File.Copy(rootIni, exeIni, true);
+                    }
+                }
             }
             catch { }
         }
