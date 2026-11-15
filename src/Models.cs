@@ -83,19 +83,64 @@ namespace TitanGameHub
         {
             get
             {
-                // Kurulu olmayan oyun için "güncelleme" kavramı yoktur: sadece indirilir.
-                if (!IsInstalled) return false;
+                // Kurulu olmayan veya Steam yönetimindeki oyunlar için güncelleme rozeti çıkarılmaz.
+                if (!IsInstalled || IsSteamManaged) return false;
+                if (string.Equals(Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase)) return false;
 
-                string local = NormalizeVersionToken(Version);
-                string remote = NormalizeVersionToken(RemoteVersion);
-                if (string.IsNullOrEmpty(local) || string.IsNullOrEmpty(remote)) return false;
-
-                // Aynı sürümde (biçim/farklı yazım farkı olsa bile) güncelleme önermeyelim.
-                if (string.Equals(local, remote, StringComparison.OrdinalIgnoreCase)) return false;
-                if (string.Equals(NormalizeVersionLoose(local), NormalizeVersionLoose(remote), StringComparison.OrdinalIgnoreCase)) return false;
+                if (!IsRemoteVersionNewer(Version, RemoteVersion)) return false;
+                if (UpdateLedger.IsUpToDate(this, RemoteVersion)) return false;
 
                 return true;
             }
+        }
+
+        public static bool IsRemoteVersionNewer(string localRaw, string remoteRaw)
+        {
+            string local = NormalizeVersionToken(localRaw);
+            string remote = NormalizeVersionToken(remoteRaw);
+            if (string.IsNullOrEmpty(local) || string.IsNullOrEmpty(remote)) return false;
+
+            if (string.Equals(local, remote, StringComparison.OrdinalIgnoreCase)) return false;
+            if (string.Equals(NormalizeVersionLoose(local), NormalizeVersionLoose(remote), StringComparison.OrdinalIgnoreCase)) return false;
+
+            int[] lNums = ExtractVersionNumbers(local);
+            int[] rNums = ExtractVersionNumbers(remote);
+
+            // Biri tekil büyük Build numarası (>=100000), diğeri noktalı sürüm (1.2.3) ise format uyumsuzluğu vardır -> yanlış uyarı verme
+            if (lNums.Length > 0 && rNums.Length > 0)
+            {
+                bool lIsSingleBuild = lNums.Length == 1 && lNums[0] >= 10000;
+                bool rIsSingleBuild = rNums.Length == 1 && rNums[0] >= 10000;
+                if (lIsSingleBuild != rIsSingleBuild) return false;
+
+                int maxLen = Math.Max(lNums.Length, rNums.Length);
+                for (int i = 0; i < maxLen; i++)
+                {
+                    int lv = i < lNums.Length ? lNums[i] : 0;
+                    int rv = i < rNums.Length ? rNums[i] : 0;
+                    if (rv > lv) return true;
+                    if (rv < lv) return false;
+                }
+                return false;
+            }
+
+            // Sayısal sürüm yoksa (jenerik metinler) güncelleme sayma
+            return false;
+        }
+
+        private static int[] ExtractVersionNumbers(string cleanVersion)
+        {
+            if (string.IsNullOrEmpty(cleanVersion)) return new int[0];
+            MatchCollection mc = Regex.Matches(cleanVersion, @"\d+");
+            if (mc.Count == 0) return new int[0];
+            List<int> nums = new List<int>();
+            for (int i = 0; i < mc.Count && i < 6; i++)
+            {
+                int val;
+                if (int.TryParse(mc[i].Value, out val))
+                    nums.Add(val);
+            }
+            return nums.ToArray();
         }
 
         public static string NormalizeVersionToken(string version)
@@ -108,11 +153,18 @@ namespace TitanGameHub
             if (lower == "bilinmiyor" || lower == "unknown" || lower == "n/a" || lower == "na" ||
                 lower == "-" || lower == "—" || lower == "yok" || lower == "none" || lower == "null" ||
                 lower == "tba" || lower == "?" || lower == "sürüm bilinmiyor" || lower == "surum bilinmiyor" ||
-                lower == "belirsiz" || lower == "n/a." || lower == "bilinmiyor.")
+                lower == "belirsiz" || lower == "n/a." || lower == "bilinmiyor." ||
+                lower == "kurulu" || lower == "resmi" || lower == "son sürüm" || lower == "son surum" ||
+                lower == "latest" || lower == "full version" || lower == "full paket" ||
+                lower == "resmi • gameloop" || lower == "gameloop (kurulu)")
                 return "";
 
-            v = System.Text.RegularExpressions.Regex.Replace(v, @"\s+", " ").Trim();
-            v = System.Text.RegularExpressions.Regex.Replace(v, @"^(v|ver\.?|version|build|sürüm|surum)\s*[:\-]?\s*", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            // DLC, Full Paket, Early Access, Online-Fix gibi etiketleri soy -> sadece gerçek sürüm kalsın
+            v = Regex.Replace(v, @"[•\|/]\s*\+?\d+\s*DLC.*$", "", RegexOptions.IgnoreCase);
+            v = Regex.Replace(v, @"\s*[•\-–\|]\s*(Full\s*(Paket|Version|Sürüm|Surum)|Early\s*Access|Repack|Portable|Online[\s-]*Fix|Güncel|Guncel|Kurulu|Resmi).*$", "", RegexOptions.IgnoreCase);
+            v = Regex.Replace(v, @"\s*\((Full\s*(Paket|Version|Sürüm)|Early\s*Access|Kurulu|Resmi|DLC|Online[\s-]*Fix)\)\s*", " ", RegexOptions.IgnoreCase);
+            v = Regex.Replace(v, @"\s+", " ").Trim();
+            v = Regex.Replace(v, @"^(v|ver\.?|version|build|sürüm|surum)\s*[:\-]?\s*", "", RegexOptions.IgnoreCase);
             return v.Trim();
         }
 

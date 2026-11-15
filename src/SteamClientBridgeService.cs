@@ -321,7 +321,8 @@ namespace TitanGameHub
                 List<GameProfile> installedTargets = new List<GameProfile>();
                 foreach (GameProfile local in profiles)
                 {
-                    if (local != null && local.IsInstalled && !local.IsSteamManaged)
+                    if (local != null && local.IsInstalled && !local.IsSteamManaged &&
+                        !string.Equals(local.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase))
                         installedTargets.Add(local);
                 }
 
@@ -349,7 +350,7 @@ namespace TitanGameHub
                                 if (liveMap.TryGetValue(key, out remote))
                                 {
                                     if (!string.IsNullOrEmpty(remote.Version) &&
-                                        !string.Equals(remote.Version.Trim(), (local.Version ?? "").Trim(), StringComparison.OrdinalIgnoreCase))
+                                        GameProfile.IsRemoteVersionNewer(local.Version, remote.Version))
                                     {
                                         local.RemoteVersion = remote.Version.Trim();
                                         if (!string.IsNullOrEmpty(remote.DirectMirrorUrl))
@@ -357,6 +358,10 @@ namespace TitanGameHub
                                         if (!string.IsNullOrEmpty(remote.FileSize) && remote.FileSize != "Bulut")
                                             local.FileSize = remote.FileSize;
                                         lock (listLock) { if (!results.Contains(local)) results.Add(local); }
+                                    }
+                                    else if (!string.IsNullOrEmpty(remote.Version))
+                                    {
+                                        local.RemoteVersion = local.Version;
                                     }
                                 }
                                 else
@@ -441,10 +446,10 @@ namespace TitanGameHub
                 return false;
             }
 
-            // Steam yönetimindeki oyun: güncelleme Steam'in işi.
-            if (gp.IsSteamManaged)
+            // Steam yönetimindeki veya GameLoop oyunu: harici sürüm taraması yapılmaz.
+            if (gp.IsSteamManaged || string.Equals(gp.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase))
             {
-                reportMessage = "Steam kütüphanesinde: güncelleme Steam üzerinden yapılır.";
+                reportMessage = "Güncel (harici istemci yönetimi).";
                 return false;
             }
 
@@ -468,13 +473,14 @@ namespace TitanGameHub
                         bool isGenericPlaceholder = string.Equals(cleanRemote, "Son Sürüm", StringComparison.OrdinalIgnoreCase) ||
                                                     string.Equals(cleanRemote, "Full Version", StringComparison.OrdinalIgnoreCase) ||
                                                     string.Equals(cleanRemote, "Latest", StringComparison.OrdinalIgnoreCase);
-                        if (!isGenericPlaceholder && !string.Equals(cleanRemote, gp.Version, StringComparison.OrdinalIgnoreCase))
+                        if (!isGenericPlaceholder && GameProfile.IsRemoteVersionNewer(gp.Version, cleanRemote))
                         {
                             gp.RemoteVersion = cleanRemote;
                             reportMessage = string.Format("🔄 YENİ GÜNCELLEME BULUNDU! {0}: Yerel [{1}] -> Sitedeki Yeni Sürüm [{2}] ({3} sunucu hazır)",
                                 gp.Name, gp.Version, gp.RemoteVersion, analysis.Mirrors.Count);
                             return true;
                         }
+                        gp.RemoteVersion = gp.Version;
                     }
 
                     reportMessage = string.Format("✔ {0} güncel ({1}). {2} aktif indirme sunucusu doğrulandı.",

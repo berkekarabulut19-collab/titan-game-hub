@@ -103,6 +103,7 @@ namespace TitanGameHub
         private Button _btnHeroPrimary;
         private Button _btnAutoInstallFromDownloads;
         private Button _btnUninstallGame;
+        private Button _btnAddToSteam;
         private Button _btnUpdateShieldStatus;
         private Button _btnUpdateShieldRollback;
 
@@ -1890,8 +1891,8 @@ namespace TitanGameHub
             };
             primaryQuickStack.Children.Add(btnVerifyIntegrity);
 
-            Button btnAddToSteam = CreateSteamUtilityButton("➕ STEAM'E EKLE", "Seçili oyunu Steam'e 'Steam Dışı Oyun' olarak ekler (Sağ tık: tüm kurulu online oyunları ekle)");
-            btnAddToSteam.Click += delegate
+            _btnAddToSteam = CreateSteamUtilityButton("➕ STEAM'E EKLE", "Tek tıkla Steam'e ekle veya Steam'den kaldır (Online Fix + Spacewar 480 otomatik hazırlanır • Sağ tık: toplu işlemler)");
+            _btnAddToSteam.Click += delegate
             {
                 if (_selectedProfile == null || !_selectedProfile.IsInstalled)
                 {
@@ -1900,22 +1901,52 @@ namespace TitanGameHub
                     return;
                 }
                 string sMsg;
-                bool ok = SteamIntegrationService.AddGameToSteamShortcuts(_selectedProfile, out sMsg);
+                bool ok;
+                if (SteamIntegrationService.IsGameInSteamShortcuts(_selectedProfile))
+                {
+                    ok = SteamIntegrationService.RemoveGameFromSteamShortcuts(_selectedProfile, out sMsg);
+                }
+                else
+                {
+                    ok = SteamIntegrationService.AddGameToSteamShortcuts(_selectedProfile, out sMsg);
+                }
                 _txtBottomStatus.Text = sMsg;
+                RefreshSteamShortcutButton(_selectedProfile);
                 Win32.PlayTechChirp(ok);
             };
             ContextMenu steamMenu = new ContextMenu();
-            MenuItem miAddAllOnline = new MenuItem() { Header = "🎮 Tüm Kurulu Online Oyunları Steam'e Ekle" };
+            MenuItem miAddAllOnline = new MenuItem() { Header = "🎮 Tüm Kurulu Online Oyunları Steam'e Ekle (Online Fix Dahil)" };
             miAddAllOnline.Click += delegate
             {
                 string allMsg;
                 bool ok = SteamIntegrationService.AddAllOnlineGamesToSteam(_allProfiles, out allMsg);
                 _txtBottomStatus.Text = allMsg;
+                RefreshSteamShortcutButton(_selectedProfile);
+                Win32.PlayTechChirp(ok);
+            };
+            MenuItem miRemoveAllTitan = new MenuItem() { Header = "🗑 Titan Tarafından Eklenen Tüm Oyunları Steam'den Kaldır" };
+            miRemoveAllTitan.Click += delegate
+            {
+                string remMsg;
+                bool ok = SteamIntegrationService.RemoveAllTitanGamesFromSteam(out remMsg);
+                _txtBottomStatus.Text = remMsg;
+                RefreshSteamShortcutButton(_selectedProfile);
+                Win32.PlayTechChirp(ok);
+            };
+            MenuItem miRestartSteam = new MenuItem() { Header = "🔄 Steam'i Yeniden Başlat (Değişiklikleri Hemen Gör)" };
+            miRestartSteam.Click += delegate
+            {
+                string rstMsg;
+                bool ok = SteamIntegrationService.RestartSteamClient(out rstMsg);
+                _txtBottomStatus.Text = rstMsg;
                 Win32.PlayTechChirp(ok);
             };
             steamMenu.Items.Add(miAddAllOnline);
-            btnAddToSteam.ContextMenu = steamMenu;
-            primaryQuickStack.Children.Add(btnAddToSteam);
+            steamMenu.Items.Add(miRemoveAllTitan);
+            steamMenu.Items.Add(new Separator());
+            steamMenu.Items.Add(miRestartSteam);
+            _btnAddToSteam.ContextMenu = steamMenu;
+            primaryQuickStack.Children.Add(_btnAddToSteam);
 
             Button btnTurkishPatch = CreateSteamUtilityButton("🇹🇷 TÜRKÇE YAMA", "Oyun için doğrulanmış Türkçe dil/altyazı paketini kur (Sağ tık: tüm kurulu hikayeli oyunları tara)");
             ContextMenu trMenu = new ContextMenu();
@@ -4161,6 +4192,7 @@ namespace TitanGameHub
                     _btnHeroPrimary.BorderBrush = HexBrush("#6ED43B");
                 }
                 _btnUninstallGame.Visibility = Visibility.Visible;
+                RefreshSteamShortcutButton(gp);
                 if (_btnUpdateShieldStatus != null) _btnUpdateShieldStatus.Visibility = Visibility.Visible;
                 if (_btnUpdateShieldRollback != null)
                 {
@@ -4184,6 +4216,7 @@ namespace TitanGameHub
                 _btnHeroPrimary.Background = MakeGradient("#9333EA", "#6B21A8");
                 _btnHeroPrimary.BorderBrush = ThemeManager.AccentTealBrush;
                 _btnUninstallGame.Visibility = Visibility.Visible;
+                RefreshSteamShortcutButton(gp);
                 if (_btnUpdateShieldStatus != null) _btnUpdateShieldStatus.Visibility = Visibility.Collapsed;
                 if (_btnUpdateShieldRollback != null) _btnUpdateShieldRollback.Visibility = Visibility.Collapsed;
             }
@@ -4353,6 +4386,29 @@ namespace TitanGameHub
             if (_txtMetricInstalled != null) _txtMetricInstalled.Text = installed + " Yüklü & Hazır";
             if (_txtMetricSaves != null) _txtMetricSaves.Text = saves + " Save Yedeği";
             if (_txtMetricHardware != null) _txtMetricHardware.Text = Win32.GetSystemHardwareSummary();
+        }
+
+        private void RefreshSteamShortcutButton(GameProfile gp)
+        {
+            if (_btnAddToSteam == null) return;
+            try
+            {
+                if (gp != null && gp.IsInstalled && SteamIntegrationService.IsGameInSteamShortcuts(gp))
+                {
+                    _btnAddToSteam.Content = "🗑 STEAM'DEN KALDIR";
+                    _btnAddToSteam.Background = MakeGradient("#7F1D1D", "#991B1B");
+                    _btnAddToSteam.Foreground = HexBrush("#FECACA");
+                    _btnAddToSteam.BorderBrush = HexBrush("#EF4444");
+                }
+                else
+                {
+                    _btnAddToSteam.Content = "➕ STEAM'E EKLE";
+                    _btnAddToSteam.Background = HexBrush("#1E2837");
+                    _btnAddToSteam.Foreground = HexBrush("#E5E7EB");
+                    _btnAddToSteam.BorderBrush = HexBrush("#334155");
+                }
+            }
+            catch { }
         }
     }
 }

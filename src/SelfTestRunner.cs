@@ -300,12 +300,19 @@ namespace TitanGameHub
                     WorkingDirectory = glDir
                 };
                 PreFlightDoctorResult dr = PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(gp);
-                Check("GameLoop PreFlightLaunchDoctor hazır", dr != null && dr.ReadyToLaunch, dr != null ? dr.DiagnosticSummary : "");
+            Check("GameLoop PreFlightLaunchDoctor hazır", dr != null && dr.ReadyToLaunch, dr != null ? dr.DiagnosticSummary : "");
             }
             else
             {
                 Report.AppendLine("[INFO] Bu PC'de GameLoop + PUBG Mobile algilanmadi (temiz kurulum modu aktif).");
             }
+
+            Check("Aynı sürüm + DLC/Full Paket etiketi güncelleme sayılmaz",
+                !GameProfile.IsRemoteVersionNewer("v1.06.52637 • +2 DLC • Full Paket", "v1.06.52637"), "");
+            Check("Yerel sürüm daha yeniyse güncelleme sayılmaz",
+                !GameProfile.IsRemoteVersionNewer("v1.2.0", "v1.1.9"), "");
+            Check("Uzak sürüm gerçekten yeniyse güncelleme sayılır",
+                GameProfile.IsRemoteVersionNewer("v1.0.5", "v1.0.6"), "");
         }
     }
 }

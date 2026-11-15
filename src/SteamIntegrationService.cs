@@ -83,6 +83,23 @@ namespace TitanGameHub
         /// Tek bir kurulu oyunu Steam'in tüm yerel hesaplarındaki shortcuts.vdf dosyasına
         /// "Steam Dışı Oyun" olarak ekler (mevcut kısayolları korur, .bak yedeği alır).
         /// </summary>
+        public static void EnsureOnlineFixReadyForSteam(GameProfile gp)
+        {
+            if (gp == null || !gp.IsInstalled) return;
+            bool isGameLoop = string.Equals(gp.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrEmpty(gp.ExecutablePath) && gp.ExecutablePath.EndsWith("AppMarket.exe", StringComparison.OrdinalIgnoreCase));
+            if (isGameLoop) return;
+
+            try
+            {
+                gp.DeployOnlineFix("480");
+                SteamAccountInfo acc = SteamClientBridgeService.GetActiveSteamAccount(false);
+                SteamClientBridgeService.InjectSteamIdentityIntoGame(gp, acc);
+                PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(gp);
+            }
+            catch { }
+        }
+
         public static bool AddGameToSteamShortcuts(GameProfile gp, out string message)
         {
             message = "";
@@ -91,6 +108,8 @@ namespace TitanGameHub
                 message = "Steam'e eklemek için oyunun bilgisayarda kurulu ve .exe yolunun geçerli olması gerekir.";
                 return false;
             }
+
+            EnsureOnlineFixReadyForSteam(gp);
 
             List<GameProfile> single = new List<GameProfile>();
             single.Add(gp);
@@ -106,15 +125,257 @@ namespace TitanGameHub
                     (File.Exists(Path.Combine(gp.WorkingDirectory, "OnlineFix.ini")) ||
                      Directory.Exists(Path.Combine(gp.WorkingDirectory, "steam_settings"))))
                 {
-                    coopNote = " | Co-Op/OnlineFix hazır";
+                    coopNote = " | Online-Fix & Spacewar 480 hazır";
                 }
                 string steamNote = steamOpen
-                    ? " (Steam kapatılmadı — bir sonraki Steam açılışında görünür)"
+                    ? " (Steam'i yeniden başlatınca anında görünür)"
                     : " (Steam'i açınca kütüphanede görünür)";
                 message = string.Format("✔ '{0}' Steam'e eklendi ({1} hesap{2}).{3}",
                     gp.Name, accounts, coopNote, steamNote);
             }
             return ok;
+        }
+
+        public static bool IsGameInSteamShortcuts(GameProfile gp)
+        {
+            if (gp == null || !gp.IsInstalled || string.IsNullOrEmpty(gp.ExecutablePath)) return false;
+            try
+            {
+                string steamRoot = FindSteamInstallPath();
+                if (string.IsNullOrEmpty(steamRoot)) return false;
+                string userDataDir = Path.Combine(steamRoot, "userdata");
+                if (!Directory.Exists(userDataDir)) return false;
+
+                string exeClean = Path.GetFullPath(gp.ExecutablePath);
+                string appName = string.IsNullOrWhiteSpace(gp.Name) ? Path.GetFileNameWithoutExtension(exeClean) : gp.Name.Trim();
+
+                foreach (string uDir in Directory.GetDirectories(userDataDir))
+                {
+                    long parsedId;
+                    if (!long.TryParse(Path.GetFileName(uDir), out parsedId) || parsedId <= 0) continue;
+                    string vdfPath = Path.Combine(uDir, "config", "shortcuts.vdf");
+                    if (!File.Exists(vdfPath)) continue;
+                    List<VdfEntry> entries = ParseShortcutsVdf(File.ReadAllBytes(vdfPath));
+                    if (FindMatchingEntry(entries, exeClean, appName) != null) return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        public static bool RemoveGameFromSteamShortcuts(GameProfile gp, out string message)
+        {
+            message = "";
+            if (gp == null || string.IsNullOrEmpty(gp.Name))
+            {
+                message = "Kaldırılacak geçerli bir oyun seçilmedi.";
+                return false;
+            }
+
+            try
+            {
+                string steamRoot = FindSteamInstallPath();
+                if (string.IsNullOrEmpty(steamRoot))
+                {
+                    message = "Steam kurulum klasörü bulunamadı.";
+                    return false;
+                }
+                string userDataDir = Path.Combine(steamRoot, "userdata");
+                if (!Directory.Exists(userDataDir))
+                {
+                    message = "Steam userdata klasörü bulunamadı.";
+                    return false;
+                }
+
+                string exeClean = !string.IsNullOrEmpty(gp.ExecutablePath) ? Path.GetFullPath(gp.ExecutablePath) : "";
+                string appName = string.IsNullOrWhiteSpace(gp.Name) ? Path.GetFileNameWithoutExtension(exeClean) : gp.Name.Trim();
+                int removedCount = 0;
+
+                foreach (string uDir in Directory.GetDirectories(userDataDir))
+                {
+                    long parsedId;
+                    if (!long.TryParse(Path.GetFileName(uDir), out parsedId) || parsedId <= 0) continue;
+                    string configDir = Path.Combine(uDir, "config");
+                    string vdfPath = Path.Combine(configDir, "shortcuts.vdf");
+                    if (!File.Exists(vdfPath)) continue;
+
+                    List<VdfEntry> entries = ParseShortcutsVdf(File.ReadAllBytes(vdfPath));
+                    VdfEntry match = FindMatchingEntry(entries, exeClean, appName);
+                    if (match != null)
+                    {
+                        try { File.Copy(vdfPath, vdfPath + ".bak", true); } catch { }
+                        string mExe = match.GetString("Exe");
+                        string mName = match.GetString("AppName");
+                        uint appId = ComputeNonSteamAppId(mExe, mName);
+                        entries.Remove(match);
+                        File.WriteAllBytes(vdfPath, SerializeShortcutsVdf(entries));
+                        CleanupSteamGridArtwork(configDir, appId);
+                        removedCount++;
+                    }
+                }
+
+                if (removedCount > 0)
+                {
+                    message = string.Format("🗑 '{0}' Steam kütüphanesinden kaldırıldı ({1} hesap).", gp.Name, removedCount);
+                    return true;
+                }
+                message = "'" + gp.Name + "' Steam kısayollarında zaten bulunmuyor.";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                message = "Steam'den kaldırma hatası: " + ex.Message;
+                return false;
+            }
+        }
+
+        public static bool RemoveAllTitanGamesFromSteam(out string message)
+        {
+            message = "";
+            try
+            {
+                string steamRoot = FindSteamInstallPath();
+                if (string.IsNullOrEmpty(steamRoot))
+                {
+                    message = "Steam kurulum klasörü bulunamadı.";
+                    return false;
+                }
+                string userDataDir = Path.Combine(steamRoot, "userdata");
+                if (!Directory.Exists(userDataDir))
+                {
+                    message = "Steam userdata klasörü bulunamadı.";
+                    return false;
+                }
+
+                int totalRemoved = 0;
+                foreach (string uDir in Directory.GetDirectories(userDataDir))
+                {
+                    long parsedId;
+                    if (!long.TryParse(Path.GetFileName(uDir), out parsedId) || parsedId <= 0) continue;
+                    string configDir = Path.Combine(uDir, "config");
+                    string vdfPath = Path.Combine(configDir, "shortcuts.vdf");
+                    if (!File.Exists(vdfPath)) continue;
+
+                    List<VdfEntry> entries = ParseShortcutsVdf(File.ReadAllBytes(vdfPath));
+                    List<VdfEntry> kept = new List<VdfEntry>();
+                    int localRemoved = 0;
+
+                    foreach (VdfEntry e in entries)
+                    {
+                        if (HasTitanTag(e))
+                        {
+                            uint appId = ComputeNonSteamAppId(e.GetString("Exe"), e.GetString("AppName"));
+                            CleanupSteamGridArtwork(configDir, appId);
+                            localRemoved++;
+                        }
+                        else
+                        {
+                            kept.Add(e);
+                        }
+                    }
+
+                    if (localRemoved > 0)
+                    {
+                        try { File.Copy(vdfPath, vdfPath + ".bak", true); } catch { }
+                        File.WriteAllBytes(vdfPath, SerializeShortcutsVdf(kept));
+                        totalRemoved += localRemoved;
+                    }
+                }
+
+                if (totalRemoved > 0)
+                {
+                    message = string.Format("🗑 Titan tarafından eklenen {0} Steam kısayolu temizlendi.", totalRemoved);
+                    return true;
+                }
+                message = "Steam'de Titan tarafından eklenmiş kısayol bulunamadı.";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                message = "Toplu kaldırma hatası: " + ex.Message;
+                return false;
+            }
+        }
+
+        public static bool RestartSteamClient(out string message)
+        {
+            message = "";
+            try
+            {
+                string steamRoot = FindSteamInstallPath();
+                string steamExe = !string.IsNullOrEmpty(steamRoot) ? Path.Combine(steamRoot, "steam.exe") : "";
+                if (string.IsNullOrEmpty(steamExe) || !File.Exists(steamExe))
+                {
+                    message = "steam.exe bulunamadı.";
+                    return false;
+                }
+
+                Process[] procs = Process.GetProcessesByName("steam");
+                if (procs.Length > 0)
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo { FileName = steamExe, Arguments = "-shutdown", UseShellExecute = true });
+                    }
+                    catch { }
+                    Thread.Sleep(2500);
+                    foreach (Process p in Process.GetProcessesByName("steam"))
+                    {
+                        try { if (!p.HasExited) p.Kill(); } catch { }
+                    }
+                    Thread.Sleep(600);
+                }
+
+                Process.Start(new ProcessStartInfo { FileName = steamExe, UseShellExecute = true });
+                message = "🔄 Steam yeniden başlatıldı — eklenen/kaldırılan oyunlar kütüphanede güncellendi!";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                message = "Steam yeniden başlatılamadı: " + ex.Message;
+                return false;
+            }
+        }
+
+        private static bool HasTitanTag(VdfEntry e)
+        {
+            if (e == null || e.Fields == null) return false;
+            foreach (VdfField f in e.Fields)
+            {
+                if (string.Equals(f.Key, "tags", StringComparison.OrdinalIgnoreCase) && f.Type == 0x00)
+                {
+                    List<VdfField> sub = f.Value as List<VdfField>;
+                    if (sub != null)
+                    {
+                        foreach (VdfField tf in sub)
+                        {
+                            if (string.Equals(tf.Value as string, "TitanGameHub", StringComparison.OrdinalIgnoreCase))
+                                return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        private static void CleanupSteamGridArtwork(string configDir, uint appId)
+        {
+            try
+            {
+                string gridDir = Path.Combine(configDir, "grid");
+                if (!Directory.Exists(gridDir)) return;
+                string[] files = new string[]
+                {
+                    Path.Combine(gridDir, appId + "p.jpg"),
+                    Path.Combine(gridDir, appId + ".jpg"),
+                    Path.Combine(gridDir, appId + "_hero.jpg")
+                };
+                foreach (string f in files)
+                {
+                    try { if (File.Exists(f)) File.Delete(f); } catch { }
+                }
+            }
+            catch { }
         }
 
         /// <summary>
@@ -148,7 +409,11 @@ namespace TitanGameHub
                       gp.Category.IndexOf("Online", StringComparison.OrdinalIgnoreCase) >= 0 ||
                       gp.Category.IndexOf("Multiplayer", StringComparison.OrdinalIgnoreCase) >= 0));
 
-                if (isOnlineOrCoop) targets.Add(gp);
+                if (isOnlineOrCoop)
+                {
+                    EnsureOnlineFixReadyForSteam(gp);
+                    targets.Add(gp);
+                }
             }
 
             if (targets.Count == 0)
@@ -239,16 +504,21 @@ namespace TitanGameHub
                     string appName = string.IsNullOrWhiteSpace(gp.Name) ? Path.GetFileNameWithoutExtension(exeClean) : gp.Name.Trim();
                     uint appId = ComputeNonSteamAppId(exeQuoted, appName);
 
+                    string launchArgs = (string.Equals(gp.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase) ||
+                        exeClean.EndsWith("AppMarket.exe", StringComparison.OrdinalIgnoreCase))
+                        ? "-startpkg com.tencent.ig"
+                        : "";
+
                     VdfEntry existing = FindMatchingEntry(entries, exeClean, appName);
                     if (existing != null)
                     {
-                        SetEntryFields(existing, appId, appName, exeQuoted, startDirQuoted, exeClean, "");
+                        SetEntryFields(existing, appId, appName, exeQuoted, startDirQuoted, exeClean, launchArgs);
                         localUpdated++;
                     }
                     else
                     {
                         VdfEntry created = new VdfEntry();
-                        SetEntryFields(created, appId, appName, exeQuoted, startDirQuoted, exeClean, "");
+                        SetEntryFields(created, appId, appName, exeQuoted, startDirQuoted, exeClean, launchArgs);
                         entries.Add(created);
                         localAdded++;
                     }
