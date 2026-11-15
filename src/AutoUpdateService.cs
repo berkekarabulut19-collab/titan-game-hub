@@ -670,7 +670,8 @@ namespace TitanGameHub
                 if (!string.IsNullOrEmpty(remoteSha) && string.Equals(remoteSha, localSha, StringComparison.OrdinalIgnoreCase))
                     return;
 
-                try { SyncCatalogFromGitHubRaw(catalog, remoteSha); } catch { }
+                bool catalogSynced = false;
+                try { catalogSynced = SyncCatalogFromGitHubRaw(catalog, remoteSha); } catch { }
 
                 string stageDir = Path.Combine(appDir, "ota_stage");
                 string stagedExe = Path.Combine(stageDir, "TitanGameHub.exe");
@@ -707,7 +708,7 @@ namespace TitanGameHub
 
                 if (string.Equals(curHash, newHash, StringComparison.OrdinalIgnoreCase))
                 {
-                    if (!string.IsNullOrEmpty(remoteSha))
+                    if (catalogSynced && !string.IsNullOrEmpty(remoteSha))
                     {
                         try
                         {
@@ -764,9 +765,9 @@ namespace TitanGameHub
             catch { }
         }
 
-        private void SyncCatalogFromGitHubRaw(List<GameProfile> catalog, string commitSha)
+        private bool SyncCatalogFromGitHubRaw(List<GameProfile> catalog, string commitSha)
         {
-            if (catalog == null) return;
+            if (catalog == null) return false;
             try
             {
                 string baseDir = AppDomain.CurrentDomain.BaseDirectory;
@@ -800,7 +801,7 @@ namespace TitanGameHub
                     cwc.Encoding = Encoding.UTF8;
                     cwc.Headers.Add("User-Agent", "TitanGameHub-CatalogSync/8.1");
                     string rawCfg = cwc.DownloadString("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/bin/games_v6.cfg");
-                    if (string.IsNullOrWhiteSpace(rawCfg)) return;
+                    if (string.IsNullOrWhiteSpace(rawCfg)) return false;
 
                     Dictionary<string, GameProfile> byId = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
                     Dictionary<string, GameProfile> byNorm = new Dictionary<string, GameProfile>(StringComparer.OrdinalIgnoreCase);
@@ -895,13 +896,17 @@ namespace TitanGameHub
 
                     if (changed > 0)
                     {
-                        ProfileStore.SaveProfiles(catalog);
+                        List<GameProfile> snap;
+                        lock (catalog) { snap = new List<GameProfile>(catalog); }
+                        ProfileStore.SaveProfiles(snap);
                         if (OnOtaStatusChanged != null)
                             OnOtaStatusChanged("☁ GitHub katalog güncellemesi uygulandı (" + changed + " oyun/boyut yenilendi).", 1);
                     }
+                    return true;
                 }
             }
             catch { }
+            return false;
         }
 
         private static string ComputeFileSha256(string path)

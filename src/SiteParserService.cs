@@ -767,7 +767,14 @@ namespace TitanGameHub
                 {
                     targetPostUrl = FindSteamRipPostUrl(gp.Name);
                 }
-                if (!string.IsNullOrWhiteSpace(targetPostUrl) && targetPostUrl.IndexOf("steamrip.com", StringComparison.OrdinalIgnoreCase) >= 0)
+                bool isSupportedMirrorHost = !string.IsNullOrWhiteSpace(targetPostUrl) &&
+                    (targetPostUrl.IndexOf("steamrip.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                     (result.Mirrors.Count == 0 && (
+                         targetPostUrl.IndexOf("fitgirl-repacks.site", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         targetPostUrl.IndexOf("freegogpcgames.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         targetPostUrl.IndexOf("ovagames.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                         targetPostUrl.IndexOf("crotorrents.com", StringComparison.OrdinalIgnoreCase) >= 0)));
+                if (isSupportedMirrorHost)
                 {
                     string markdown = FetchViaJinaReader(targetPostUrl);
                     if (!string.IsNullOrWhiteSpace(markdown))
