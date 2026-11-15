@@ -36,6 +36,14 @@ namespace TitanGameHub
                 return result;
             }
 
+            if (string.Equals(gp.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase) ||
+                gp.ExecutablePath.EndsWith("AppMarket.exe", StringComparison.OrdinalIgnoreCase))
+            {
+                result.ReadyToLaunch = true;
+                result.DiagnosticSummary = "GameLoop emülatörü başlatmaya hazır.";
+                return result;
+            }
+
             try
             {
                 string root = gp.WorkingDirectory;

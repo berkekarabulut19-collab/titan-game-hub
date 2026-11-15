@@ -491,6 +491,13 @@ namespace TitanGameHub
                     archiveFormat = "7Z";
                     return true;
                 }
+                // Official PE Executable Installer (e.g. GameLoop installer): 4D 5A ('MZ')
+                if (header[0] == 0x4D && header[1] == 0x5A &&
+                    filePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+                {
+                    archiveFormat = "EXE_INSTALLER";
+                    return true;
+                }
                 // HTML check (<!DOCTYPE or <html) -> Reject
                 if (header[0] == '<' || (header[0] == 0xEF && header[1] == 0xBB && header[2] == 0xBF && header[3] == '<'))
                 {
@@ -889,8 +896,12 @@ namespace TitanGameHub
                         ReportProgress("[1/4] " + profile.Name + " - Çoklu site doğrudan indirme sunucuları çözümleniyor...", 10, "Çözümleniyor...");
                     }
 
-                    SitePageAnalysis analysis = SiteParserService.AnalyzeGameOnSteamRip(profile);
-                    if (OnSiteMirrorsDiscovered != null)
+                    bool isDirectExeInstaller = string.Equals(profile.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(profile.DirectMirrorUrl) &&
+                         profile.DirectMirrorUrl.EndsWith(".exe", StringComparison.OrdinalIgnoreCase));
+
+                    SitePageAnalysis analysis = isDirectExeInstaller ? null : SiteParserService.AnalyzeGameOnSteamRip(profile);
+                    if (OnSiteMirrorsDiscovered != null && analysis != null)
                         OnSiteMirrorsDiscovered(profile, analysis);
 
                     // Sıra önemli: canlı site taraması (doğrudan o oyunun sayfasından) ÖNCE,
@@ -1565,7 +1576,11 @@ namespace TitanGameHub
             string targetDir = GetTargetInstallDirectoryForGame(profile);
             string gamesRoot = Path.GetDirectoryName(targetDir) ?? GetEffectiveGamesRoot();
             string safeFolder = Path.GetFileName(targetDir) ?? Regex.Replace(profile.Name, @"[^\w\s-]", "").Trim();
-            string ext = directUrl.IndexOf(".zip", StringComparison.OrdinalIgnoreCase) >= 0 ? ".zip" : ".rar";
+            string ext = directUrl.IndexOf(".exe", StringComparison.OrdinalIgnoreCase) >= 0
+                ? ".exe"
+                : (directUrl.IndexOf(".7z", StringComparison.OrdinalIgnoreCase) >= 0
+                    ? ".7z"
+                    : (directUrl.IndexOf(".zip", StringComparison.OrdinalIgnoreCase) >= 0 ? ".zip" : ".rar"));
             string tempArchive = Path.Combine(gamesRoot, safeFolder + "_pkg" + ext);
             string partialFile = tempArchive + ".resume";
 
@@ -2390,6 +2405,58 @@ namespace TitanGameHub
                 }
 
                 string hashTag = ComputeFileQuickHash(archivePath);
+
+                // 0. OFFICIAL INSTALLER EXECUTABLE (e.g. GameLoop PUBG Mobile installer)
+                if (magicFmt == "EXE_INSTALLER")
+                {
+                    ReportProgress(profile.Name + " — Resmi yükleyici başlatılıyor...", 80, "Kuruluyor...");
+                    try
+                    {
+                        ProcessStartInfo psi = new ProcessStartInfo
+                        {
+                            FileName = archivePath,
+                            UseShellExecute = true
+                        };
+                        Process.Start(psi);
+                    }
+                    catch (Exception exRun)
+                    {
+                        _isBusy = false;
+                        ReportCompleted(profile, false, "Yükleyici çalıştırılamadı: " + exRun.Message);
+                        return;
+                    }
+
+                    string glExe, glDir;
+                    if (ProfileStore.TryResolveGameLoopPubgMobile(out glExe, out glDir))
+                    {
+                        profile.ExecutablePath = glExe;
+                        profile.WorkingDirectory = glDir;
+                        profile.Version = "GameLoop (Kurulu)";
+                        profile.RemoteVersion = profile.Version;
+                        try
+                        {
+                            List<GameProfile> curList = ProfileStore.LoadProfiles();
+                            foreach (GameProfile p in curList)
+                            {
+                                if (string.Equals(p.Id, profile.Id, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    p.ExecutablePath = glExe;
+                                    p.WorkingDirectory = glDir;
+                                    p.Version = profile.Version;
+                                    p.RemoteVersion = profile.RemoteVersion;
+                                    break;
+                                }
+                            }
+                            ProfileStore.SaveProfiles(curList);
+                        }
+                        catch { }
+                    }
+
+                    _isBusy = false;
+                    ReportProgress(profile.Name + " — Resmi GameLoop yükleyicisi başlatıldı!", 100, "Hazır");
+                    ReportCompleted(profile, true, "Resmi GameLoop PUBG Mobile yükleyicisi indirildi ve başlatıldı! Kurulum tamamlandığında oyun otomatik olarak OYNA durumuna geçecektir.");
+                    return;
+                }
 
                 // 1. IS THIS AN UPDATE TO AN ALREADY INSTALLED GAME?
                 if (profile.IsInstalled && !string.IsNullOrEmpty(profile.WorkingDirectory) && Directory.Exists(profile.WorkingDirectory))

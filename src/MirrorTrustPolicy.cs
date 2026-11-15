@@ -43,6 +43,8 @@ namespace TitanGameHub
         {
             if (string.IsNullOrEmpty(url) || string.IsNullOrEmpty(gameName)) return false;
             if (!url.StartsWith("http", StringComparison.OrdinalIgnoreCase)) return false; // steam:// vb. bizi ilgilendirmez
+            if (url.IndexOf("gameloop.com", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                url.IndexOf("com.tencent.ig", StringComparison.OrdinalIgnoreCase) >= 0) return false;
 
             string fileName = ExtractCandidateFileName(url);
             if (!IsTitleLikeFileName(fileName)) return false; // gofile/d/AbC123 gibi ID tabanlı linkler

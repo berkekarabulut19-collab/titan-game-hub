@@ -4,6 +4,7 @@ using System.IO;
 using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
+using Microsoft.Win32;
 
 namespace TitanGameHub
 {
@@ -578,6 +579,121 @@ namespace TitanGameHub
             }
         }
 
+        public static bool TryResolveGameLoopPubgMobile(out string appMarketExe, out string workingDir)
+        {
+            appMarketExe = "";
+            workingDir = "";
+            try
+            {
+                List<string> candidateDirs = new List<string>();
+                try
+                {
+                    using (RegistryKey rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\WOW6432Node\Tencent\MobileGamePC\AppMarket"))
+                    {
+                        if (rk != null)
+                        {
+                            object p = rk.GetValue("InstallPath");
+                            if (p != null) candidateDirs.Add(p.ToString());
+                        }
+                    }
+                }
+                catch { }
+                try
+                {
+                    using (RegistryKey rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Tencent\MobileGamePC\AppMarket"))
+                    {
+                        if (rk != null)
+                        {
+                            object p = rk.GetValue("InstallPath");
+                            if (p != null) candidateDirs.Add(p.ToString());
+                        }
+                    }
+                }
+                catch { }
+                try
+                {
+                    using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Tencent\MobileGamePC\UI"))
+                    {
+                        if (rk != null)
+                        {
+                            object p = rk.GetValue("InstallPath");
+                            if (p != null)
+                            {
+                                string uiDir = p.ToString().TrimEnd('\\', '/');
+                                string parent = Path.GetDirectoryName(uiDir);
+                                if (!string.IsNullOrEmpty(parent))
+                                    candidateDirs.Add(Path.Combine(parent, "AppMarket"));
+                            }
+                        }
+                    }
+                }
+                catch { }
+
+                candidateDirs.Add(@"C:\TxGameAssistant\AppMarket");
+                candidateDirs.Add(@"D:\TxGameAssistant\AppMarket");
+                candidateDirs.Add(@"C:\Program Files\TxGameAssistant\AppMarket");
+                candidateDirs.Add(@"D:\Program Files\TxGameAssistant\AppMarket");
+
+                string resolvedExe = "";
+                foreach (string dir in candidateDirs)
+                {
+                    if (string.IsNullOrEmpty(dir)) continue;
+                    string exe = Path.Combine(dir.TrimEnd('\\', '/'), "AppMarket.exe");
+                    if (File.Exists(exe))
+                    {
+                        resolvedExe = exe;
+                        break;
+                    }
+                }
+                if (string.IsNullOrEmpty(resolvedExe)) return false;
+
+                bool hasPubgMarker = false;
+                try
+                {
+                    using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Tencent\MobileGamePC\com.tencent.ig"))
+                    {
+                        if (rk != null) hasPubgMarker = true;
+                    }
+                }
+                catch { }
+
+                if (!hasPubgMarker)
+                {
+                    try
+                    {
+                        using (RegistryKey rk = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Tencent\MobileGamePC\NewOpGuidTip"))
+                        {
+                            if (rk != null && rk.GetValue("com.tencent.ig-dpiguid") != null)
+                                hasPubgMarker = true;
+                        }
+                    }
+                    catch { }
+                }
+
+                if (!hasPubgMarker)
+                {
+                    string txRoot = Path.GetDirectoryName(Path.GetDirectoryName(resolvedExe));
+                    if (!string.IsNullOrEmpty(txRoot))
+                    {
+                        string gft = Path.Combine(txRoot, @"UI\AndroidEmulator\res\img\com.tencent.ig.gft");
+                        string rootfs = Path.Combine(txRoot, @"AOW_Rootfs_100\rootfs.bin");
+                        if (File.Exists(gft) && File.Exists(rootfs))
+                            hasPubgMarker = true;
+                    }
+                }
+
+                if (!hasPubgMarker) return false;
+
+                appMarketExe = resolvedExe;
+                workingDir = Path.GetDirectoryName(resolvedExe);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static int AutoDiscoverInstalledGames(List<GameProfile> catalog)
         {
             string localGamesRoot = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Games");
@@ -593,6 +709,26 @@ namespace TitanGameHub
 
             foreach (GameProfile gp in catalog)
             {
+                if (string.Equals(gp.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase))
+                {
+                    string glExe, glDir;
+                    if (TryResolveGameLoopPubgMobile(out glExe, out glDir))
+                    {
+                        gp.ExecutablePath = glExe;
+                        gp.WorkingDirectory = glDir;
+                        if (string.IsNullOrEmpty(gp.Version) || gp.Version.StartsWith("Resmi", StringComparison.OrdinalIgnoreCase))
+                            gp.Version = "GameLoop (Kurulu)";
+                        gp.RemoteVersion = gp.Version;
+                        changed++;
+                    }
+                    else
+                    {
+                        gp.ExecutablePath = "";
+                        gp.WorkingDirectory = "";
+                    }
+                    continue;
+                }
+
                 if (GamePathResolver.TryRelocateFromIndex(gp, index))
                 {
                     if (gp.IsSteamManaged) gp.RemoteVersion = gp.Version;
@@ -937,7 +1073,26 @@ namespace TitanGameHub
 
                 MakeDefault("outlasttrials", "The Outlast Trials", "Korku", "v1.2", "https://steamrip.com/the-outlast-trials-free-download/", "1304930", "4 kişiye kadar arkadaşlarınızla Murkoff tesisinin korkunç deneylerinden sağ çıkmaya çalışın.", "4 Kişilik Online Co-Op", "34.0 GB", false, "https://gofile.io/d/4gGDhx"),
 
-                MakeDefault("l4d2", "Left 4 Dead 2", "Korku", "v2.2.4", "https://steamrip.com/left-4-dead-2-free-download/", "550", "Efsanevi 4-8 kişilik zombi kıyameti co-op FPS klasiği. LAN ve Spacewar P2P destekli.", "4-8 Kişilik Co-Op", "13.0 GB", false, "https://gofile.io/d/RPbTag")
+                MakeDefault("l4d2", "Left 4 Dead 2", "Korku", "v2.2.4", "https://steamrip.com/left-4-dead-2-free-download/", "550", "Efsanevi 4-8 kişilik zombi kıyameti co-op FPS klasiği. LAN ve Spacewar P2P destekli.", "4-8 Kişilik Co-Op", "13.0 GB", false, "https://gofile.io/d/RPbTag"),
+
+                new GameProfile
+                {
+                    Id = "pubg-mobile-gameloop",
+                    Name = "PUBG Mobile (GameLoop)",
+                    Category = "Battle Royale / FPS",
+                    Version = "Resmi • GameLoop",
+                    RemoteVersion = "Resmi • GameLoop",
+                    DownloadUrl = "https://www.gameloop.com/game/action/pubg-mobile-on-pc",
+                    OnlineFixUrl = "",
+                    SteamAppId = "578080",
+                    Description = "Resmi Tencent GameLoop emülatörü üzerinden PUBG Mobile PC deneyimi. Bilgisayarınızda GameLoop + PUBG Mobile yüklüyse otomatik algılanır ve tek tıkla doğrudan başlatılır; yüklü değilse resmi GameLoop yükleyicisi uygulama içinden indirilir.",
+                    MaxPlayers = "100 Kişilik Battle Royale",
+                    BannerUrl = "https://img.gameloop.com/syzs_cms/202611/26ca1c8e2784dddba619527229789fae.jpeg",
+                    CapsuleUrl = "https://img.gameloop.com/syzs_cms/202611/26ca1c8e2784dddba619527229789fae.jpeg",
+                    FileSize = "4.5 GB",
+                    DirectMirrorUrl = "https://down.gameloop.com/channel/88/16229/GLP_installer_1000218273_com.tencent.ig.exe",
+                    LastPlayedText = "Henüz Oynanmadı"
+                }
             };
         }
     }

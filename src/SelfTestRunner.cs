@@ -36,6 +36,7 @@ namespace TitanGameHub
             TestAria2();
             TestMaintenance();
             TestLanguageAndApi();
+            TestGameLoopPubgMobile();
             Report.AppendLine(new string('=', 60));
             Report.AppendLine(string.Format("SONUÇ: {0} geçti, {1} başarısız", _passed, _failed));
             try
@@ -277,6 +278,34 @@ namespace TitanGameHub
             Check("TR modunda değişmez", LanguageService.T("OYNA") == "OYNA", "");
 
             Report.AppendLine("[INFO] Katalog API: " + (CatalogApiClient.IsConfigured ? "yapılandırılmış" : "tanımlı değil (site taraması kullanılıyor)"));
+        }
+
+        private static void TestGameLoopPubgMobile()
+        {
+            Report.AppendLine("\n-- GameLoop PUBG Mobile Entegrasyonu --");
+            Check("GameLoop resmi installer URL'si engellenmez",
+                !MirrorTrustPolicy.LooksLikeWrongGame("https://down.gameloop.com/channel/88/16229/GLP_installer_1000218273_com.tencent.ig.exe", "PUBG Mobile (GameLoop)"),
+                "");
+
+            string glExe, glDir;
+            bool detected = ProfileStore.TryResolveGameLoopPubgMobile(out glExe, out glDir);
+            if (detected)
+            {
+                Check("GameLoop AppMarket.exe mevcut", File.Exists(glExe), glExe);
+                GameProfile gp = new GameProfile
+                {
+                    Id = "pubg-mobile-gameloop",
+                    Name = "PUBG Mobile (GameLoop)",
+                    ExecutablePath = glExe,
+                    WorkingDirectory = glDir
+                };
+                PreFlightDoctorResult dr = PreFlightLaunchDoctor.DiagnoseAndPrepareLaunch(gp);
+                Check("GameLoop PreFlightLaunchDoctor hazır", dr != null && dr.ReadyToLaunch, dr != null ? dr.DiagnosticSummary : "");
+            }
+            else
+            {
+                Report.AppendLine("[INFO] Bu PC'de GameLoop + PUBG Mobile algilanmadi (temiz kurulum modu aktif).");
+            }
         }
     }
 }

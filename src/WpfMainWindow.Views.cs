@@ -4002,10 +4002,15 @@ namespace TitanGameHub
                 // Freeze Windows Background Services (Zero-Jitter Game Mode)
                 GameModeDebloaterService.FreezeBackgroundServicesAsync(null);
 
+                bool isGameLoopPubg = string.Equals(_selectedProfile.Id, "pubg-mobile-gameloop", StringComparison.OrdinalIgnoreCase) ||
+                    (!string.IsNullOrEmpty(_selectedProfile.ExecutablePath) &&
+                     _selectedProfile.ExecutablePath.EndsWith("AppMarket.exe", StringComparison.OrdinalIgnoreCase));
+
                 ProcessStartInfo psi = new ProcessStartInfo
                 {
                     FileName = _selectedProfile.ExecutablePath,
                     WorkingDirectory = _selectedProfile.WorkingDirectory,
+                    Arguments = isGameLoopPubg ? "-startpkg com.tencent.ig" : "",
                     UseShellExecute = true
                 };
                 Process proc = Process.Start(psi);
@@ -4013,7 +4018,7 @@ namespace TitanGameHub
 
                 _cloudLobby.CurrentGame = _selectedProfile.Name;
                 _cloudLobby.CurrentGameVersion = _selectedProfile.Version ?? "";
-                _cloudLobby.CurrentStatus = "Oyunda (Spacewar P2P)";
+                _cloudLobby.CurrentStatus = isGameLoopPubg ? "Oyunda (GameLoop)" : "Oyunda (Spacewar P2P)";
                 _cloudLobby.SendHeartbeat();
 
                 DiscordRpcService.SetActivity(_selectedProfile.Name, "Titan Game Hub — Spacewar 480 Co-Op");
