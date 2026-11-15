@@ -50,6 +50,37 @@ namespace TitanGameHub
                     Match m = Regex.Match(json, @"""id""\s*:\s*(\d{2,8})\b");
                     if (m.Success && m.Groups[1].Value != "480")
                         foundUrl = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + m.Groups[1].Value + "/header.jpg";
+
+                    if (string.IsNullOrEmpty(foundUrl))
+                    {
+                        try
+                        {
+                            string csJson = swc.DownloadString("https://www.cheapshark.com/api/1.0/games?title=" + Uri.EscapeDataString(clean) + "&limit=2");
+                            Match csId = Regex.Match(csJson, @"""steamAppID""\s*:\s*""(\d{2,8})""");
+                            if (csId.Success && csId.Groups[1].Value != "480")
+                                foundUrl = "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/" + csId.Groups[1].Value + "/header.jpg";
+                            else
+                            {
+                                Match csThumb = Regex.Match(csJson, @"""thumb""\s*:\s*""(https?:[^""]+)""");
+                                if (csThumb.Success)
+                                    foundUrl = csThumb.Groups[1].Value.Replace("\\/", "/");
+                            }
+                        }
+                        catch { }
+                    }
+
+                    if (string.IsNullOrEmpty(foundUrl))
+                    {
+                        try
+                        {
+                            string wkSlug = Uri.EscapeDataString(clean.Replace(' ', '_'));
+                            string wkJson = swc.DownloadString("https://en.wikipedia.org/api/rest_v1/page/summary/" + wkSlug);
+                            Match wkThumb = Regex.Match(wkJson, @"""source""\s*:\s*""(https?://[^""]+\.(?:jpg|jpeg|png))""", RegexOptions.IgnoreCase);
+                            if (wkThumb.Success)
+                                foundUrl = wkThumb.Groups[1].Value.Replace("\\/", "/");
+                        }
+                        catch { }
+                    }
                 }
             }
             catch { }

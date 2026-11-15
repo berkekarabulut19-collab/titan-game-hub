@@ -1310,7 +1310,8 @@ namespace TitanGameHub
         private static string ExtractSlugFromUrl(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
-            Match m = Regex.Match(url, @"steamrip\.com/([a-zA-Z0-9_-]+)/?", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            if (url.IndexOf("?s=", StringComparison.OrdinalIgnoreCase) >= 0) return null;
+            Match m = Regex.Match(url, @"(?:steamrip\.com|fitgirl-repacks\.site|freegogpcgames\.com|crotorrents\.com|ovagames\.com)/([a-zA-Z0-9_-]+)/?(?:$|\?|#)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
             if (m.Success) return m.Groups[1].Value;
             return null;
         }
