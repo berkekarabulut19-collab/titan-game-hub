@@ -2242,13 +2242,23 @@ namespace TitanGameHub
         }
 
         /// <summary>
+        /// <summary>
         /// 7-Zip/RAR çıkarma işlemini ilerleme raporuyla çalıştırır.
-        /// Büyük oyunlarda (100+ GB) UI donmasın diye hedef klasör boyutu izlenir.
+        /// Sıfır disk tarama (MFT I/O) yüküyle DriveInfo boş alan farkından anlık çıkarılan boyutu okur.
         /// </summary>
         private bool RunExtractionWithProgress(string archivePath, string destinationDir, int basePct, string phaseLabel)
         {
             bool done = false;
             bool[] runningFlag = new bool[] { true };
+
+            long startFree = 0;
+            string rootDrive = null;
+            try
+            {
+                rootDrive = Path.GetPathRoot(Path.GetFullPath(destinationDir));
+                if (!string.IsNullOrEmpty(rootDrive)) startFree = new DriveInfo(rootDrive).AvailableFreeSpace;
+            }
+            catch { }
 
             Thread watcher = new Thread(delegate()
             {
@@ -2259,12 +2269,22 @@ namespace TitanGameHub
                 {
                     try
                     {
-                        Thread.Sleep(1800);
+                        Thread.Sleep(1500);
                         if (!runningFlag[0]) break;
 
-                        long bytes = GetDirectorySizeSafe(destinationDir);
+                        long bytes = lastBytes;
+                        if (startFree > 0 && !string.IsNullOrEmpty(rootDrive))
+                        {
+                            try
+                            {
+                                long curFree = new DriveInfo(rootDrive).AvailableFreeSpace;
+                                if (startFree >= curFree) bytes = startFree - curFree;
+                            }
+                            catch { }
+                        }
+
                         double secs = Math.Max(0.5, (DateTime.UtcNow - last).TotalSeconds);
-                        double mbps = ((bytes - lastBytes) / 1048576.0) / secs;
+                        double mbps = Math.Max(0.0, ((bytes - lastBytes) / 1048576.0) / secs);
                         last = DateTime.UtcNow;
                         lastBytes = bytes;
                         pulse = (pulse + 1) % 4;
@@ -2307,15 +2327,37 @@ namespace TitanGameHub
             if (!Directory.Exists(destinationDir)) Directory.CreateDirectory(destinationDir);
 
             bool extracted = false;
-
-            // Priority 1: Multi-engine high-speed extraction via 7-Zip
-            string[] possible7z = new string[]
+            bool isRar = archivePath.EndsWith(".rar", StringComparison.OrdinalIgnoreCase);
+            if (!isRar)
             {
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "7za.exe"),
-                Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
-                @"C:\Program Files\7-Zip\7z.exe",
-                @"C:\Program Files (x86)\7-Zip\7z.exe"
-            };
+                try
+                {
+                    byte[] h = new byte[4];
+                    using (FileStream fs = File.OpenRead(archivePath))
+                    {
+                        if (fs.Read(h, 0, 4) >= 3 && h[0] == 0x52 && h[1] == 0x61 && h[2] == 0x72)
+                            isRar = true;
+                    }
+                }
+                catch { }
+            }
+
+            // Priority 1: Multi-threaded high-priority extraction via 7-Zip (-mmt=on)
+            string[] possible7z = isRar
+                ? new string[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
+                    @"C:\Program Files\7-Zip\7z.exe",
+                    @"C:\Program Files (x86)\7-Zip\7z.exe"
+                }
+                : new string[]
+                {
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "res", "7za.exe"),
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "7z.exe"),
+                    @"C:\Program Files\7-Zip\7z.exe",
+                    @"C:\Program Files (x86)\7-Zip\7z.exe"
+                };
+
             foreach (string p7z in possible7z)
             {
                 if (File.Exists(p7z))
@@ -2325,12 +2367,13 @@ namespace TitanGameHub
                         ProcessStartInfo psi7 = new ProcessStartInfo
                         {
                             FileName = p7z,
-                            Arguments = string.Format("x \"{0}\" -o\"{1}\" -y -bso0 -bsp0", archivePath, destinationDir),
+                            Arguments = string.Format("x \"{0}\" -o\"{1}\" -mmt=on -y -bso0 -bsp0", archivePath, destinationDir),
                             CreateNoWindow = true,
                             UseShellExecute = false
                         };
                         using (Process p = Process.Start(psi7))
                         {
+                            try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                             p.WaitForExit();
                             if (p.ExitCode == 0) { extracted = true; break; }
                         }
@@ -2339,7 +2382,34 @@ namespace TitanGameHub
                 }
             }
 
-            // Priority 2: System tar.exe (Windows 10/11 native)
+            // Priority 2: WinRAR engine (RAR için tar.exe'den çok daha hızlı ve güvenilir)
+            if (!extracted)
+            {
+                string winrar = @"C:\Program Files\WinRAR\WinRAR.exe";
+                if (!File.Exists(winrar)) winrar = @"C:\Program Files (x86)\WinRAR\WinRAR.exe";
+                if (File.Exists(winrar))
+                {
+                    try
+                    {
+                        ProcessStartInfo psiRar = new ProcessStartInfo
+                        {
+                            FileName = winrar,
+                            Arguments = string.Format("x -ibck -inul -mt{0} -y \"{1}\" \"{2}\\\"", Math.Max(2, Environment.ProcessorCount), archivePath, destinationDir),
+                            CreateNoWindow = true,
+                            UseShellExecute = false
+                        };
+                        using (Process p = Process.Start(psiRar))
+                        {
+                            try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
+                            p.WaitForExit();
+                            if (p.ExitCode == 0) extracted = true;
+                        }
+                    }
+                    catch { }
+                }
+            }
+
+            // Priority 3: System tar.exe (Windows 10/11 native)
             if (!extracted)
             {
                 string sysTar = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "tar.exe");
@@ -2356,6 +2426,7 @@ namespace TitanGameHub
                         };
                         using (Process p = Process.Start(psi))
                         {
+                            try { p.PriorityClass = ProcessPriorityClass.High; } catch { }
                             p.WaitForExit();
                             if (p.ExitCode == 0) extracted = true;
                         }
@@ -2364,37 +2435,13 @@ namespace TitanGameHub
                 }
             }
 
-            // Priority 3: WinRAR engine
-            if (!extracted)
-            {
-                string winrar = @"C:\Program Files\WinRAR\WinRAR.exe";
-                if (!File.Exists(winrar)) winrar = @"C:\Program Files (x86)\WinRAR\WinRAR.exe";
-                if (File.Exists(winrar))
-                {
-                    try
-                    {
-                        ProcessStartInfo psiRar = new ProcessStartInfo
-                        {
-                            FileName = winrar,
-                            Arguments = string.Format("x -ibck -inul -y \"{0}\" \"{1}\\\"", archivePath, destinationDir),
-                            CreateNoWindow = true,
-                            UseShellExecute = false
-                        };
-                        using (Process p = Process.Start(psiRar))
-                        {
-                            p.WaitForExit();
-                            if (p.ExitCode == 0) extracted = true;
-                        }
-                    }
-                    catch { }
-                }
-            }
-
-            // Priority 4: Built-in ZipFile fallback with safe file overwrite
+            // Priority 4: Built-in ZipFile fallback with 1MB buffered sequential I/O & dir cache
             if (!extracted && archivePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
             {
                 try
                 {
+                    HashSet<string> createdDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    byte[] ioBuf = new byte[1048576];
                     using (ZipArchive archive = ZipFile.OpenRead(archivePath))
                     {
                         foreach (ZipArchiveEntry entry in archive.Entries)
@@ -2402,16 +2449,22 @@ namespace TitanGameHub
                             string destPath = Path.Combine(destinationDir, entry.FullName);
                             if (string.IsNullOrEmpty(entry.Name))
                             {
-                                if (!Directory.Exists(destPath)) Directory.CreateDirectory(destPath);
+                                if (createdDirs.Add(destPath) && !Directory.Exists(destPath))
+                                    Directory.CreateDirectory(destPath);
                             }
                             else
                             {
                                 string parent = Path.GetDirectoryName(destPath);
-                                if (!string.IsNullOrEmpty(parent) && !Directory.Exists(parent))
-                                {
+                                if (!string.IsNullOrEmpty(parent) && createdDirs.Add(parent) && !Directory.Exists(parent))
                                     Directory.CreateDirectory(parent);
+
+                                using (Stream src = entry.Open())
+                                using (FileStream dst = new FileStream(destPath, FileMode.Create, FileAccess.Write, FileShare.None, 1048576, FileOptions.SequentialScan))
+                                {
+                                    int r;
+                                    while ((r = src.Read(ioBuf, 0, ioBuf.Length)) > 0)
+                                        dst.Write(ioBuf, 0, r);
                                 }
-                                entry.ExtractToFile(destPath, true);
                             }
                         }
                     }
