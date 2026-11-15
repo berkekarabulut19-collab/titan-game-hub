@@ -1,6 +1,8 @@
 # Build / runtime caches & user data
 bin/Games/
 bin/cache/
+bin/ota_stage/
+bin/ota_swap.bat
 bin/data/crashes/
 bin/data/*.log
 bin/data/friends.cfg

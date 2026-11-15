@@ -285,6 +285,58 @@ namespace TitanGameHub
             return false;
         }
 
+        private static bool WriteAndRunOtaSwapBatch(string appDir, string stageDir, bool copyFullStage, string stagedExe, string currentExe, string shaFile, string pendingSha)
+        {
+            try
+            {
+                string batPath = Path.Combine(appDir, "ota_swap.bat");
+                int currentPid = Process.GetCurrentProcess().Id;
+
+                StringBuilder bat = new StringBuilder();
+                bat.AppendLine("@echo off");
+                bat.AppendLine("chcp 65001 >nul");
+                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
+                bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
+                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
+                if (copyFullStage)
+                {
+                    bat.AppendLine("xcopy /y /e \"" + stageDir + "\\*\" \"" + appDir + "\" >nul 2>&1");
+                }
+                else
+                {
+                    bat.AppendLine("copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1");
+                    bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 3 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
+                    bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 3 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
+                }
+                if (!string.IsNullOrEmpty(pendingSha) && !string.IsNullOrEmpty(shaFile))
+                {
+                    string shaDir = Path.GetDirectoryName(shaFile);
+                    if (!string.IsNullOrEmpty(shaDir))
+                        bat.AppendLine("if not exist \"" + shaDir + "\" mkdir \"" + shaDir + "\"");
+                    bat.AppendLine("(echo " + pendingSha + ")> \"" + shaFile + "\"");
+                }
+                bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
+                bat.AppendLine("start \"\" \"" + currentExe + "\"");
+                bat.AppendLine("del \"%~f0\"");
+
+                File.WriteAllText(batPath, bat.ToString(), new UTF8Encoding(false));
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = batPath,
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    WorkingDirectory = appDir
+                };
+                Process.Start(psi);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         public static void ExecutePendingAppHotSwapIfReady()
         {
             if (!_pendingAppHotSwap) return;
@@ -297,41 +349,13 @@ namespace TitanGameHub
                 return;
             }
 
-            try
+            string currentExe = Assembly.GetExecutingAssembly().Location;
+            string shaFile = Path.Combine(appDir, "data", "last_github_sha.txt");
+            if (WriteAndRunOtaSwapBatch(appDir, stageDir, true, stagedExe, currentExe, shaFile, _pendingGitHubSha))
             {
-                string batPath = Path.Combine(appDir, "ota_swap.bat");
-                string currentExe = Assembly.GetExecutingAssembly().Location;
-                int currentPid = Process.GetCurrentProcess().Id;
-
-                StringBuilder bat = new StringBuilder();
-                bat.AppendLine("@echo off");
-                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
-                bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
-                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
-                bat.AppendLine("xcopy /y /e \"" + stageDir + "\\*\" \"" + appDir + "\" >nul 2>&1");
-                if (!string.IsNullOrEmpty(_pendingGitHubSha))
-                {
-                    string shaFile = Path.Combine(appDir, "data", "last_github_sha.txt");
-                    bat.AppendLine("if not exist \"" + Path.GetDirectoryName(shaFile) + "\" mkdir \"" + Path.GetDirectoryName(shaFile) + "\"");
-                    bat.AppendLine("(echo " + _pendingGitHubSha + ")> \"" + shaFile + "\"");
-                }
-                bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
-                bat.AppendLine("start \"\" \"" + currentExe + "\"");
-                bat.AppendLine("del \"%~f0\"");
-
-                File.WriteAllText(batPath, bat.ToString(), Encoding.Default);
-
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = batPath,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WorkingDirectory = appDir
-                };
-                Process.Start(psi);
                 Environment.Exit(0);
             }
-            catch
+            else
             {
                 _pendingAppHotSwap = false;
             }
@@ -409,31 +433,15 @@ namespace TitanGameHub
                         return;
                     }
 
-                    string batPath = Path.Combine(appDir, "ota_swap.bat");
                     string currentExe = Assembly.GetExecutingAssembly().Location;
-                    int currentPid = Process.GetCurrentProcess().Id;
-
-                    StringBuilder bat = new StringBuilder();
-                    bat.AppendLine("@echo off");
-                    bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
-                    bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
-                    bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
-                    bat.AppendLine("xcopy /y /e \"" + stageDir + "\\*\" \"" + appDir + "\" >nul 2>&1");
-                    bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
-                    bat.AppendLine("start \"\" \"" + currentExe + "\"");
-                    bat.AppendLine("del \"%~f0\"");
-
-                    File.WriteAllText(batPath, bat.ToString(), Encoding.Default);
-
-                    ProcessStartInfo psi = new ProcessStartInfo
+                    if (WriteAndRunOtaSwapBatch(appDir, stageDir, true, stagedExe, currentExe, null, null))
                     {
-                        FileName = batPath,
-                        CreateNoWindow = true,
-                        UseShellExecute = false,
-                        WorkingDirectory = appDir
-                    };
-                    Process.Start(psi);
-                    Environment.Exit(0);
+                        Environment.Exit(0);
+                    }
+                    else
+                    {
+                        _isUpdatingBinary = false;
+                    }
                 }
             }
             catch
@@ -733,36 +741,10 @@ namespace TitanGameHub
                 if (OnOtaStatusChanged != null)
                     OnOtaStatusChanged("🚀 GitHub üzerinde yeni güncelleme bulundu! Uygulama güncellenip yeniden başlatılıyor...", 1);
 
-                string batPath = Path.Combine(appDir, "ota_swap.bat");
-                int currentPid = Process.GetCurrentProcess().Id;
-                StringBuilder bat = new StringBuilder();
-                bat.AppendLine("@echo off");
-                bat.AppendLine("chcp 65001 >nul");
-                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
-                bat.AppendLine("taskkill /f /pid " + currentPid + " >nul 2>&1");
-                bat.AppendLine("ping 127.0.0.1 -n 2 >nul");
-                bat.AppendLine("copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1");
-                bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 3 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
-                bat.AppendLine("if errorlevel 1 ( ping 127.0.0.1 -n 3 >nul & copy /y \"" + stagedExe + "\" \"" + currentExe + "\" >nul 2>&1 )");
-                if (catalogSynced && !string.IsNullOrEmpty(remoteSha))
+                if (WriteAndRunOtaSwapBatch(appDir, stageDir, false, stagedExe, currentExe, shaFile, catalogSynced ? remoteSha : null))
                 {
-                    bat.AppendLine("if not exist \"" + Path.GetDirectoryName(shaFile) + "\" mkdir \"" + Path.GetDirectoryName(shaFile) + "\"");
-                    bat.AppendLine("(echo " + remoteSha + ")> \"" + shaFile + "\"");
+                    Environment.Exit(0);
                 }
-                bat.AppendLine("rmdir /s /q \"" + stageDir + "\" >nul 2>&1");
-                bat.AppendLine("start \"\" \"" + currentExe + "\"");
-                bat.AppendLine("del \"%~f0\"");
-                File.WriteAllText(batPath, bat.ToString(), new UTF8Encoding(false));
-
-                ProcessStartInfo psi = new ProcessStartInfo
-                {
-                    FileName = batPath,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WorkingDirectory = appDir
-                };
-                Process.Start(psi);
-                Environment.Exit(0);
             }
             catch { }
         }
@@ -778,20 +760,20 @@ namespace TitanGameHub
                 {
                     string icoTarget = Path.Combine(baseDir, "app.ico");
                     string logoTarget = Path.Combine(baseDir, "app_logo.png");
-                    if (!File.Exists(icoTarget))
+                    using (WebClient awc = new WebClient())
                     {
-                        using (WebClient awc = new WebClient())
+                        awc.Proxy = null;
+                        byte[] icoBytes = awc.DownloadData("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/res/app.ico");
+                        if (icoBytes != null && icoBytes.Length > 256)
                         {
-                            awc.Proxy = null;
-                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/res/app.ico", icoTarget);
+                            if (!File.Exists(icoTarget) || new FileInfo(icoTarget).Length != icoBytes.Length)
+                                File.WriteAllBytes(icoTarget, icoBytes);
                         }
-                    }
-                    if (!File.Exists(logoTarget))
-                    {
-                        using (WebClient awc = new WebClient())
+                        byte[] logoBytes = awc.DownloadData("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/res/app_logo.png");
+                        if (logoBytes != null && logoBytes.Length > 256)
                         {
-                            awc.Proxy = null;
-                            awc.DownloadFile("https://raw.githubusercontent.com/berkekarabulut19-collab/titan-game-hub/" + refName + "/res/app_logo.png", logoTarget);
+                            if (!File.Exists(logoTarget) || new FileInfo(logoTarget).Length != logoBytes.Length)
+                                File.WriteAllBytes(logoTarget, logoBytes);
                         }
                     }
                 }

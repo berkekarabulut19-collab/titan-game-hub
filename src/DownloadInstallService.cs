@@ -1094,8 +1094,31 @@ namespace TitanGameHub
                             {
                                 foreach (SiteMirror mirror in retryAnalysis.Mirrors)
                                 {
+                                    if (mirror == null || string.IsNullOrEmpty(mirror.Url) || DownloadHostPolicy.IsAdShortener(mirror.Url))
+                                        continue;
+                                    bool acceptRetry;
+                                    MirrorTrustPolicy.DescribeVerdict(mirror.Url, profile, out acceptRetry);
+                                    if (!acceptRetry) continue;
+
+                                    string normUrl = DownloadHostPolicy.NormalizeDirectUrl(mirror.Url);
+                                    if (DownloadHostPolicy.NeedsBrowserSession(normUrl))
+                                    {
+                                        string embRetry;
+                                        if (TryEmbeddedBrowserDownload(profile, normUrl.StartsWith("//") ? "https:" + normUrl : normUrl, out embRetry))
+                                        {
+                                            string scanMsg;
+                                            if (ArchiveSecurityScanner.IsSafe(embRetry, out scanMsg))
+                                            {
+                                                ExtractArchiveAndConfigure(profile, embRetry, GetTargetInstallDirectoryForGame(profile));
+                                                return;
+                                            }
+                                            try { File.Delete(embRetry); } catch { }
+                                        }
+                                        continue;
+                                    }
+
                                     ReportProgress(string.Format("[2/4] {0} — Canlı bulunan ayna deneniyor: {1}...", profile.Name, mirror.HostName), 20, mirror.HostName);
-                                    if (TryDirectStreamDownload(profile, mirror.Url))
+                                    if (TryDirectStreamDownload(profile, normUrl))
                                     {
                                         return;
                                     }

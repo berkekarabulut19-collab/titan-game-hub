@@ -88,6 +88,8 @@ namespace TitanGameHub
                 win.Content = view;
 
                 bool finished = false;
+                bool downloadStarted = false;
+                CoreWebView2DownloadOperation activeOp = null;
                 DateTime deadline = DateTime.UtcNow.AddMinutes(Math.Max(5, timeoutMinutes));
 
                 Action<CoreWebView2> attachHandlers = delegate(CoreWebView2 core)
@@ -121,13 +123,19 @@ namespace TitanGameHub
                         {
                             try
                             {
-                                core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.All);
+                                string targetHost = "";
+                                try { targetHost = new Uri(url.StartsWith("//") ? "https:" + url : url).Host; } catch { }
+                                core.AddWebResourceRequestedFilter("*", CoreWebView2WebResourceContext.Document);
                                 core.WebResourceRequested += delegate(object sr, CoreWebView2WebResourceRequestedEventArgs er)
                                 {
                                     try
                                     {
-                                        er.Request.Headers.SetHeader("Referer", referer);
-                                        er.Request.Headers.SetHeader("Accept-Language", "en-US,en;q=0.9");
+                                        if (!string.IsNullOrEmpty(targetHost) &&
+                                            er.Request.Uri.IndexOf(targetHost, StringComparison.OrdinalIgnoreCase) >= 0)
+                                        {
+                                            er.Request.Headers.SetHeader("Referer", referer);
+                                            er.Request.Headers.SetHeader("Accept-Language", "en-US,en;q=0.9");
+                                        }
                                     }
                                     catch { }
                                 };
@@ -149,6 +157,8 @@ namespace TitanGameHub
 
                             CoreWebView2DownloadOperation op = e2.DownloadOperation;
                             if (op == null) return;
+                            downloadStarted = true;
+                            activeOp = op;
 
                             op.BytesReceivedChanged += delegate
                             {
@@ -188,26 +198,32 @@ namespace TitanGameHub
 
                         core.Navigate(url);
 
-                        // 12 sn içinde indirme başlamazsa sayfadaki arşiv linkini tıklamayı dene
+                        // İndirme başlamadıysa 2.5s, 5s, 8.5s, 13s, 18s aralıklarında sayfadaki indirme linkini/butonunu otomatik tıkla
                         ThreadPool.QueueUserWorkItem(delegate
                         {
-                            Thread.Sleep(12000);
-                            if (finished) return;
-                            try
+                            int[] delays = new int[] { 2500, 2500, 3500, 4500, 5000 };
+                            foreach (int waitMs in delays)
                             {
-                                view.Dispatcher.BeginInvoke(new Action(delegate
+                                Thread.Sleep(waitMs);
+                                if (finished || downloadStarted) return;
+                                try
                                 {
-                                    try
+                                    view.Dispatcher.BeginInvoke(new Action(delegate
                                     {
-                                        core.ExecuteScriptAsync(
-                                            "(function(){var s='a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button[hx-get],a[href*=\"download\"]';" +
-                                            "var a=document.querySelectorAll(s);" +
-                                            "if(a.length>0){a[0].click();return a.length;}return 0;})()");
-                                    }
-                                    catch { }
-                                }));
+                                        if (finished || downloadStarted) return;
+                                        try
+                                        {
+                                            core.ExecuteScriptAsync(
+                                                "(function(){var s='a[href$=\".rar\"],a[href$=\".zip\"],a[href$=\".7z\"],a[href*=\"/dl/\"],a[href*=\"/download\"],a.link-button,button.link-button,a[download],#downloadbtn,button[hx-get],a[href*=\"download\"]';" +
+                                                "var a=document.querySelectorAll(s);" +
+                                                "for(var i=0;i<a.length;i++){if(a[i]&&a[i].offsetParent!==null){a[i].click();return i+1;}}" +
+                                                "if(a.length>0){a[0].click();return a.length;}return 0;})()");
+                                        }
+                                        catch { }
+                                    }));
+                                }
+                                catch { }
                             }
-                            catch { }
                         });
                     }
                     catch (Exception ex)
@@ -268,7 +284,15 @@ namespace TitanGameHub
                                 if (string.IsNullOrEmpty(result.Error))
                                     result.Error = cancelled ? "İptal edildi" : "Zaman aşımı";
                                 finished = true;
-                                try { win.Dispatcher.BeginInvoke(new Action(delegate { try { win.Close(); } catch { } })); } catch { }
+                                try
+                                {
+                                    win.Dispatcher.BeginInvoke(new Action(delegate
+                                    {
+                                        try { if (activeOp != null) activeOp.Cancel(); } catch { }
+                                        try { win.Close(); } catch { }
+                                    }));
+                                }
+                                catch { }
                                 break;
                             }
                         }
