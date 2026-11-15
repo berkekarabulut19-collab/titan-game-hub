@@ -1894,9 +1894,9 @@ namespace TitanGameHub
             _btnAddToSteam = CreateSteamUtilityButton("➕ STEAM'E EKLE", "Tek tıkla Steam'e ekle veya Steam'den kaldır (Online Fix + Spacewar 480 otomatik hazırlanır • Sağ tık: toplu işlemler)");
             _btnAddToSteam.Click += delegate
             {
-                if (_selectedProfile == null || !_selectedProfile.IsInstalled)
+                if (_selectedProfile == null)
                 {
-                    _txtBottomStatus.Text = "Steam'e eklemek için önce kurulu bir oyun seçin.";
+                    _txtBottomStatus.Text = "Steam'e eklemek için önce bir oyun seçin.";
                     Win32.PlayTechChirp(false);
                     return;
                 }
@@ -1909,6 +1909,7 @@ namespace TitanGameHub
                 else
                 {
                     ok = SteamIntegrationService.AddGameToSteamShortcuts(_selectedProfile, out sMsg);
+                    if (ok) ProfileStore.SaveProfiles(_allProfiles);
                 }
                 _txtBottomStatus.Text = sMsg;
                 RefreshSteamShortcutButton(_selectedProfile);

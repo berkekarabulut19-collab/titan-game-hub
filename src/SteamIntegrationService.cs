@@ -103,7 +103,29 @@ namespace TitanGameHub
         public static bool AddGameToSteamShortcuts(GameProfile gp, out string message)
         {
             message = "";
-            if (gp == null || !gp.IsInstalled || string.IsNullOrEmpty(gp.ExecutablePath) || !File.Exists(gp.ExecutablePath))
+            if (gp == null)
+            {
+                message = "Steam'e eklemek için önce bir oyun seçin.";
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(gp.ExecutablePath) || !File.Exists(gp.ExecutablePath))
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(gp.WorkingDirectory) && Directory.Exists(gp.WorkingDirectory))
+                    {
+                        string resolvedExe = ProfileStore.FindMainExeInFolder(gp.WorkingDirectory);
+                        if (!string.IsNullOrEmpty(resolvedExe) && File.Exists(resolvedExe))
+                            gp.ExecutablePath = resolvedExe;
+                    }
+                    if (string.IsNullOrEmpty(gp.ExecutablePath) || !File.Exists(gp.ExecutablePath))
+                        GamePathResolver.TryRelocate(gp);
+                }
+                catch { }
+            }
+
+            if (string.IsNullOrEmpty(gp.ExecutablePath) || !File.Exists(gp.ExecutablePath))
             {
                 message = "Steam'e eklemek için oyunun bilgisayarda kurulu ve .exe yolunun geçerli olması gerekir.";
                 return false;
