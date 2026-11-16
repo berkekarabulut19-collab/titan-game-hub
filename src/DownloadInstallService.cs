@@ -1048,11 +1048,14 @@ namespace TitanGameHub
 
             try { ProfileStore.UnmarkGameRemoved(profile); } catch { }
 
-            string existingArchive = FindMatchingArchiveInDownloads(profile.Name);
-            if (!string.IsNullOrEmpty(existingArchive))
+            if (!(profile.IsInstalled && profile.UpdateAvailable))
             {
-                ExtractAndBindAsync(profile, existingArchive);
-                return;
+                string existingArchive = FindMatchingArchiveInDownloads(profile.Name);
+                if (!string.IsNullOrEmpty(existingArchive))
+                {
+                    ExtractAndBindAsync(profile, existingArchive);
+                    return;
+                }
             }
 
             _isBusy = true;
@@ -1166,7 +1169,7 @@ namespace TitanGameHub
                         if (!string.IsNullOrEmpty(cacheKey))
                             _preferredMirrorCache.TryGetValue(cacheKey, out cachedMirrorUrl);
                     }
-                    if (!string.IsNullOrEmpty(cachedMirrorUrl))
+                    if (!isUpdateDownload && !string.IsNullOrEmpty(cachedMirrorUrl))
                     {
                         int idxPref = candidates.FindIndex(delegate(SiteMirror m) { return string.Equals(m.Url, cachedMirrorUrl, StringComparison.OrdinalIgnoreCase); });
                         if (idxPref > 0)
