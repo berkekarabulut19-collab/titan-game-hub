@@ -1564,6 +1564,11 @@ namespace TitanGameHub
                 string destName = Path.GetFileName(destFilePath);
                 if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
 
+                if (File.Exists(destFilePath) && !File.Exists(destFilePath + ".aria2"))
+                {
+                    try { File.Delete(destFilePath); } catch { }
+                }
+
                 int conns = Math.Max(4, Math.Min(16, connections));
                 string ua = !string.IsNullOrEmpty(userAgent) ? userAgent : "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
 
@@ -1572,7 +1577,7 @@ namespace TitanGameHub
                 args.AppendFormat("--max-connection-per-server={0} --split={0} --min-split-size=2M ", conns);
                 args.Append("--stream-piece-selector=geom --file-allocation=none --continue=true ");
                 args.Append("--allow-overwrite=true --auto-file-renaming=false ");
-                args.Append("--max-tries=6 --retry-wait=1 --timeout=8 --connect-timeout=7 --lowest-speed-limit=64K ");
+                args.Append("--max-tries=8 --retry-wait=1 --timeout=10 --connect-timeout=8 ");
                 args.Append("--disable-ipv6=true --summary-interval=1 --console-log-level=notice ");
                 args.AppendFormat("--user-agent=\"{0}\" ", ua.Replace("\"", ""));
                 if (!string.IsNullOrEmpty(customReferer))
