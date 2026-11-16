@@ -4333,7 +4333,7 @@ namespace TitanGameHub
                     // Win32.RegisterHotKey(helper.Handle, 4, 0, 0x73); // F4 [DEVRE DISI: Standart oyun tuslari korundu]
                     Win32.RegisterHotKey(helper.Handle, 5, 0, 0x74); // F5
                     Win32.RegisterHotKey(helper.Handle, 6, 0, 0x75); // F6 (Live Turkish Subtitle HUD)
-                    Win32.RegisterHotKey(helper.Handle, 7, 0x0004, 0x09); // Shift+Tab (Steam In-Game Overlay)
+                    Win32.RegisterHotKey(helper.Handle, 7, 0x0004, 0x71); // Shift+F2 (Titan In-Game Overlay; Shift+Tab Steam'e bırakıldı)
                     Win32.RegisterHotKey(helper.Handle, 8, 0, 0x7B); // F12 (Steam Screenshot)
                     Win32.RegisterHotKey(helper.Handle, 9, 0, 0x7A); // F11 (Steam Big Picture Fullscreen)
                     Win32.RegisterHotKey(helper.Handle, 10, 0, 0x76); // F7 (In-Game Wiki & Guide Browser)
@@ -4684,7 +4684,7 @@ namespace TitanGameHub
             if (msg == Win32.WM_HOTKEY)
             {
                 int id = wParam.ToInt32();
-                if ((id == 5 || id == 7) && _overlay != null) // Shift+Tab / F5 (Steam In-Game Overlay)
+                if ((id == 5 || id == 7) && _overlay != null) // Shift+F2 / F5 (Titan In-Game Overlay)
                 {
                     if (_overlay.Visible)
                     {
@@ -5292,7 +5292,7 @@ namespace TitanGameHub
             mainStack.Children.Add(overlayCard);
             StackPanel overlayStack = (StackPanel)overlayCard.Child;
 
-            CheckBox chkShiftTab = CreateTelemetryCheckBox("[Shift + Tab] ve [F5] Oyun İçi Steam HUD Arayüzü");
+            CheckBox chkShiftTab = CreateTelemetryCheckBox("[Shift + F2] ve [F5] Titan Oyun İçi HUD Arayüzü (Steam Shift+Tab ile çakışmaz)");
             chkShiftTab.IsChecked = true;
             chkShiftTab.Checked += delegate { if (_overlay != null) _overlay.Show(); };
             chkShiftTab.Unchecked += delegate { if (_overlay != null) _overlay.Hide(); };
