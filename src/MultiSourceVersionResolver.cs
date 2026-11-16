@@ -220,7 +220,11 @@ namespace TitanGameHub
                         continue;
 
                     string v = ExtractVersion(title);
-                    if (string.IsNullOrEmpty(v)) continue;
+                    if (string.IsNullOrEmpty(v))
+                    {
+                        if (!string.IsNullOrEmpty(localVersionHint)) continue;
+                        v = "v1.0";
+                    }
 
                     version = v;
 

@@ -712,7 +712,7 @@ namespace TitanGameHub
 
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288;
 
                 // Katalogdaki DownloadUrl başka bir oyunun sayfasına işaret ediyorsa (çapraz karışma), yoksay ve canlı aramaya düş
                 string effectiveDownloadUrl = gp.DownloadUrl;
