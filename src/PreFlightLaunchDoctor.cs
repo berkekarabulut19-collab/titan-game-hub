@@ -83,6 +83,25 @@ namespace TitanGameHub
                 }
                 catch { }
 
+                // 3b. Verify dlllist.txt integrity (OnlineFix64.dll Defender tarafından silindiyse uyar / tekrar başlatmaya bırakma)
+                string dllListFile = Path.Combine(root, "dlllist.txt");
+                if (!gp.IsSteamManaged && File.Exists(dllListFile))
+                {
+                    string of64 = Path.Combine(root, "OnlineFix64.dll");
+                    if (!File.Exists(of64))
+                    {
+                        try { DefenderExclusionShield.AddFolderExclusion(Path.GetDirectoryName(root) ?? root, true); } catch { }
+                        if (!File.Exists(of64))
+                        {
+                            result.ReadyToLaunch = false;
+                            result.DiagnosticSummary =
+                                "🛡️ Windows Defender bu oyunun OnlineFix64.dll dosyasını silmiş!\n\n" +
+                                "Klasör Defender istisnasına eklendi. Oyunu '🗑 KALDIR' ile temizleyip '⬇ İNDİR'e basarak 1 tıkla yeniden kurduğunuzda sorunsuz açılacaktır.";
+                            return result;
+                        }
+                    }
+                }
+
                 // 4. Inspect system dependencies (DirectX & VC++ runtimes)
                 try
                 {
