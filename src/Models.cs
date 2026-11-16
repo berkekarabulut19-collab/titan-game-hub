@@ -106,12 +106,12 @@ namespace TitanGameHub
             int[] lNums = ExtractVersionNumbers(local);
             int[] rNums = ExtractVersionNumbers(remote);
 
-            // Biri tekil büyük Build numarası (>=100000), diğeri noktalı sürüm (1.2.3) ise format uyumsuzluğu vardır -> yanlış uyarı verme
+            // Biri Steam Build ID (>=10000), diğeri noktalı SemVer sürüm (<10000) ise format uyumsuzluğu vardır -> yanlış uyarı verme
             if (lNums.Length > 0 && rNums.Length > 0)
             {
-                bool lIsSingleBuild = lNums.Length == 1 && lNums[0] >= 10000;
-                bool rIsSingleBuild = rNums.Length == 1 && rNums[0] >= 10000;
-                if (lIsSingleBuild != rIsSingleBuild) return false;
+                bool lIsBuildId = lNums[0] >= 10000;
+                bool rIsBuildId = rNums[0] >= 10000;
+                if (lIsBuildId != rIsBuildId) return false;
 
                 int maxLen = Math.Max(lNums.Length, rNums.Length);
                 for (int i = 0; i < maxLen; i++)
@@ -159,13 +159,14 @@ namespace TitanGameHub
                 lower == "resmi • gameloop" || lower == "gameloop (kurulu)")
                 return "";
 
-            // DLC, Full Paket, Early Access, Online-Fix gibi etiketleri soy -> sadece gerçek sürüm kalsın
-            v = Regex.Replace(v, @"[•\|/]\s*\+?\d+\s*DLC.*$", "", RegexOptions.IgnoreCase);
+            // DLC, Full Paket, Deluxe, Early Access, Online-Fix gibi etiketleri soy -> sadece gerçek sürüm kalsın
+            v = Regex.Replace(v, @"[•\|/\s]*\+?\d+\s*DLC[s]?\b", " ", RegexOptions.IgnoreCase);
+            v = Regex.Replace(v, @"\b(Digital\s+Deluxe|Deluxe\s+Edition|Ultimate\s+Edition|Complete\s+Edition|Definitive\s+Edition|Anniversary\s+Edition|Game\s+of\s+the\s+Year|GOTY|Multi\d+|ElAmigos|FitGirl|DODI)\b", " ", RegexOptions.IgnoreCase);
             v = Regex.Replace(v, @"\s*[•\-–\|]\s*(Full\s*(Paket|Version|Sürüm|Surum)|Early\s*Access|Repack|Portable|Online[\s-]*Fix|Güncel|Guncel|Kurulu|Resmi).*$", "", RegexOptions.IgnoreCase);
             v = Regex.Replace(v, @"\s*\((Full\s*(Paket|Version|Sürüm)|Early\s*Access|Kurulu|Resmi|DLC|Online[\s-]*Fix)\)\s*", " ", RegexOptions.IgnoreCase);
-            v = Regex.Replace(v, @"\s+", " ").Trim();
+            v = Regex.Replace(v, @"[\s•\|]+", " ").Trim();
             v = Regex.Replace(v, @"^(v|ver\.?|version|build|sürüm|surum)\s*[:\-]?\s*", "", RegexOptions.IgnoreCase);
-            return v.Trim();
+            return v.Trim(' ', '-', '•', '|');
         }
 
         private static string NormalizeVersionLoose(string v)

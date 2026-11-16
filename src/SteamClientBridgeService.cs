@@ -473,7 +473,9 @@ namespace TitanGameHub
                         bool isGenericPlaceholder = string.Equals(cleanRemote, "Son Sürüm", StringComparison.OrdinalIgnoreCase) ||
                                                     string.Equals(cleanRemote, "Full Version", StringComparison.OrdinalIgnoreCase) ||
                                                     string.Equals(cleanRemote, "Latest", StringComparison.OrdinalIgnoreCase);
-                        if (!isGenericPlaceholder && GameProfile.IsRemoteVersionNewer(gp.Version, cleanRemote))
+                        if (!isGenericPlaceholder &&
+                            GameProfile.IsRemoteVersionNewer(gp.Version, cleanRemote) &&
+                            !UpdateLedger.IsUpToDate(gp, cleanRemote))
                         {
                             gp.RemoteVersion = cleanRemote;
                             reportMessage = string.Format("🔄 YENİ GÜNCELLEME BULUNDU! {0}: Yerel [{1}] -> Sitedeki Yeni Sürüm [{2}] ({3} sunucu hazır)",

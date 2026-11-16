@@ -367,6 +367,10 @@ namespace TitanGameHub
                 string wvScript = WebViewDownloadService.BuildAutoClickScript();
                 Check("WebView2 otomatik tıklama betiği btn-main ve download seçicilerini içerir",
                     !string.IsNullOrEmpty(wvScript) && wvScript.Contains(".btn-main") && wvScript.Contains("free download"), "");
+                Check("Aynı sürüm + DLC/Deluxe etiketi sahte güncelleme vermez",
+                    !GameProfile.IsRemoteVersionNewer("v1.5.3", "v1.5.3 • Digital Deluxe • +6 DLC • Full Paket"), "");
+                Check("Build ID ile SemVer farkı sahte güncelleme vermez",
+                    !GameProfile.IsRemoteVersionNewer("v1.5.3", "Build 26317497 • +2 DLC"), "");
             }
             finally
             {
