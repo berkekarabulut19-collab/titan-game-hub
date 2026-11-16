@@ -1667,8 +1667,27 @@ namespace TitanGameHub
             btnManualLink.Click += delegate { RunManualLinkInstall(); };
             actionToolbar.Children.Add(btnManualLink);
 
-            Button btnUninstall = CreateUtilityButtonSmall("🗑 KALDIR", "Seçili oyunu diskten ve katalogdan kaldır");
-            btnUninstall.Click += delegate { RunUninstallSelected(); };
+            Button btnUninstall = CreateUtilityButtonSmall("🗑 KALDIR", "Aktif indirmeyi/artıkları temizle veya kurulu oyunu kaldır");
+            btnUninstall.Click += delegate
+            {
+                if (_downloader != null && _downloader.IsBusy &&
+                    (_selectedProfile == null || _downloader.ActiveTargetProfile == null ||
+                     string.Equals(_downloader.ActiveTargetProfile.Id, _selectedProfile.Id, StringComparison.OrdinalIgnoreCase)))
+                {
+                    _downloader.CancelDownload();
+                    if (_downloader.ActiveTargetProfile != null)
+                        GameMaintenanceService.CleanupGameArtifacts(_downloader.ActiveTargetProfile);
+                    if (_txtDownloadStatus != null) _txtDownloadStatus.Text = "İndirme iptal edildi ve yalnızca bu oyunun geçici indirme artıkları temizlendi.";
+                    return;
+                }
+                if (_selectedProfile != null && !_selectedProfile.IsInstalled)
+                {
+                    GameMaintenanceService.CleanupGameArtifacts(_selectedProfile);
+                    if (_txtDownloadStatus != null) _txtDownloadStatus.Text = _selectedProfile.Name + " için geçici indirme artıkları temizlendi (kurulu oyunlara dokunulmadı).";
+                    return;
+                }
+                RunUninstallSelected();
+            };
             actionToolbar.Children.Add(btnUninstall);
 
             Button btnDisk = CreateUtilityButtonSmall("💾 DİSK", "Disk kullanım raporu ve geçici dosya temizliği");

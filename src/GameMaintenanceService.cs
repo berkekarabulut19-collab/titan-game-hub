@@ -26,6 +26,31 @@ namespace TitanGameHub
             public string Text = "";
         }
 
+        private static bool HasOtherInstalledGamesInFolder(string folder, GameProfile selfGp)
+        {
+            if (string.IsNullOrEmpty(folder)) return false;
+            try
+            {
+                string fFull = Path.GetFullPath(folder).TrimEnd('\\') + "\\";
+                string selfNorm = selfGp != null ? GameDeduplicationEngine.NormalizeGameTitle(selfGp.Name) : "";
+                foreach (GameProfile other in ProfileStore.LoadProfiles())
+                {
+                    if (other == null || string.IsNullOrEmpty(other.ExecutablePath)) continue;
+                    if (selfGp != null && (string.Equals(other.Id, selfGp.Id, StringComparison.OrdinalIgnoreCase) ||
+                        (!string.IsNullOrEmpty(selfNorm) && GameDeduplicationEngine.NormalizeGameTitle(other.Name) == selfNorm)))
+                        continue;
+
+                    string oPath = !string.IsNullOrEmpty(other.WorkingDirectory) ? other.WorkingDirectory : Path.GetDirectoryName(other.ExecutablePath);
+                    if (string.IsNullOrEmpty(oPath)) continue;
+                    string oFull = Path.GetFullPath(oPath).TrimEnd('\\') + "\\";
+                    if (oFull.StartsWith(fFull, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
         /// <summary>Oyunu kaldırır: klasörü siler, katalog kaydını temizler.</summary>
         public static bool Uninstall(GameProfile gp, bool deleteFiles, out string message)
         {
@@ -77,7 +102,8 @@ namespace TitanGameHub
                             string topName = Path.GetFileName(topGameFolder).ToLowerInvariant();
                             if (Directory.Exists(topGameFolder) &&
                                 topName != "games" && topName != "common" && topName != "steamapps" &&
-                                topName != "_incoming" && !topName.StartsWith("_staging"))
+                                topName != "_incoming" && !topName.StartsWith("_staging") &&
+                                !HasOtherInstalledGamesInFolder(topGameFolder, gp))
                             {
                                 deleteTarget = topGameFolder;
                             }
@@ -85,8 +111,16 @@ namespace TitanGameHub
                     }
                     catch { }
 
-                    ForceDeleteDirectoryCompletely(deleteTarget);
-                    message = "Oyun ve tüm dosyaları diskten sıfır kalıntıyla silindi: " + deleteTarget;
+                    if (HasOtherInstalledGamesInFolder(deleteTarget, gp))
+                    {
+                        message = "Güvenlik: '" + deleteTarget + "' klasöründe başka kurulu oyunlar olduğu için klasör silinmedi, yalnızca seçili oyunun kaydı kaldırıldı.";
+                        deleteFiles = false;
+                    }
+                    else
+                    {
+                        ForceDeleteDirectoryCompletely(deleteTarget);
+                        message = "Oyun ve tüm dosyaları diskten sıfır kalıntıyla silindi: " + deleteTarget;
+                    }
                 }
                 else
                 {
@@ -202,9 +236,9 @@ namespace TitanGameHub
                 try
                 {
                     string incDir = Path.Combine(root, "_incoming");
-                    if (Directory.Exists(incDir) && !string.IsNullOrEmpty(safe) && safe.Length >= 3)
+                    if (Directory.Exists(incDir) && !string.IsNullOrEmpty(safe) && safe.Length >= 4)
                     {
-                        foreach (string f in Directory.EnumerateFiles(incDir, "*" + safe + "*", SearchOption.TopDirectoryOnly))
+                        foreach (string f in Directory.EnumerateFiles(incDir, safe + "*", SearchOption.TopDirectoryOnly))
                         {
                             try { freed += new FileInfo(f).Length; File.Delete(f); } catch { }
                         }
