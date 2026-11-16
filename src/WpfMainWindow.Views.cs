@@ -4030,6 +4030,14 @@ namespace TitanGameHub
                 {
                     try
                     {
+                        bool hasOnlineFix = !string.IsNullOrEmpty(_selectedProfile.WorkingDirectory) &&
+                            (System.IO.File.Exists(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "OnlineFix64.dll")) ||
+                             System.IO.File.Exists(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "OnlineFix.ini")));
+                        if (hasOnlineFix && Process.GetProcessesByName("steam").Length == 0)
+                        {
+                            try { SteamClientBridgeService.ConnectAndBridgeSteamClient(_selectedProfile, true); System.Threading.Thread.Sleep(1500); } catch { }
+                        }
+
                         ProcessStartInfo psiDirect = new ProcessStartInfo
                         {
                             FileName = _selectedProfile.ExecutablePath,
@@ -4041,7 +4049,8 @@ namespace TitanGameHub
                             System.IO.File.Exists(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "steam_appid.txt")))
                             ? (System.IO.File.ReadAllText(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "steam_appid.txt")).Trim())
                             : "480";
-                        if (string.IsNullOrEmpty(bridgeAppId)) bridgeAppId = "480";
+                        if (string.IsNullOrEmpty(bridgeAppId) || (!_selectedProfile.IsSteamManaged && hasOnlineFix))
+                            bridgeAppId = "480";
                         psiDirect.EnvironmentVariables["SteamAppId"] = bridgeAppId;
                         psiDirect.EnvironmentVariables["SteamGameId"] = bridgeAppId;
                         psiDirect.EnvironmentVariables["SteamOverlayGameId"] = bridgeAppId;

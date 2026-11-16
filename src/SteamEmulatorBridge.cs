@@ -170,21 +170,26 @@ namespace TitanGameHub
                 ulong uniqueSteamId = baseSteamId + (hash % 900000000UL) + 1;
                 string steamIdStr = uniqueSteamId.ToString();
 
-                // 1. steam_appid.txt (Spacewar P2P bridge için 480)
-                File.WriteAllText(Path.Combine(root, "steam_appid.txt"), bridgeAppId, Encoding.ASCII);
+                // 1. steam_appid.txt (Spacewar P2P bridge için 480; Steam yönetimindeki oyunlara dokunma)
+                if (!gp.IsSteamManaged)
+                    File.WriteAllText(Path.Combine(root, "steam_appid.txt"), bridgeAppId, Encoding.ASCII);
 
-                // 2. OnlineFix.ini (yaygın OnlineFix varyantlarıyla uyumlu)
-                StringBuilder ofIni = new StringBuilder();
-                ofIni.AppendLine("[Main]");
-                ofIni.AppendLine("RealAppId=" + realAppId);
-                ofIni.AppendLine("FakeAppId=480");
-                ofIni.AppendLine("Language=turkish");
-                ofIni.AppendLine("PlayerName=" + user);
-                ofIni.AppendLine("SteamId64=" + steamIdStr);
-                ofIni.AppendLine("UseSpacewarP2P=true");
-                ofIni.AppendLine("UnlockAllDLC=true");
-                ofIni.AppendLine("Overlay=true");
-                File.WriteAllText(Path.Combine(root, "OnlineFix.ini"), ofIni.ToString(), Encoding.UTF8);
+                // 2. OnlineFix.ini: arşivden çıkan çalışan OnlineFix.ini varsa ASLA üzerine yazma
+                string ofIniPath = Path.Combine(root, "OnlineFix.ini");
+                if (!gp.IsSteamManaged && !File.Exists(ofIniPath))
+                {
+                    StringBuilder ofIni = new StringBuilder();
+                    ofIni.AppendLine("[Main]");
+                    ofIni.AppendLine("RealAppId=" + realAppId);
+                    ofIni.AppendLine("FakeAppId=480");
+                    ofIni.AppendLine("Language=turkish");
+                    ofIni.AppendLine("PlayerName=" + user);
+                    ofIni.AppendLine("SteamId64=" + steamIdStr);
+                    ofIni.AppendLine("UseSpacewarP2P=true");
+                    ofIni.AppendLine("UnlockAllDLC=true");
+                    ofIni.AppendLine("Overlay=true");
+                    File.WriteAllText(ofIniPath, ofIni.ToString(), new UTF8Encoding(false));
+                }
 
                 // 3. Goldberg / emülatör ayar hiyerarşisi (farklı loader'lar için uyumlu dosya seti)
                 string steamSettings = Path.Combine(root, "steam_settings");
@@ -209,18 +214,6 @@ namespace TitanGameHub
                 File.WriteAllText(Path.Combine(steamSettings, "force_language.txt"), "turkish", Encoding.ASCII);
 
                 File.WriteAllText(Path.Combine(steamSettings, "DLC.txt"), "1000=All DLC Unlock Pack\r\n", Encoding.UTF8);
-
-                // 4. steam_appid.txt yayılımı (ikili alt klasördeyse üst dizinlere de 480)
-                DirectoryInfo parent = Directory.GetParent(root);
-                if (parent != null && parent.Exists)
-                {
-                    try { File.WriteAllText(Path.Combine(parent.FullName, "steam_appid.txt"), bridgeAppId, Encoding.ASCII); } catch { }
-                    DirectoryInfo grandParent = Directory.GetParent(parent.FullName);
-                    if (grandParent != null && grandParent.Exists)
-                    {
-                        try { File.WriteAllText(Path.Combine(grandParent.FullName, "steam_appid.txt"), bridgeAppId, Encoding.ASCII); } catch { }
-                    }
-                }
 
                 return true;
             }

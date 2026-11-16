@@ -733,22 +733,29 @@ namespace TitanGameHub
             try
             {
                 string root = profile.WorkingDirectory;
-                string appId = string.IsNullOrEmpty(profile.SteamAppId) ? "480" : profile.SteamAppId;
+                string realAppId = string.IsNullOrEmpty(profile.SteamAppId) ? "480" : profile.SteamAppId;
                 string user = Environment.UserName;
 
-                // 1. steam_appid.txt
-                File.WriteAllText(Path.Combine(root, "steam_appid.txt"), appId, Encoding.ASCII);
+                // 1. steam_appid.txt: OnlineFix / Spacewar oyunlarında gerçek AppID yerine 480 (Spacewar) kullan;
+                // aksi halde Steam "oyuna sahip olan hesapla giriş yap" hatası verir.
+                string appIdPath = Path.Combine(root, "steam_appid.txt");
+                if (!profile.IsSteamManaged && (!File.Exists(appIdPath) || File.Exists(Path.Combine(root, "OnlineFix64.dll"))))
+                    File.WriteAllText(appIdPath, "480", Encoding.ASCII);
 
-                // 2. OnlineFix.ini
-                StringBuilder ofIni = new StringBuilder();
-                ofIni.AppendLine("[Main]");
-                ofIni.AppendLine("RealAppId=" + appId);
-                ofIni.AppendLine("FakeAppId=480");
-                ofIni.AppendLine("Language=turkish");
-                ofIni.AppendLine("UseSpacewarP2P=true");
-                ofIni.AppendLine("UnlockAllDLC=true");
-                ofIni.AppendLine("Overlay=true");
-                File.WriteAllText(Path.Combine(root, "OnlineFix.ini"), ofIni.ToString(), Encoding.UTF8);
+                // 2. OnlineFix.ini: arşivden çıkan orijinal OnlineFix.ini varsa ASLA ezme (BOM/section bozulur).
+                string ofIniPath = Path.Combine(root, "OnlineFix.ini");
+                if (!profile.IsSteamManaged && !File.Exists(ofIniPath))
+                {
+                    StringBuilder ofIni = new StringBuilder();
+                    ofIni.AppendLine("[Main]");
+                    ofIni.AppendLine("RealAppId=" + realAppId);
+                    ofIni.AppendLine("FakeAppId=480");
+                    ofIni.AppendLine("Language=turkish");
+                    ofIni.AppendLine("UseSpacewarP2P=true");
+                    ofIni.AppendLine("UnlockAllDLC=true");
+                    ofIni.AppendLine("Overlay=true");
+                    File.WriteAllText(ofIniPath, ofIni.ToString(), new UTF8Encoding(false));
+                }
 
                 // 3. Goldberg emulation structure
                 SteamEmulatorBridge.DeployFullEmulationSuite(profile, user);
