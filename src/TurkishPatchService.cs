@@ -527,20 +527,43 @@ namespace TitanGameHub
 
                 if (progressCallback != null) progressCallback("Türkçe dil ve altyazı yapılandırması hazırlanıyor...", 10);
 
-                // 1) Varsa indirilebilir yama paketini indir ve oyuna entegre et
+                // 1) Kayıtlı yama paketi varsa indir ve oyuna entegre et
                 bool packageApplied = false;
+                string appliedTitle = info != null ? info.PatchTitle : "";
                 if (info != null && !string.IsNullOrEmpty(info.DownloadUrl))
                 {
                     if (progressCallback != null) progressCallback("Türkçe yama paketi indiriliyor...", 25);
                     packageApplied = TryDownloadAndApplyPatchPackage(profile, workDir, info, progressCallback);
                 }
 
-                // 2) Unity oyunuysa (IL2CPP veya Mono) BepInEx + XUnity.AutoTranslator ile gerçek otomatik Türkçe çeviri kur
+                // 2) Kayıtlı paket yoksa internetten gerçek topluluk Türkçe yamasını canlı tara (GitHub + OyunÇeviri)
+                if (!packageApplied)
+                {
+                    if (progressCallback != null) progressCallback(profile.Name + " için canlı Türkçe yama taranıyor...", 22);
+                    string liveUrl, liveTitle;
+                    if (TryFindLiveCommunityPatchUrl(profile.Name, out liveUrl, out liveTitle))
+                    {
+                        TurkishPatchInfo liveInfo = new TurkishPatchInfo
+                        {
+                            GameName = profile.Name,
+                            PatchTitle = liveTitle,
+                            Author = "Topluluk Çeviri",
+                            Version = "Live",
+                            TargetSubFolder = "",
+                            DownloadUrl = liveUrl
+                        };
+                        if (progressCallback != null) progressCallback("Topluluk yaması bulundu — indiriliyor ve kuruluyor...", 35);
+                        packageApplied = TryDownloadAndApplyPatchPackage(profile, workDir, liveInfo, progressCallback);
+                        if (packageApplied) appliedTitle = liveTitle;
+                    }
+                }
+
+                // 3) Gerçek topluluk yaması bulunamadıysa ve Unity oyunuysa BepInEx + XUnity.AutoTranslator yedek kur
                 string translatorNote = "";
                 bool unityTranslatorInstalled = false;
-                if (IsUnityGameDirectory(workDir))
+                if (!packageApplied && IsUnityGameDirectory(workDir))
                 {
-                    if (progressCallback != null) progressCallback("Unity oyun motoru algılandı — canlı Türkçe çeviri eklentisi kuruluyor...", 42);
+                    if (progressCallback != null) progressCallback("Topluluk yaması bulunamadı — Unity otomatik Türkçe çeviri kuruluyor...", 45);
                     unityTranslatorInstalled = TryInstallUnityAutoTranslator(workDir, progressCallback, out translatorNote);
                 }
 
@@ -558,7 +581,7 @@ namespace TitanGameHub
                 if (progressCallback != null) progressCallback("Türkçe yama ve altyazı entegrasyonu tamamlandı!", 100);
                 ok = true;
                 if (packageApplied)
-                    message = "🇹🇷 " + profile.Name + " için Türkçe yama paketi indirildi ve oyuna entegre edildi.";
+                    message = "🇹🇷 " + profile.Name + " için topluluk Türkçe yaması indirildi ve oyuna kuruldu! (" + appliedTitle + ")";
                 else if (unityTranslatorInstalled)
                     message = "🇹🇷 " + profile.Name + " için gerçek zamanlı Unity Türkçe Çeviri Motoru (BepInEx + XUnity.AutoTranslator) kuruldu! " + translatorNote;
                 else
@@ -569,6 +592,132 @@ namespace TitanGameHub
                 ok = false;
                 message = "Türkçe yama yükleme hatası: " + ex.Message;
             }
+        }
+
+        private static bool TryFindLiveCommunityPatchUrl(string gameName, out string foundUrl, out string foundTitle)
+        {
+            foundUrl = null;
+            foundTitle = null;
+            if (string.IsNullOrWhiteSpace(gameName)) return false;
+
+            string clean = SiteParserService.CleanGameTitleForSearch(gameName);
+            if (string.IsNullOrWhiteSpace(clean) || clean.Length < 3) clean = gameName.Trim();
+
+            string normGame = Regex.Replace(clean.ToLowerInvariant(), @"[^a-z0-9]+", " ").Trim();
+            string[] words = normGame.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length == 0) return false;
+
+            try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12; } catch { }
+
+            // 1. GitHub topluluk Türkçe yama repoları (Releases veya doğrudan repo zip)
+            try
+            {
+                string q = Uri.EscapeDataString(clean + " turkce yama");
+                string ghSearch = "https://api.github.com/search/repositories?q=" + q + "&sort=stars&per_page=5";
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Proxy = null;
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "TitanGameHub/1.0");
+                    string json = wc.DownloadString(ghSearch);
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    Dictionary<string, object> root = ser.DeserializeObject(json) as Dictionary<string, object>;
+                    object itemsObj;
+                    if (root != null && root.TryGetValue("items", out itemsObj) && itemsObj is object[])
+                    {
+                        foreach (object itObj in (object[])itemsObj)
+                        {
+                            Dictionary<string, object> it = itObj as Dictionary<string, object>;
+                            if (it == null) continue;
+                            string fullName = it.ContainsKey("full_name") ? Convert.ToString(it["full_name"]) : "";
+                            string desc = it.ContainsKey("description") ? Convert.ToString(it["description"]) : "";
+                            string defBranch = it.ContainsKey("default_branch") ? Convert.ToString(it["default_branch"]) : "main";
+                            string hay = (fullName + " " + desc).ToLowerInvariant();
+                            if (hay.Contains("macos") || hay.Contains("android") || hay.Contains("linux")) continue;
+                            if (!hay.Contains("turk") && !hay.Contains("tr")) continue;
+
+                            int hits = 0;
+                            foreach (string w in words)
+                            {
+                                if (w.Length >= 3 && hay.Contains(w)) hits++;
+                            }
+                            if (hits == 0 || (words.Length >= 2 && hits < Math.Min(2, words.Length))) continue;
+
+                            // Release asset (.zip/.rar/.7z) var mı bak
+                            try
+                            {
+                                string relJson = wc.DownloadString("https://api.github.com/repos/" + fullName + "/releases/latest");
+                                Match am = Regex.Match(relJson, @"""browser_download_url""\s*:\s*""(https://[^""]+\.(?:zip|rar|7z))""", RegexOptions.IgnoreCase);
+                                if (am.Success)
+                                {
+                                    foundUrl = am.Groups[1].Value;
+                                    foundTitle = "GitHub: " + fullName;
+                                    return true;
+                                }
+                            }
+                            catch { }
+
+                            foundUrl = "https://github.com/" + fullName + "/archive/refs/heads/" + (string.IsNullOrEmpty(defBranch) ? "main" : defBranch) + ".zip";
+                            foundTitle = "GitHub: " + fullName;
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            // 2. OyunÇeviri.net WP-JSON API
+            try
+            {
+                string ocUrl = "https://oyunceviri.net/wp-json/wp/v2/posts?search=" + Uri.EscapeDataString(clean) + "&per_page=3&_fields=title,link,content";
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Proxy = null;
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+                    string json = wc.DownloadString(ocUrl);
+                    JavaScriptSerializer ser = new JavaScriptSerializer();
+                    object[] posts = ser.DeserializeObject(json) as object[];
+                    if (posts != null)
+                    {
+                        foreach (object po in posts)
+                        {
+                            Dictionary<string, object> p = po as Dictionary<string, object>;
+                            if (p == null) continue;
+                            string titleHtml = "";
+                            if (p.ContainsKey("title") && p["title"] is Dictionary<string, object>)
+                            {
+                                Dictionary<string, object> td = (Dictionary<string, object>)p["title"];
+                                if (td.ContainsKey("rendered")) titleHtml = Convert.ToString(td["rendered"]);
+                            }
+                            string tLow = titleHtml.ToLowerInvariant();
+                            int hits = 0;
+                            foreach (string w in words)
+                            {
+                                if (w.Length >= 3 && tLow.Contains(w)) hits++;
+                            }
+                            if (hits == 0) continue;
+
+                            string bodyHtml = "";
+                            if (p.ContainsKey("content") && p["content"] is Dictionary<string, object>)
+                            {
+                                Dictionary<string, object> cd = (Dictionary<string, object>)p["content"];
+                                if (cd.ContainsKey("rendered")) bodyHtml = Convert.ToString(cd["rendered"]);
+                            }
+                            Match dm = Regex.Match(bodyHtml, @"https?://[^\s""'<>]+\.(?:zip|rar|7z|exe)", RegexOptions.IgnoreCase);
+                            if (dm.Success)
+                            {
+                                foundUrl = WebUtility.HtmlDecode(dm.Groups[0].Value);
+                                foundTitle = "OyunÇeviri: " + Regex.Replace(titleHtml, "<[^>]+>", "").Trim();
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            return false;
         }
 
         private static bool IsUnityGameDirectory(string workDir)
