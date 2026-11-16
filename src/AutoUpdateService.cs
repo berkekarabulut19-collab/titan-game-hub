@@ -90,6 +90,7 @@ namespace TitanGameHub
             {
                 using (WebClient wc = new WebClient())
                 {
+                    wc.Proxy = null;
                     wc.Encoding = Encoding.UTF8;
                     wc.Headers.Add("User-Agent", "TitanGameHub/7.0");
                     string raw = wc.DownloadString(OtaChannelUrl + "/json?poll=1&since=48h");

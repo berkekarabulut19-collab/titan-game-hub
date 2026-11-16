@@ -38,7 +38,7 @@ namespace TitanGameHub
                 Author = "TürkçeÇeviri Ekibi",
                 Version = "v1.2",
                 TargetSubFolder = "Pal/Content/Paks",
-                DownloadUrl = "https://raw.githubusercontent.com/TitanEngine/GamePatches/main/palworld_tr.zip"
+                DownloadUrl = null
             });
 
             RegisterPatch(new TurkishPatchInfo
@@ -48,7 +48,7 @@ namespace TitanGameHub
                 Author = "Topluluk Çeviri Grubu",
                 Version = "v2.0",
                 TargetSubFolder = "BepInEx/plugins",
-                DownloadUrl = "https://raw.githubusercontent.com/TitanEngine/GamePatches/main/lethal_tr.zip"
+                DownloadUrl = null
             });
 
             RegisterPatch(new TurkishPatchInfo
@@ -58,7 +58,7 @@ namespace TitanGameHub
                 Author = "ForestTR",
                 Version = "v1.0",
                 TargetSubFolder = "SonsOfTheForest_Data",
-                DownloadUrl = "https://raw.githubusercontent.com/TitanEngine/GamePatches/main/soft_tr.zip"
+                DownloadUrl = null
             });
 
             RegisterPatch(new TurkishPatchInfo
@@ -68,7 +68,7 @@ namespace TitanGameHub
                 Author = "KorkuÇeviri",
                 Version = "v0.10",
                 TargetSubFolder = "Phasmophobia_Data",
-                DownloadUrl = "https://raw.githubusercontent.com/TitanEngine/GamePatches/main/phasmo_tr.zip"
+                DownloadUrl = null
             });
 
             // Assassin's Creed serisi — Türkçe altyazı/dil desteği otomatik etkinleştirilir ve bağlanır
@@ -590,6 +590,17 @@ namespace TitanGameHub
                 if (!File.Exists(tempFile)) return false;
                 FileInfo fi = new FileInfo(tempFile);
                 if (fi.Length < 64) return false;
+
+                // HTML hata sayfasını (.zip/.pak diye) asla oyun klasörüne kopyalama
+                try
+                {
+                    byte[] head = new byte[(int)Math.Min(128, fi.Length)];
+                    using (FileStream hfs = File.OpenRead(tempFile)) { hfs.Read(head, 0, head.Length); }
+                    string headStr = Encoding.ASCII.GetString(head).TrimStart().ToLowerInvariant();
+                    if (headStr.StartsWith("<!doctype") || headStr.StartsWith("<html") || headStr.StartsWith("<head"))
+                        return false;
+                }
+                catch { }
 
                 string targetDir = workDir;
                 if (info != null && !string.IsNullOrEmpty(info.TargetSubFolder))
