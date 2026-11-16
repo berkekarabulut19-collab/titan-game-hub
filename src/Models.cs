@@ -1014,7 +1014,7 @@ namespace TitanGameHub
 
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; }
                 using (WebClient wc = new WebClient())
                 {
                     wc.Encoding = Encoding.UTF8;

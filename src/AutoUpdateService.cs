@@ -40,7 +40,7 @@ namespace TitanGameHub
 
         public void Start(List<GameProfile> catalog)
         {
-            ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+            try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
             _pollTimer = new Timer(delegate { CheckForUpdates(catalog, false); }, null, 2000, 25000);
             ThreadPool.QueueUserWorkItem(delegate
             {
@@ -492,7 +492,7 @@ namespace TitanGameHub
                     byte[] zipBytes = File.ReadAllBytes(tempZip);
                     try { File.Delete(tempZip); } catch { }
 
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
                     using (WebClient wc = new WebClient())
                     {
                         wc.Headers.Add("User-Agent", "TitanGameHub/7.0");

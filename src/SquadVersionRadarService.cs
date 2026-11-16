@@ -135,7 +135,7 @@ namespace TitanGameHub
                         (p2pSwarmUrl ?? "").Replace("#", "")
                     });
 
-                    ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                    try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
                     using (WebClient wc = new WebClient())
                     {
                         wc.Encoding = Encoding.UTF8;

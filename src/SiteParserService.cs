@@ -1583,7 +1583,7 @@ namespace TitanGameHub
                     if (bm.Success) appId = bm.Groups[1].Value;
                 }
 
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
                 using (FastSizeWebClient wc = new FastSizeWebClient(4500))
                 {
                     wc.Proxy = null;
@@ -1647,7 +1647,7 @@ namespace TitanGameHub
 
                     try
                     {
-                        ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                        try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
                         using (FastSizeWebClient jwc = new FastSizeWebClient(4500))
                         {
                             jwc.Proxy = null;
@@ -1667,7 +1667,7 @@ namespace TitanGameHub
 
                 if (!string.IsNullOrEmpty(gp.DirectMirrorUrl) && gp.DirectMirrorUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 {
-                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                    try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
                     HttpWebRequest req = (HttpWebRequest)WebRequest.Create(gp.DirectMirrorUrl);
                     req.Method = "HEAD";
                     req.Timeout = 5000;

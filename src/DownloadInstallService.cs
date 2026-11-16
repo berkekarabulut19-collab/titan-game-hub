@@ -217,12 +217,17 @@ namespace TitanGameHub
                         ServicePointManager.UseNagleAlgorithm = false;
 
                         long fsz = handoff.ExpectedTotalBytes;
-                        int segs = (fsz >= 1000L * 1024 * 1024) ? 32 : ((fsz >= 250L * 1024 * 1024) ? 24 : 16);
-                        if (url.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            handoff.ResolvedDirectUrl.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0)
+                        int ariaConns = (url.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                         handoff.ResolvedDirectUrl.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0) ? 8 : 12;
+                        if (TryAria2HttpDownload(profile, handoff.ResolvedDirectUrl, destFile, fsz, url, handoff.ResolvedCookies, handoff.ResolvedUserAgent, ariaConns))
                         {
-                            segs = Math.Min(segs, 12);
+                            downloadedPath = destFile;
+                            return true;
                         }
+                        if (_cancelRequested) return false;
+
+                        int segs = (fsz >= 250L * 1024 * 1024) ? 16 : 12;
+                        if (ariaConns < 12) segs = Math.Min(segs, 8);
                         ReportProgress(string.Format("[2/4] {0} — {1}x Turbo çoklu bağlantı aktarımına geçildi...", profile.Name, segs), 26, segs + "x Turbo");
 
                         _activeTurboUserAgent = handoff.ResolvedUserAgent;
@@ -316,7 +321,7 @@ namespace TitanGameHub
 
         public DownloadInstallService()
         {
-            ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072; // TLS 1.2
+            try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; } // TLS 1.2+1.3
             KernelLatencyOptimizer.OptimizeNetworkStack();
             StartDownloadsFolderWatcher();
         }
@@ -464,7 +469,7 @@ namespace TitanGameHub
             accountToken = null;
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072;
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072; }
                 string ua = "Mozilla/5.0";
 
                 lock (_gofileLock)
@@ -1513,6 +1518,136 @@ namespace TitanGameHub
             catch { }
         }
 
+        private static string FindAria2Executable()
+        {
+            string baseDir = AppDomain.CurrentDomain.BaseDirectory;
+            string[] cands = new string[]
+            {
+                Path.Combine(baseDir, "aria2c.exe"),
+                Path.Combine(baseDir, "res", "aria2", "aria2c.exe"),
+                Path.Combine(baseDir, "res", "aria2c.exe")
+            };
+            foreach (string c in cands)
+            {
+                if (File.Exists(c)) return c;
+            }
+            return null;
+        }
+
+        private static double ParseSizeToMB(string numStr, string unit)
+        {
+            double val;
+            if (!double.TryParse(numStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out val))
+                return 0;
+            string u = (unit ?? "").ToUpperInvariant();
+            if (u.StartsWith("G")) return val * 1024.0;
+            if (u.StartsWith("K")) return val / 1024.0;
+            if (u == "B") return val / 1048576.0;
+            return val;
+        }
+
+        /// <summary>
+        /// Dinamik piece-stealing (aria2c) ile yüksek hızlı ve dalgalanmasız çoklu-bağlantı HTTP/HTTPS indirici.
+        /// 64 KB/sn altına düşen yavaş soketleri otomatik kesip hızlı bağlantılara devreder.
+        /// </summary>
+        private bool TryAria2HttpDownload(
+            GameProfile profile, string directUrl, string destFilePath, long expectedBytes,
+            string customReferer, string authCookie, string userAgent, int connections)
+        {
+            string ariaExe = FindAria2Executable();
+            if (string.IsNullOrEmpty(ariaExe) || string.IsNullOrEmpty(directUrl) || string.IsNullOrEmpty(destFilePath))
+                return false;
+
+            try
+            {
+                string destDir = Path.GetDirectoryName(destFilePath);
+                string destName = Path.GetFileName(destFilePath);
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) Directory.CreateDirectory(destDir);
+
+                int conns = Math.Max(4, Math.Min(16, connections));
+                string ua = !string.IsNullOrEmpty(userAgent) ? userAgent : "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
+
+                StringBuilder args = new StringBuilder();
+                args.AppendFormat("\"{0}\" -d \"{1}\" -o \"{2}\" ", directUrl, destDir, destName);
+                args.AppendFormat("--max-connection-per-server={0} --split={0} --min-split-size=2M ", conns);
+                args.Append("--stream-piece-selector=geom --file-allocation=none --continue=true ");
+                args.Append("--allow-overwrite=true --auto-file-renaming=false ");
+                args.Append("--max-tries=6 --retry-wait=1 --timeout=8 --connect-timeout=7 --lowest-speed-limit=64K ");
+                args.Append("--disable-ipv6=true --summary-interval=1 --console-log-level=notice ");
+                args.AppendFormat("--user-agent=\"{0}\" ", ua.Replace("\"", ""));
+                if (!string.IsNullOrEmpty(customReferer))
+                    args.AppendFormat("--referer=\"{0}\" ", customReferer.Replace("\"", ""));
+                if (!string.IsNullOrEmpty(authCookie))
+                    args.AppendFormat("--header=\"Cookie: {0}\" ", authCookie.Replace("\"", ""));
+
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = ariaExe,
+                    Arguments = args.ToString(),
+                    CreateNoWindow = true,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true
+                };
+
+                ReportProgress(string.Format("[2/4] {0} — {1}x Dinamik Turbo (aria2) başlatılıyor...", profile.Name, conns), 26, conns + "x Turbo");
+
+                using (Process p = Process.Start(psi))
+                {
+                    try { p.PriorityClass = ProcessPriorityClass.AboveNormal; } catch { }
+
+                    p.OutputDataReceived += delegate(object s, DataReceivedEventArgs ev)
+                    {
+                        if (string.IsNullOrEmpty(ev.Data)) return;
+                        try
+                        {
+                            Match m = Regex.Match(ev.Data, @"([0-9\.]+)([KMGT]?i?B)/([0-9\.]+)([KMGT]?i?B)\((\d+)%\).*?DL:([0-9\.]+)([KMGT]?i?B)(?:\s+ETA:([^\]]+))?");
+                            if (m.Success)
+                            {
+                                double recMb = ParseSizeToMB(m.Groups[1].Value, m.Groups[2].Value);
+                                double totMb = ParseSizeToMB(m.Groups[3].Value, m.Groups[4].Value);
+                                int dlPct;
+                                int.TryParse(m.Groups[5].Value, out dlPct);
+                                double speedMb = ParseSizeToMB(m.Groups[6].Value, m.Groups[7].Value);
+                                string etaStr = m.Groups[8].Success ? (" • kalan " + m.Groups[8].Value.Trim()) : "";
+
+                                int uiPct = Math.Min(85, 25 + (dlPct * 60) / 100);
+                                ReportProgress(
+                                    string.Format("[2/4] {0} İndiriliyor ({1}x Turbo): {2:0.0} MB / {3:0.0} MB{4}", profile.Name, conns, recMb, totMb, etaStr),
+                                    uiPct,
+                                    string.Format("{0:0.0} MB/sn", speedMb));
+                            }
+                        }
+                        catch { }
+                    };
+                    p.ErrorDataReceived += delegate { };
+                    p.BeginOutputReadLine();
+                    p.BeginErrorReadLine();
+
+                    while (!p.WaitForExit(350))
+                    {
+                        if (_cancelRequested)
+                        {
+                            try { p.Kill(); } catch { }
+                            return false;
+                        }
+                    }
+
+                    if (!_cancelRequested && p.ExitCode == 0 && File.Exists(destFilePath))
+                    {
+                        long gotLen = new FileInfo(destFilePath).Length;
+                        if (gotLen >= 1024 * 1024 && (expectedBytes <= 0 || gotLen >= expectedBytes - 65536))
+                        {
+                            ReportProgress(string.Format("[2/4] {0} İndirme Tamamlandı: {1:0.0} MB — Arşiv doğrulanıyor...", profile.Name, gotLen / 1048576.0), 85, "Doğrulanıyor");
+                            return true;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return false;
+        }
+
         /// <summary>
         /// Multi-segment parallel HTTP Range downloader (8x-12x Turbo) with .segmap resume support.
         /// Falls back cleanly to single-stream if server rejects 206 Partial Content or any segment fails.
@@ -1627,8 +1762,8 @@ namespace TitanGameHub
                                 sReq.Proxy = null;
                                 sReq.UserAgent = !string.IsNullOrEmpty(_activeTurboUserAgent) ? _activeTurboUserAgent : "Mozilla/5.0 (Windows NT 10.0; Win64; x64)";
                                 sReq.Referer = customReferer;
-                                sReq.Timeout = 15000;
-                                sReq.ReadWriteTimeout = 15000;
+                                sReq.Timeout = 10000;
+                                sReq.ReadWriteTimeout = 8000;
                                 sReq.AllowReadStreamBuffering = false;
                                 sReq.KeepAlive = true;
                                 sReq.AutomaticDecompression = DecompressionMethods.None;
@@ -1647,7 +1782,7 @@ namespace TitanGameHub
                                     using (Stream rs = sResp.GetResponseStream())
                                     using (FileStream fs = new FileStream(partialFile, FileMode.Open, FileAccess.Write, FileShare.ReadWrite, 4194304, FileOptions.RandomAccess))
                                     {
-                                        try { if (rs.CanTimeout) rs.ReadTimeout = 10000; } catch { }
+                                        try { if (rs.CanTimeout) rs.ReadTimeout = 7000; } catch { }
                                         fs.Seek(curPos, SeekOrigin.Begin);
                                         byte[] buf = new byte[4194304]; // 4 MB ultra-throughput streaming buffer
                                         long remaining = (segEnd - curPos) + 1;
@@ -1961,10 +2096,21 @@ namespace TitanGameHub
                             if (ServicePointManager.DefaultConnectionLimit < 512) ServicePointManager.DefaultConnectionLimit = 512;
                             ServicePointManager.Expect100Continue = false;
                             ServicePointManager.UseNagleAlgorithm = false;
-                            int segs = (fullSize >= 1000L * 1024 * 1024) ? 32 : ((fullSize >= 250L * 1024 * 1024) ? 24 : 16);
-                            if (directUrl.IndexOf("gofile.io", StringComparison.OrdinalIgnoreCase) >= 0)
-                                segs = Math.Min(segs, 10); // GoFile ücretsiz API aşırı bağlantıda 429 verebilir -> 10 dengeli paralel stream
-                            if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
+                            int segs = (fullSize >= 250L * 1024 * 1024) ? 16 : 12;
+                            if (directUrl.IndexOf("gofile.io", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                directUrl.IndexOf("megadb", StringComparison.OrdinalIgnoreCase) >= 0)
+                                segs = Math.Min(segs, 8); // GoFile/MegaDB 429 koruması -> 8 dengeli paralel stream
+
+                            if (TryAria2HttpDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, null, Math.Min(12, segs)))
+                            {
+                                receivedTotal = fullSize;
+                                multiDone = true;
+                            }
+                            else if (_cancelRequested)
+                            {
+                                return false;
+                            }
+                            else if (TryParallelSegmentedDownload(profile, directUrl, partialFile, fullSize, customReferer, authCookie, segs))
                             {
                                 receivedTotal = fullSize;
                                 multiDone = true;

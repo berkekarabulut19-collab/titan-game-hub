@@ -232,7 +232,7 @@ namespace TitanGameHub
                         return;
                     }
 
-                    ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12;
+                    try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
                     string json;
                     using (WebClient wc = new WebClient())
                     {
@@ -565,7 +565,7 @@ namespace TitanGameHub
             string tempFile = null;
             try
             {
-                ServicePointManager.SecurityProtocol = (SecurityProtocolType)3072 | SecurityProtocolType.Tls12 | SecurityProtocolType.Tls11 | SecurityProtocolType.Tls;
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12; } catch { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | SecurityProtocolType.Tls12; }
                 string tempRoot = Path.Combine(Path.GetTempPath(), "TitanTurkishPatches");
                 if (!Directory.Exists(tempRoot)) Directory.CreateDirectory(tempRoot);
 
