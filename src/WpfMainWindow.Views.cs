@@ -4327,19 +4327,11 @@ namespace TitanGameHub
                 if (_hwndSource != null)
                 {
                     _hwndSource.AddHook(HwndHook);
-                    // Win32.RegisterHotKey(helper.Handle, 1, 0, 0x70); // F1 [DEVRE DISI: Standart oyun tuslari korundu]
-                    // Win32.RegisterHotKey(helper.Handle, 2, 0, 0x71); // F2 [DEVRE DISI: Standart oyun tuslari korundu]
-                    // Win32.RegisterHotKey(helper.Handle, 3, 0, 0x72); // F3 [DEVRE DISI: Standart oyun tuslari korundu]
-                    // Win32.RegisterHotKey(helper.Handle, 4, 0, 0x73); // F4 [DEVRE DISI: Standart oyun tuslari korundu]
-                    Win32.RegisterHotKey(helper.Handle, 5, 0, 0x74); // F5
-                    Win32.RegisterHotKey(helper.Handle, 6, 0, 0x75); // F6 (Live Turkish Subtitle HUD)
-                    Win32.RegisterHotKey(helper.Handle, 7, 0x0004, 0x71); // Shift+F2 (Titan In-Game Overlay; Shift+Tab Steam'e bırakıldı)
-                    Win32.RegisterHotKey(helper.Handle, 8, 0, 0x7B); // F12 (Steam Screenshot)
-                    Win32.RegisterHotKey(helper.Handle, 9, 0, 0x7A); // F11 (Steam Big Picture Fullscreen)
-                    Win32.RegisterHotKey(helper.Handle, 10, 0, 0x76); // F7 (In-Game Wiki & Guide Browser)
-                    Win32.RegisterHotKey(helper.Handle, 11, 0, 0x77); // F8 (In-Game Pinned Notes)
-                    Win32.RegisterHotKey(helper.Handle, 12, 0, 0x78); // F9 (OSD Gamepad Keyboard)
-                    Win32.RegisterHotKey(helper.Handle, 13, 0x0004, 0x7A); // Shift + F11 (Live Benchmark Recorder)
+                    // Oyun ve Steam tuşlarıyla (QuickSave F5, Steam Screenshot F12, Tam Ekran F11, Shift+Tab) çakışmaması için
+                    // yalnızca Insert ve Ctrl+Alt kombinasyonları küresel kısayol olarak kaydedilir.
+                    Win32.RegisterHotKey(helper.Handle, 7, 0, 0x2D); // Insert (Titan Oyun İçi Overlay)
+                    Win32.RegisterHotKey(helper.Handle, 6, 0x0001 | 0x0002, 0x54); // Ctrl + Alt + T (Canlı Altyazı HUD)
+                    Win32.RegisterHotKey(helper.Handle, 13, 0x0004, 0x7A); // Shift + F11 (Canlı Benchmark)
                     Win32.RegisterHotKey(helper.Handle, 14, 0x0001 | 0x0002, 0x46); // Ctrl + Alt + F (Universal Frame Gen)
                     QosNetworkJitterShield.StartShield();
                 }
@@ -4684,7 +4676,7 @@ namespace TitanGameHub
             if (msg == Win32.WM_HOTKEY)
             {
                 int id = wParam.ToInt32();
-                if ((id == 5 || id == 7) && _overlay != null) // Shift+F2 / F5 (Titan In-Game Overlay)
+                if (id == 7 && _overlay != null) // Insert (Titan In-Game Overlay)
                 {
                     if (_overlay.Visible)
                     {
@@ -5292,7 +5284,7 @@ namespace TitanGameHub
             mainStack.Children.Add(overlayCard);
             StackPanel overlayStack = (StackPanel)overlayCard.Child;
 
-            CheckBox chkShiftTab = CreateTelemetryCheckBox("[Shift + F2] ve [F5] Titan Oyun İçi HUD Arayüzü (Steam Shift+Tab ile çakışmaz)");
+            CheckBox chkShiftTab = CreateTelemetryCheckBox("[Insert] Titan Oyun İçi HUD Arayüzü (Steam Shift+Tab ve F5-F12 ile çakışmaz)");
             chkShiftTab.IsChecked = true;
             chkShiftTab.Checked += delegate { if (_overlay != null) _overlay.Show(); };
             chkShiftTab.Unchecked += delegate { if (_overlay != null) _overlay.Hide(); };

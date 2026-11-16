@@ -37,9 +37,9 @@ namespace TitanGameHub
             st.ConfigPath = ini;
             st.IsDeployed = File.Exists(ini);
             st.HookMethod = "DirectX DXGI Trampoline Hook & Topmost OSD";
-            st.ShortcutKey = "Shift + F2 veya F10";
+            st.ShortcutKey = "Insert veya F10";
             st.DiagnosticSummary = st.IsDeployed
-                ? "🟢 DirectX Oyun İçi OSD & Lobi Paneli Aktif (Shift+F2)!"
+                ? "🟢 DirectX Oyun İçi OSD & Lobi Paneli Aktif (Insert)!"
                 : "⚪ Oyun İçi OSD henüz kurulmadı (1-tıkla aktif edilebilir).";
 
             return st;
@@ -64,7 +64,7 @@ namespace TitanGameHub
                     "; =========================================================\r\n" +
                     "[Overlay]\r\n" +
                     "Enabled = true\r\n" +
-                    "ToggleKey = Shift+F2\r\n" +
+                    "ToggleKey = Insert\r\n" +
                     "SecondaryKey = F10\r\n" +
                     "ShowFps = true\r\n" +
                     "ShowFrametimeGraph = true\r\n" +
@@ -84,7 +84,7 @@ namespace TitanGameHub
                 File.WriteAllText(iniTarget, iniContent, Encoding.UTF8);
 
                 message = "✅ DirectX Oyun İçi ImGui OSD Köprüsü Kuruldu!\n\n" +
-                          "• Oyun esnasında 'Shift + F2' veya 'F10' basarak lobi sohbetini ve donanım göstergelerini açabilirsiniz.\n" +
+                          "• Oyun esnasında 'Insert' veya 'F10' basarak lobi sohbetini ve donanım göstergelerini açabilirsiniz.\n" +
                           "• Canlı FPS, %1 Low, P2P Ping ve CPU/RAM monitörü oyun içi ekrana kancalandı.";
                 return true;
             }

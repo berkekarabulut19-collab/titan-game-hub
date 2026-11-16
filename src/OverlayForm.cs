@@ -269,7 +269,7 @@ namespace TitanGameHub
 
             _btnResumeGame = new Button
             {
-        Text = "✕ OYUNA DÖN (Shift+F2 / Esc)",
+        Text = "✕ OYUNA DÖN (Insert / Esc)",
                 Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Color.White,
                 BackColor = Color.FromArgb(147, 51, 234),
@@ -606,7 +606,7 @@ namespace TitanGameHub
 
             _lblFooterHint = new Label
             {
-        Text = "Arayüzü kapatmak ve anında oyuna dönmek için Shift + F2 veya Esc tuşuna basın.",
+        Text = "Arayüzü kapatmak ve anında oyuna dönmek için Insert veya Esc tuşuna basın.",
                 Font = new Font("Segoe UI", 8.5f, FontStyle.Italic),
                 ForeColor = Color.FromArgb(143, 152, 160),
                 Location = new Point(startX + totalCardsW - 480, footerY),
@@ -623,7 +623,7 @@ namespace TitanGameHub
             // Populate Friends and Achievements
             PopulateInitialFriends();
             PopulateAchievementsList();
-            AppendSystemChatMessage("Spacewar (480) Canlı Lobi sohbeti bağlandı. Shift+F2 veya F5 ile istediğiniz zaman erişebilirsiniz.");
+            AppendSystemChatMessage("Spacewar (480) Canlı Lobi sohbeti bağlandı. Insert tuşuyla istediğiniz zaman erişebilirsiniz.");
         }
 
         private Button CreateQuickToolButton(string text, int y)
