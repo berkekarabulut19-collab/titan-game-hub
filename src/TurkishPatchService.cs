@@ -535,28 +535,133 @@ namespace TitanGameHub
                     packageApplied = TryDownloadAndApplyPatchPackage(profile, workDir, info, progressCallback);
                 }
 
-                // 2) Evrensel dil/altyazı yapılandırmasını uygula ve bağla
-                if (progressCallback != null) progressCallback("Türkçe altyazı ve dil dosyaları oyuna bağlanıyor...", 60);
+                // 2) Unity oyunuysa (IL2CPP veya Mono) BepInEx + XUnity.AutoTranslator ile gerçek otomatik Türkçe çeviri kur
+                string translatorNote = "";
+                bool unityTranslatorInstalled = false;
+                if (IsUnityGameDirectory(workDir))
+                {
+                    if (progressCallback != null) progressCallback("Unity oyun motoru algılandı — canlı Türkçe çeviri eklentisi kuruluyor...", 42);
+                    unityTranslatorInstalled = TryInstallUnityAutoTranslator(workDir, progressCallback, out translatorNote);
+                }
+
+                // 3) Evrensel dil/altyazı yapılandırmasını uygula ve bağla
+                if (progressCallback != null) progressCallback("Türkçe altyazı ve dil dosyaları oyuna bağlanıyor...", 70);
                 ApplyUniversalTurkishLocalization(profile, workDir);
 
-                // 3) Motor/oyun yapılandırma dosyalarında dil Türkçe'ye çekilir (varsa)
-                if (progressCallback != null) progressCallback("Oyun yapılandırması Türkçe olarak güncelleniyor...", 80);
+                // 4) Motor/oyun yapılandırma dosyalarında dil Türkçe'ye çekilir (varsa)
+                if (progressCallback != null) progressCallback("Oyun yapılandırması Türkçe olarak güncelleniyor...", 85);
                 TryForceTurkishInKnownConfigs(workDir);
 
-                // 4) Kurulum kaydı
-                WriteInstallMarker(profile, workDir, info, packageApplied);
+                // 5) Kurulum kaydı
+                WriteInstallMarker(profile, workDir, info, packageApplied || unityTranslatorInstalled);
 
                 if (progressCallback != null) progressCallback("Türkçe yama ve altyazı entegrasyonu tamamlandı!", 100);
                 ok = true;
                 if (packageApplied)
-                    message = "🇹🇷 " + profile.Name + " için Türkçe yama paketi indirildi ve oyuna entegre edildi. Dil/altyazı ayarları bağlandı.";
+                    message = "🇹🇷 " + profile.Name + " için Türkçe yama paketi indirildi ve oyuna entegre edildi.";
+                else if (unityTranslatorInstalled)
+                    message = "🇹🇷 " + profile.Name + " için gerçek zamanlı Unity Türkçe Çeviri Motoru (BepInEx + XUnity.AutoTranslator) kuruldu! " + translatorNote;
                 else
-                    message = "🇹🇷 " + profile.Name + " için Türkçe dil ve altyazı yapılandırması uygulandı, oyuna bağlandı. (Resmî altyazı destekliyse oyun içinde Türkçe aktif olur.)";
+                    message = "🇹🇷 " + profile.Name + " için Türkçe dil ayarları uygulandı (oyunun kendi dosyalarında Türkçe varsa aktif olur).";
             }
             catch (Exception ex)
             {
                 ok = false;
                 message = "Türkçe yama yükleme hatası: " + ex.Message;
+            }
+        }
+
+        private static bool IsUnityGameDirectory(string workDir)
+        {
+            if (string.IsNullOrEmpty(workDir) || !Directory.Exists(workDir)) return false;
+            if (File.Exists(Path.Combine(workDir, "UnityPlayer.dll")) ||
+                File.Exists(Path.Combine(workDir, "GameAssembly.dll")))
+                return true;
+            try
+            {
+                foreach (string d in Directory.GetDirectories(workDir, "*_Data", SearchOption.TopDirectoryOnly))
+                {
+                    if (Directory.Exists(Path.Combine(d, "Managed")) || File.Exists(Path.Combine(d, "globalgamemanagers")))
+                        return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        private static bool TryInstallUnityAutoTranslator(string workDir, Action<string, int> progressCallback, out string detail)
+        {
+            detail = "";
+            try
+            {
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288 | SecurityProtocolType.Tls12; } catch { }
+                bool isIl2Cpp = File.Exists(Path.Combine(workDir, "GameAssembly.dll"));
+
+                string bepUrl = isIl2Cpp
+                    ? "https://github.com/BepInEx/BepInEx/releases/download/v6.0.0-pre.2/BepInEx-Unity.IL2CPP-win-x64-6.0.0-pre.2.zip"
+                    : "https://github.com/BepInEx/BepInEx/releases/download/v5.4.23.6/BepInEx_win_x64_5.4.23.6.zip";
+                string xuUrl = isIl2Cpp
+                    ? "https://github.com/bbepis/XUnity.AutoTranslator/releases/download/v5.6.3.1/XUnity.AutoTranslator-BepInEx-IL2CPP-5.6.3.1.zip"
+                    : "https://github.com/bbepis/XUnity.AutoTranslator/releases/download/v5.6.3.1/XUnity.AutoTranslator-BepInEx-5.6.3.1.zip";
+
+                string cacheDir = Path.Combine(Path.GetTempPath(), "TitanUnityTranslatorCache");
+                if (!Directory.Exists(cacheDir)) Directory.CreateDirectory(cacheDir);
+
+                string bepZip = Path.Combine(cacheDir, Path.GetFileName(new Uri(bepUrl).AbsolutePath));
+                string xuZip = Path.Combine(cacheDir, Path.GetFileName(new Uri(xuUrl).AbsolutePath));
+
+                using (WebClient wc = new WebClient())
+                {
+                    wc.Proxy = null;
+                    wc.Headers.Add("User-Agent", "TitanGameHub/1.0");
+                    if (!File.Exists(bepZip) || new FileInfo(bepZip).Length < 50000)
+                    {
+                        if (progressCallback != null) progressCallback("BepInEx yükleyicisi indiriliyor...", 48);
+                        wc.DownloadFile(bepUrl, bepZip);
+                    }
+                    if (!File.Exists(xuZip) || new FileInfo(xuZip).Length < 50000)
+                    {
+                        if (progressCallback != null) progressCallback("XUnity.AutoTranslator Türkçe modülü indiriliyor...", 56);
+                        wc.DownloadFile(xuUrl, xuZip);
+                    }
+                }
+
+                if (!File.Exists(bepZip) || !File.Exists(xuZip)) return false;
+
+                bool ok1 = DownloadInstallService.ExtractArchiveCore(bepZip, workDir);
+                bool ok2 = DownloadInstallService.ExtractArchiveCore(xuZip, workDir);
+                if (!ok1 || !ok2) return false;
+
+                string cfgDir = Path.Combine(workDir, "BepInEx", "config");
+                if (!Directory.Exists(cfgDir)) Directory.CreateDirectory(cfgDir);
+                string cfgPath = Path.Combine(cfgDir, "AutoTranslatorConfig.ini");
+                string cfgText =
+                    "[Service]\r\n" +
+                    "Endpoint=GoogleTranslateV2\r\n" +
+                    "FallbackEndpoint=GoogleTranslate\r\n" +
+                    "[General]\r\n" +
+                    "Language=tr\r\n" +
+                    "FromLanguage=en\r\n" +
+                    "[Files]\r\n" +
+                    "Directory=Translation\\{Lang}\\Text\r\n" +
+                    "[TextFrameworks]\r\n" +
+                    "EnableUGUI=True\r\n" +
+                    "EnableNGUI=True\r\n" +
+                    "EnableTextMeshPro=True\r\n" +
+                    "EnableTextMesh=True\r\n" +
+                    "[Behaviour]\r\n" +
+                    "MaxCharactersPerTranslation=250\r\n" +
+                    "ResizeUIFontSize=True\r\n" +
+                    "EnableBatching=True\r\n";
+                SafeWriteAllText(cfgPath, cfgText, new UTF8Encoding(false));
+
+                detail = isIl2Cpp ? "(Unity IL2CPP)" : "(Unity Mono)";
+                return true;
+            }
+            catch (Exception ex)
+            {
+                detail = ex.Message;
+                return false;
             }
         }
 
