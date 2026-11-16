@@ -3045,6 +3045,8 @@ namespace TitanGameHub
                 // 2. FRESH INSTALLATION (İlk Kez Kurulan Oyun)
                 ReportProgress(string.Format("{0} — [3/5] {1} Arşivi Çıkartılıyor [CRC:{2}]...", profile.Name, magicFmt, hashTag), 60, "Çıkartılıyor...");
                 if (!Directory.Exists(targetDir)) Directory.CreateDirectory(targetDir);
+                // Çıkartma başlamadan önce hedef klasörü Defender istisnasına al (winmm.dll / OnlineFix64.dll silinmesin)
+                try { DefenderExclusionShield.AddFolderExclusion(targetDir); } catch { }
 
                 bool extracted = RunExtractionWithProgress(archivePath, targetDir, 66, profile.Name);
                 if (!extracted)

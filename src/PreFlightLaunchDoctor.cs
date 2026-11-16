@@ -47,7 +47,8 @@ namespace TitanGameHub
             try
             {
                 string root = gp.WorkingDirectory;
-                string appId = string.IsNullOrEmpty(gp.SteamAppId) ? "480" : gp.SteamAppId;
+                bool hasOnlineFix = File.Exists(Path.Combine(root, "OnlineFix64.dll")) || File.Exists(Path.Combine(root, "OnlineFix.ini"));
+                string appId = (!gp.IsSteamManaged && hasOnlineFix) ? "480" : (string.IsNullOrEmpty(gp.SteamAppId) ? "480" : gp.SteamAppId);
 
                 // 1. Check steam_appid.txt
                 string appIdFile = Path.Combine(root, "steam_appid.txt");
@@ -57,10 +58,16 @@ namespace TitanGameHub
                     result.RepairedItemsCount++;
                 }
 
-                // 2. Check for missing steam_api64.dll / steam_api.dll (frequently deleted by Defender)
-                string api64 = Path.Combine(root, "steam_api64.dll");
-                string api32 = Path.Combine(root, "steam_api.dll");
-                bool hasApi = File.Exists(api64) || File.Exists(api32);
+                // 2. Check for missing steam_api64.dll / steam_api.dll (also check Unity Plugins\x86_64 subfolders)
+                bool hasApi = File.Exists(Path.Combine(root, "steam_api64.dll")) || File.Exists(Path.Combine(root, "steam_api.dll"));
+                if (!hasApi)
+                {
+                    try
+                    {
+                        hasApi = Directory.GetFiles(root, "steam_api*.dll", SearchOption.AllDirectories).Length > 0;
+                    }
+                    catch { }
+                }
 
                 if (!hasApi)
                 {

@@ -4038,23 +4038,33 @@ namespace TitanGameHub
                             try { SteamClientBridgeService.ConnectAndBridgeSteamClient(_selectedProfile, true); System.Threading.Thread.Sleep(1500); } catch { }
                         }
 
-                        ProcessStartInfo psiDirect = new ProcessStartInfo
-                        {
-                            FileName = _selectedProfile.ExecutablePath,
-                            WorkingDirectory = _selectedProfile.WorkingDirectory,
-                            Arguments = "",
-                            UseShellExecute = false
-                        };
                         string bridgeAppId = (!string.IsNullOrEmpty(_selectedProfile.WorkingDirectory) &&
                             System.IO.File.Exists(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "steam_appid.txt")))
                             ? (System.IO.File.ReadAllText(System.IO.Path.Combine(_selectedProfile.WorkingDirectory, "steam_appid.txt")).Trim())
                             : "480";
                         if (string.IsNullOrEmpty(bridgeAppId) || (!_selectedProfile.IsSteamManaged && hasOnlineFix))
                             bridgeAppId = "480";
-                        psiDirect.EnvironmentVariables["SteamAppId"] = bridgeAppId;
-                        psiDirect.EnvironmentVariables["SteamGameId"] = bridgeAppId;
-                        psiDirect.EnvironmentVariables["SteamOverlayGameId"] = bridgeAppId;
-                        proc = Process.Start(psiDirect);
+
+                        if (hasOnlineFix && OnlineFixLaunchInjector.NeedsDirectInjection(_selectedProfile.WorkingDirectory))
+                        {
+                            proc = OnlineFixLaunchInjector.LaunchWithOnlineFixInjection(
+                                _selectedProfile.ExecutablePath, _selectedProfile.WorkingDirectory, bridgeAppId);
+                        }
+
+                        if (proc == null)
+                        {
+                            ProcessStartInfo psiDirect = new ProcessStartInfo
+                            {
+                                FileName = _selectedProfile.ExecutablePath,
+                                WorkingDirectory = _selectedProfile.WorkingDirectory,
+                                Arguments = "",
+                                UseShellExecute = false
+                            };
+                            psiDirect.EnvironmentVariables["SteamAppId"] = bridgeAppId;
+                            psiDirect.EnvironmentVariables["SteamGameId"] = bridgeAppId;
+                            psiDirect.EnvironmentVariables["SteamOverlayGameId"] = bridgeAppId;
+                            proc = Process.Start(psiDirect);
+                        }
                     }
                     catch { proc = null; }
                 }
