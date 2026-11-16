@@ -638,10 +638,10 @@ namespace TitanGameHub
 
             SafeWriteAllText(Path.Combine(steamSettingsDir, "force_language.txt"), "turkish", Encoding.ASCII);
             SafeWriteAllText(Path.Combine(settingsSub, "language.txt"), "turkish", Encoding.ASCII);
-            SafeWriteAllText(Path.Combine(workDir, "steam_appid.txt"), string.IsNullOrEmpty(profile.SteamAppId) ? "480" : profile.SteamAppId, Encoding.ASCII);
+            bool hasOf = File.Exists(Path.Combine(workDir, "OnlineFix64.dll")) || File.Exists(Path.Combine(workDir, "OnlineFix.ini"));
+            SafeWriteAllText(Path.Combine(workDir, "steam_appid.txt"), hasOf ? "480" : (string.IsNullOrEmpty(profile.SteamAppId) ? "480" : profile.SteamAppId), Encoding.ASCII);
 
-            // OnlineFix / Goldberg varyantları
-            TrySetIniValue(Path.Combine(workDir, "OnlineFix.ini"), "Main", "Language", "turkish");
+            // Goldberg varyantları (OnlineFix.ini [Hashes] bütünlüğü için orijinal OnlineFix.ini'ye dokunma)
             TrySetIniValue(Path.Combine(steamSettingsDir, "configs.user.ini"), "Language", "language", "turkish");
             TrySetIniValue(Path.Combine(steamSettingsDir, "configs.app.ini"), "Language", "language", "turkish");
 

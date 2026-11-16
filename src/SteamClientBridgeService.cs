@@ -255,17 +255,22 @@ namespace TitanGameHub
                 }
 
                 string onlineFixIni = Path.Combine(root, "OnlineFix.ini");
-                string iniContent =
-                    "[Main]\r\n" +
-                    "RealAppId=" + realAppId + "\r\n" +
-                    "FakeAppId=480\r\n" +
-                    "Language=turkish\r\n" +
-                    "PlayerName=" + persona + "\r\n" +
-                    "SteamId64=" + steamId + "\r\n" +
-                    "UseSpacewarP2P=true\r\n" +
-                    "UnlockAllDLC=true\r\n" +
-                    "Overlay=true\r\n";
-                File.WriteAllText(onlineFixIni, iniContent, Encoding.UTF8);
+                // Arşivden çıkan orijinal OnlineFix.ini ([Hashes], [Interfaces], [Depots]) varsa ASLA ezme;
+                // ezilirse OnlineFix64.dll "Self-protection failed. Error code: 4" hatası verir.
+                if (!File.Exists(onlineFixIni))
+                {
+                    string iniContent =
+                        "[Main]\r\n" +
+                        "RealAppId=" + realAppId + "\r\n" +
+                        "FakeAppId=480\r\n" +
+                        "Language=turkish\r\n" +
+                        "PlayerName=" + persona + "\r\n" +
+                        "SteamId64=" + steamId + "\r\n" +
+                        "UseSpacewarP2P=true\r\n" +
+                        "UnlockAllDLC=true\r\n" +
+                        "Overlay=true\r\n";
+                    File.WriteAllText(onlineFixIni, iniContent, new UTF8Encoding(false));
+                }
             }
             catch { }
         }

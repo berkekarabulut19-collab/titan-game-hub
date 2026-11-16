@@ -297,25 +297,29 @@ namespace TitanGameHub
                 // 1. Repair steam_appid.txt
                 string appId = string.IsNullOrEmpty(gp.SteamAppId) ? "480" : gp.SteamAppId;
                 string appIdPath = Path.Combine(root, "steam_appid.txt");
-                File.WriteAllText(appIdPath, appId, Encoding.ASCII);
+                bool hasOf = File.Exists(Path.Combine(root, "OnlineFix64.dll")) || File.Exists(Path.Combine(root, "OnlineFix.ini"));
+                File.WriteAllText(appIdPath, (!gp.IsSteamManaged && hasOf) ? "480" : appId, Encoding.ASCII);
                 repairedCount++;
 
                 // 2. Deploy Full Goldberg Emulation Suite
                 SteamEmulatorBridge.DeployFullEmulationSuite(gp, Environment.UserName);
                 repairedCount++;
 
-                // 3. Re-inject OnlineFix.ini
+                // 3. Re-inject OnlineFix.ini (yalnızca yoksa oluştur; orijinal [Hashes] dosyasını asla ezme)
                 string onlineFixIni = Path.Combine(root, "OnlineFix.ini");
-                StringBuilder ofIni = new StringBuilder();
-                ofIni.AppendLine("[Main]");
-                ofIni.AppendLine("RealAppId=" + appId);
-                ofIni.AppendLine("FakeAppId=480");
-                ofIni.AppendLine("Language=turkish");
-                ofIni.AppendLine("UseSpacewarP2P=true");
-                ofIni.AppendLine("UnlockAllDLC=true");
-                ofIni.AppendLine("Overlay=true");
-                File.WriteAllText(onlineFixIni, ofIni.ToString(), Encoding.UTF8);
-                repairedCount++;
+                if (!gp.IsSteamManaged && !File.Exists(onlineFixIni))
+                {
+                    StringBuilder ofIni = new StringBuilder();
+                    ofIni.AppendLine("[Main]");
+                    ofIni.AppendLine("RealAppId=" + appId);
+                    ofIni.AppendLine("FakeAppId=480");
+                    ofIni.AppendLine("Language=turkish");
+                    ofIni.AppendLine("UseSpacewarP2P=true");
+                    ofIni.AppendLine("UnlockAllDLC=true");
+                    ofIni.AppendLine("Overlay=true");
+                    File.WriteAllText(onlineFixIni, ofIni.ToString(), new UTF8Encoding(false));
+                    repairedCount++;
+                }
 
                 // 4. Re-locate Main Executable if path broken
                 if (string.IsNullOrEmpty(gp.ExecutablePath) || !File.Exists(gp.ExecutablePath))
