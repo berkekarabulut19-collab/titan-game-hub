@@ -33,6 +33,7 @@ namespace TitanGameHub
         private int _storeDisplayLimit = 150;
         private System.Windows.Controls.ScrollViewer _storeScrollViewer;
         private GameProfile _selectedProfile;
+        private readonly HashSet<string> _versionResolveInFlight = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private TelemetryEngine _telemetry;
         private OverlayForm _overlay;
@@ -4194,6 +4195,16 @@ namespace TitanGameHub
             _txtHeroCategory.Text = (safeCat + "  •  " + safePlayers + "  •  " + safeSize).ToUpperInvariant();
             _txtHeroDesc.Text = string.IsNullOrEmpty(gp.Description) ? (gp.Name + " — Spacewar 480 eşli oyun lobisi.") : gp.Description;
 
+            if (SiteParserService.IsGenericVersionText(gp.Version))
+            {
+                string hintVer = SiteParserService.TryExtractVersionFromHints(gp);
+                if (!SiteParserService.IsGenericVersionText(hintVer))
+                {
+                    gp.Version = hintVer;
+                    gp.RemoteVersion = hintVer;
+                }
+            }
+
             string safeAppId = string.IsNullOrEmpty(gp.SteamAppId) ? "480" : gp.SteamAppId;
             if (safeAppId.StartsWith("http", StringComparison.OrdinalIgnoreCase) || safeAppId.Length > 10) safeAppId = "480";
             bool hasRealUpdate = gp.UpdateAvailable && !UpdateLedger.IsUpToDate(gp, gp.RemoteVersion);
@@ -4211,6 +4222,53 @@ namespace TitanGameHub
             _txtSteamBarLastPlayed.Text = gp.LastPlayedText ?? "Henüz Oynanmadı";
             _txtSteamBarPlayTime.Text = gp.FormattedPlayTime;
             _txtSteamBarSizeVersion.Text = safeSize + " • " + gp.Version;
+
+            if (SiteParserService.IsGenericVersionText(gp.Version))
+            {
+                string verKey = !string.IsNullOrEmpty(gp.Id) ? gp.Id : gp.Name;
+                bool startLookup = false;
+                lock (_versionResolveInFlight)
+                {
+                    if (!string.IsNullOrEmpty(verKey) && !_versionResolveInFlight.Contains(verKey))
+                    {
+                        _versionResolveInFlight.Add(verKey);
+                        startLookup = true;
+                    }
+                }
+                if (startLookup)
+                {
+                    GameProfile targetGp = gp;
+                    string cachedSafeSize = safeSize;
+                    System.Threading.ThreadPool.QueueUserWorkItem(delegate
+                    {
+                        try
+                        {
+                            string resolvedVer = SiteParserService.ResolveLiveDisplayVersion(targetGp);
+                            if (!SiteParserService.IsGenericVersionText(resolvedVer))
+                            {
+                                Dispatcher.BeginInvoke(new Action(delegate
+                                {
+                                    targetGp.Version = resolvedVer;
+                                    targetGp.RemoteVersion = resolvedVer;
+                                    if (_selectedProfile == targetGp)
+                                    {
+                                        bool upd = targetGp.UpdateAvailable && !UpdateLedger.IsUpToDate(targetGp, targetGp.RemoteVersion);
+                                        _txtHeroVersionBadge.Text = "SÜRÜM: " + targetGp.Version + (upd ? (" -> " + targetGp.RemoteVersion + " GÜNCELLEME!") : "");
+                                        _txtSteamBarSizeVersion.Text = cachedSafeSize + " • " + targetGp.Version;
+                                        if (_txtP2PVersionStatus != null && targetGp.IsInstalled)
+                                            _txtP2PVersionStatus.Text = "Durum: 🟢 BİLGİSAYARDA YÜKLÜ (" + targetGp.Version + " • Spacewar AppID 480 Aktif)";
+                                    }
+                                }));
+                            }
+                        }
+                        catch { }
+                        finally
+                        {
+                            lock (_versionResolveInFlight) { _versionResolveInFlight.Remove(verKey); }
+                        }
+                    });
+                }
+            }
             _txtSteamBarCloudStatus.Text = gp.IsInstalled ? "✔ Yüklü • Spacewar P2P Hazır" : "☁ Bulut Mağazada Hazır";
 
             _btnHeroFav.Content = gp.IsFavorite ? "★ FAVORİDE" : "☆ FAVORİ";

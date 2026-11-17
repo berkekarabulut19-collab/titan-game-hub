@@ -1739,5 +1739,159 @@ namespace TitanGameHub
                 catch { }
             });
         }
+
+        private static readonly Dictionary<string, string> _steamBuildCache = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        public static bool IsGenericVersionText(string ver)
+        {
+            if (string.IsNullOrEmpty(ver) || string.IsNullOrEmpty(ver.Trim())) return true;
+            for (int i = 0; i < ver.Length; i++)
+            {
+                if (char.IsDigit(ver[i])) return false;
+            }
+            return true;
+        }
+
+        public static string ParseSteamCmdBuildId(string json)
+        {
+            if (string.IsNullOrEmpty(json)) return null;
+            Match m = Regex.Match(json, @"""branches""\s*:\s*\{[^}]*""public""\s*:\s*\{[^}]*""buildid""\s*:\s*""?(\d+)""?", RegexOptions.IgnoreCase);
+            if (!m.Success)
+                m = Regex.Match(json, @"""public""\s*:\s*\{[^}]*""buildid""\s*:\s*""?(\d+)""?", RegexOptions.IgnoreCase);
+            if (m.Success && m.Groups[1].Value.Length >= 4)
+                return "Build " + m.Groups[1].Value;
+            return null;
+        }
+
+        public static string TryExtractVersionFromHints(GameProfile gp)
+        {
+            if (gp == null) return null;
+
+            string[] textSources = new string[] { gp.Name, gp.DownloadUrl, gp.Description };
+            for (int i = 0; i < textSources.Length; i++)
+            {
+                string src = textSources[i];
+                if (string.IsNullOrEmpty(src)) continue;
+
+                Match mv = Regex.Match(src, @"(?i)(?:^|[\s\-_\(\[])(v\d+(?:\.\d+)+[a-z0-9\-]*)\b");
+                if (mv.Success) return mv.Groups[1].Value;
+
+                Match mb = Regex.Match(src, @"(?i)\bbuild[\s\._-]*(\d{5,9})\b");
+                if (mb.Success) return "Build " + mb.Groups[1].Value;
+            }
+
+            if (gp.IsInstalled && !string.IsNullOrEmpty(gp.ExecutablePath) && System.IO.File.Exists(gp.ExecutablePath))
+            {
+                try
+                {
+                    System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(gp.ExecutablePath);
+                    string raw = !string.IsNullOrEmpty(fvi.ProductVersion) ? fvi.ProductVersion.Trim() : (fvi.FileVersion != null ? fvi.FileVersion.Trim() : "");
+                    if (!string.IsNullOrEmpty(raw))
+                    {
+                        Match pm = Regex.Match(raw, @"(\d+\.\d+(?:\.\d+){0,2})");
+                        if (pm.Success)
+                        {
+                            string clean = pm.Groups[1].Value;
+                            if (clean != "0.0.0.0" && clean != "0.0.0" && clean != "0.0" && clean != "1.0.0.0")
+                                return "v" + clean;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return null;
+        }
+
+        public static string TryResolveSteamBuildId(GameProfile gp)
+        {
+            if (gp == null) return null;
+            try
+            {
+                string appId = null;
+                if (!string.IsNullOrEmpty(gp.SteamAppId) && gp.SteamAppId != "480" && Regex.IsMatch(gp.SteamAppId.Trim(), @"^\d+$"))
+                    appId = gp.SteamAppId.Trim();
+
+                if (string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(gp.BannerUrl))
+                {
+                    Match bm = Regex.Match(gp.BannerUrl, @"/apps/(\d+)/");
+                    if (bm.Success) appId = bm.Groups[1].Value;
+                }
+
+                if (!string.IsNullOrEmpty(appId))
+                {
+                    lock (_steamBuildCache)
+                    {
+                        string cached;
+                        if (_steamBuildCache.TryGetValue(appId, out cached))
+                            return cached;
+                    }
+                }
+
+                try { ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072 | (SecurityProtocolType)12288; } catch { ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12; }
+                using (FastSizeWebClient wc = new FastSizeWebClient(4500))
+                {
+                    wc.Proxy = null;
+                    wc.Encoding = Encoding.UTF8;
+                    wc.Headers.Add("User-Agent", "TitanGameHub/1.0");
+
+                    if (string.IsNullOrEmpty(appId) && !string.IsNullOrEmpty(gp.Name))
+                    {
+                        string clean = CleanGameTitleForSearch(gp.Name);
+                        if (!string.IsNullOrEmpty(clean) && clean.Length >= 3)
+                        {
+                            string sr = wc.DownloadString("https://store.steampowered.com/api/storesearch/?term=" + Uri.EscapeDataString(clean) + "&l=english&cc=US");
+                            Match idm = Regex.Match(sr, @"""id"":(\d+)");
+                            if (idm.Success) appId = idm.Groups[1].Value;
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(appId))
+                    {
+                        lock (_steamBuildCache)
+                        {
+                            string cached;
+                            if (_steamBuildCache.TryGetValue(appId, out cached))
+                                return cached;
+                        }
+
+                        string infoJson = wc.DownloadString("https://api.steamcmd.net/v1/info/" + appId);
+                        string buildVer = ParseSteamCmdBuildId(infoJson);
+                        if (!string.IsNullOrEmpty(buildVer))
+                        {
+                            lock (_steamBuildCache) { _steamBuildCache[appId] = buildVer; }
+                            return buildVer;
+                        }
+                    }
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        public static string ResolveLiveDisplayVersion(GameProfile gp)
+        {
+            if (gp == null) return null;
+            if (!IsGenericVersionText(gp.Version)) return gp.Version;
+
+            string hint = TryExtractVersionFromHints(gp);
+            if (!IsGenericVersionText(hint)) return hint;
+
+            try
+            {
+                if (!string.IsNullOrEmpty(gp.DownloadUrl) && gp.DownloadUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+                {
+                    SitePageAnalysis an = AnalyzeGameOnSteamRip(gp);
+                    if (an != null && !IsGenericVersionText(an.LiveVersion))
+                        return an.LiveVersion;
+                }
+            }
+            catch { }
+
+            string steamBuild = TryResolveSteamBuildId(gp);
+            if (!IsGenericVersionText(steamBuild)) return steamBuild;
+
+            return null;
+        }
     }
 }

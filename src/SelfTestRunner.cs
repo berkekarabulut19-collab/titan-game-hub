@@ -371,6 +371,17 @@ namespace TitanGameHub
                     !GameProfile.IsRemoteVersionNewer("v1.5.3", "v1.5.3 • Digital Deluxe • +6 DLC • Full Paket"), "");
                 Check("Build ID ile SemVer farkı sahte güncelleme vermez",
                     !GameProfile.IsRemoteVersionNewer("v1.5.3", "Build 26317497 • +2 DLC"), "");
+                Check("IsGenericVersionText jenerik sürüm etiketlerini tanır",
+                    SiteParserService.IsGenericVersionText("Full Paket") &&
+                    SiteParserService.IsGenericVersionText("Son Sürüm") &&
+                    !SiteParserService.IsGenericVersionText("Build 25811160") &&
+                    !SiteParserService.IsGenericVersionText("v1.2.3"), "");
+                string parsedBuild = SiteParserService.ParseSteamCmdBuildId("{\"status\":\"success\",\"data\":{\"739630\":{\"depots\":{\"branches\":{\"public\":{\"buildid\":\"25811160\"}}}}}}");
+                Check("ParseSteamCmdBuildId canlı SteamCMD JSON'dan buildid çeker",
+                    string.Equals(parsedBuild, "Build 25811160", StringComparison.OrdinalIgnoreCase), parsedBuild ?? "<null>");
+                GameProfile gpHint = new GameProfile { Id = "test-hint", Name = "Test Game v2.4.1 Co-Op", Version = "Full Paket" };
+                Check("TryExtractVersionFromHints oyun adından gerçek sürümü yakalar",
+                    string.Equals(SiteParserService.TryExtractVersionFromHints(gpHint), "v2.4.1", StringComparison.OrdinalIgnoreCase), "");
             }
             finally
             {
